@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="15">
+    <title>Стартовый протокол — {{ data.competition }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+            margin: 0; background: #f3f4f6; color: #111827;
+        }
+        .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+        .head { margin-bottom: 12px; }
+        .head h1 { margin: 0 0 4px; font-size: 20px; line-height: 1.25; }
+        .head .meta { font-size: 13px; color: #6b7280; }
+        .card { background: #fff; border-radius: 10px; padding: 4px 0 8px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+        .slt { width: 100%; border-collapse: collapse; }
+        .slt th {
+            padding: 8px 10px; font-size: 10px; font-weight: 700; color: #9ca3af;
+            text-transform: uppercase; letter-spacing: .04em; text-align: left;
+            border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; background: #fff;
+        }
+        .slt td { padding: 8px 10px; border-bottom: 1px solid #f1f3f6; font-size: 14px; vertical-align: top; }
+        .slt tbody tr:nth-child(even) { background: #fafbfc; }
+        .slt tr.slt-dns { opacity: .55; }
+        .slt tr.slt-running { background: #fffbeb; }
+        .slt tr.slt-finished { background: #f0fdf4; }
+        .slt-note { font-size: 12px; color: #6b7280; }
+        .mono { font-variant-numeric: tabular-nums; }
+        .foot { margin-top: 12px; font-size: 12px; color: #9ca3af; text-align: center; }
+        .wrap .slt-scroll { overflow-x: auto; }
+        @media (max-width: 760px) {
+            .slt .c-year, .slt .c-city, .slt .c-team { display: none; }
+            .slt td, .slt th { padding: 6px 8px; font-size: 13px; }
+        }
+        @media print {
+            body { background: #fff; }
+            .head h1 { font-size: 16px; }
+            .slt td, .slt th { font-size: 11px; padding: 4px 5px; }
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="head">
+        <h1>{{ data.competition }}</h1>
+        <div class="meta">
+            Стартовый протокол · старт №{{ data.heat.number }}{% if data.heat.name %} · {{ data.heat.name }}{% endif %}
+            {% if data.heat.format == 'itt' %}
+                · раздельный старт, интервал {{ data.heat.interval }} с
+                {% if data.heat.start_at %} · первый старт {{ data.heat.start_at }}{% endif %}
+            {% endif %}
+            · участников {{ data.total }}
+        </div>
+    </div>
+    <div class="card slt-scroll">
+        {% include "_startlist_table.html" %}
+    </div>
+    <div class="foot">Обновляется автоматически</div>
+</div>
+</body>
+</html>

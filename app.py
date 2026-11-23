@@ -226,7 +226,7 @@ PUBLIC_ENDPOINTS = {
     'results_page', 'results_details', 'results_export',
     'service_worker', 'static',
     'finish_screen', 'finish_screen_data',
-    'login', 'logout', 'app_download', 'app_page',
+    'login', 'logout', 'app_download', 'app_page', 'startlist_public',
     'index', 'select_competition', 'manual_select',
     'manage_page', 'manage_login', 'manage_logout', 'manage_create',
     'manage_delete', 'manage_readonly', 'manage_people_refresh',
@@ -1325,6 +1325,7 @@ def init_db(path=None):
                 auto_enabled INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'pending',
                 started_at TEXT, finished_at TEXT, format TEXT NOT NULL DEFAULT 'mass',
                 start_order TEXT NOT NULL DEFAULT 'number',
+                start_at TEXT, startlist_token TEXT,
                 FOREIGN KEY (competition_id) REFERENCES competitions(id) ON DELETE CASCADE,
                 UNIQUE (competition_id, heat_number)
             );
@@ -1915,6 +1916,11 @@ def _assign_category_gaps(races):
         r['gap_kind'] = kind
     return races
 
+def _base_url():
+    """Базовый URL сайта (с учётом CHRONO_PUBLIC_URL)."""
+    return (os.environ.get('CHRONO_PUBLIC_URL') or request.url_root).rstrip('/')
+
+
 def _public_url():
     """Абсолютный URL текущей страницы (с учётом CHRONO_PUBLIC_URL)."""
     base = (os.environ.get('CHRONO_PUBLIC_URL') or request.url_root).rstrip('/')
@@ -2310,6 +2316,276 @@ def _manual_start_state(conn, cid):
         if times:
             state['planned_ts'] = max(times) + interval
     return state
+
+def _fmt_start_at(value):
+    """Плановое время старта: ISO → «23.11.2026 12:00» (или пусто)."""
+    if not value:
+        return ''
+    try:
+        return datetime.fromisoformat(value).strftime('%d.%m.%Y %H:%M')
+    except (TypeError, ValueError):
+        return ''
+
+
+def _heat_start_rows(conn, heat):
+    """Участники старта в порядке старта: позиция, план/факт время, статус."""
+    hid = heat['id']
+    try:
+        mode = heat['start_order'] or 'number'
+    except (KeyError, IndexError):
+        mode = 'number'
+    rows = conn.execute(
+        'SELECT hp.participant_id, hp.status AS hp_status, hp.sort_order, '
+        '       p.number, p.full_name, p.birth_year, p.city, p.team, '
+        "       COALESCE(c.name, '') AS category_name, c.sort_order AS cat_sort, "
+        '       r.id AS race_id, r.status AS race_status, r.start_time, r.finish_time '
+        'FROM heat_participants hp '
+        'JOIN participants p ON p.id = hp.participant_id '
+        'LEFT JOIN categories c ON c.id = p.category_id '
+        'LEFT JOIN races r ON r.heat_id = hp.heat_id AND r.participant_id = hp.participant_id '
+        'WHERE hp.heat_id = ?', (hid,)).fetchall()
+
+    def rank(r):
+        is_dns = (r['hp_status'] == 'dns') or ((r['race_status'] or '') == 'dns')
+        if is_dns:
+            return (2, 0, 0, r['number'] or 0)
+        if r['race_id'] is not None:
+            return (0, 0, 0, r['start_time'] or '')
+        manual = r['sort_order']
+        if manual is not None:
+            return (1, 0, manual, r['number'] or 0)
+        cat = r['cat_sort'] if r['cat_sort'] is not None else 1000000
+        return (1, 1, cat if mode == 'category' else 0, r['number'] or 0)
+
+    rows = sorted(rows, key=rank)
+    interval = _itt_interval()
+    start_at = None
+    try:
+        if heat['start_at']:
+            start_at = datetime.fromisoformat(heat['start_at'])
+    except (KeyError, IndexError, TypeError, ValueError):
+        start_at = None
+
+    out, position = [], 0
+    for r in rows:
+        is_dns = (r['hp_status'] == 'dns') or ((r['race_status'] or '') == 'dns')
+        race_status = (r['race_status'] or '') if r['race_id'] is not None else ''
+        if is_dns:
+            status = 'dns'
+        elif race_status in ('ok', 'dnf', 'lapped'):
+            status = 'finished'
+        elif race_status == 'running':
+            status = 'running'
+        else:
+            status = 'waiting'
+        planned = ''
+        if not is_dns:
+            position += 1
+            if start_at is not None:
+                planned = (start_at + timedelta(seconds=interval * (position - 1))).strftime('%H:%M:%S')
+        actual = (r['start_time'] or '')[11:19] if r['race_id'] is not None and not is_dns else ''
+        out.append({
+            'participant_id': r['participant_id'],
+            'position': position if not is_dns else None,
+            'number': r['number'],
+            'full_name': r['full_name'],
+            'birth_year': r['birth_year'],
+            'category': r['category_name'] or '',
+            'city': r['city'] or '',
+            'team': r['team'] or '',
+            'status': status,
+            'manual': (r['sort_order'] is not None) and status == 'waiting',
+            'planned_display': planned,
+            'actual_display': actual,
+            'finish_display': (r['finish_time'] or '')[11:19] if status == 'finished' else '',
+        })
+    return out
+
+
+def _heat_startlist_data(conn, heat, comp):
+    """Данные стартового протокола."""
+    rows = _heat_start_rows(conn, heat)
+    total = sum(1 for r in rows if r['status'] != 'dns')
+    started = sum(1 for r in rows if r['status'] in ('running', 'finished'))
+    finished = sum(1 for r in rows if r['status'] == 'finished')
+    return {
+        'heat': {
+            'id': heat['id'],
+            'number': heat['heat_number'],
+            'name': heat['name'] or '',
+            'status': heat['status'],
+            'format': _heat_format(heat),
+            'interval': _itt_interval(),
+            'start_at': _fmt_start_at(heat['start_at'] if 'start_at' in heat.keys() else None),
+            'started_display': (heat['started_at'] or '')[11:19] if heat['started_at'] else '',
+        },
+        'competition': comp['name'] if comp else '',
+        'rows': rows,
+        'total': total,
+        'started': started,
+        'finished': finished,
+        'date_display': datetime.now().strftime('%d.%m.%Y'),
+    }
+
+
+_TOKEN_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789'
+
+
+def _new_startlist_token(conn):
+    """Короткий токен публичной ссылки, уникальный в этой базе."""
+    for _ in range(30):
+        token = ''.join(secrets.choice(_TOKEN_ALPHABET) for _ in range(8))
+        row = conn.execute('SELECT 1 FROM heats WHERE startlist_token = ?', (token,)).fetchone()
+        if not row:
+            return token
+    return secrets.token_hex(6)
+
+
+def _find_heat_by_token(token):
+    """Ищет старт по токену во всех базах соревнований."""
+    if not token:
+        return None
+    try:
+        reg = _registry_load()
+    except Exception:
+        return None
+    for entry in reg.get('competitions', []):
+        path = _comp_db_path(entry)
+        if not os.path.exists(path):
+            continue
+        conn = None
+        try:
+            conn = _connect(path)
+            h = conn.execute('SELECT * FROM heats WHERE startlist_token = ?', (token,)).fetchone()
+            if h:
+                comp = conn.execute('SELECT * FROM competitions WHERE id = ?', (h['competition_id'],)).fetchone()
+                if comp:
+                    return conn, h, comp
+        except sqlite3.Error:
+            pass
+        if conn is not None:
+            conn.close()
+    return None
+
+
+def _pdf_font_pair():
+    """Шрифт с кириллицей для PDF: (обычный, жирный) или Helvetica."""
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    regular, bold = 'Helvetica', 'Helvetica-Bold'
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    pairs = [
+        (r'C:\Windows\Fonts\arial.ttf', r'C:\Windows\Fonts\arialbd.ttf'),
+        ('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+         '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
+        ('/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+         '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf'),
+        (os.path.join(app_dir, 'static', 'fonts', 'DejaVuSans.ttf'),
+         os.path.join(app_dir, 'static', 'fonts', 'DejaVuSans-Bold.ttf')),
+    ]
+    for reg_path, bold_path in pairs:
+        if not os.path.exists(reg_path):
+            continue
+        try:
+            pdfmetrics.registerFont(TTFont('SlFont', reg_path))
+            regular = 'SlFont'
+            if os.path.exists(bold_path):
+                pdfmetrics.registerFont(TTFont('SlFontBd', bold_path))
+                bold = 'SlFontBd'
+            break
+        except Exception:
+            pass
+    return regular, bold
+
+
+def _render_startlist_pdf(comp, data):
+    """PDF стартового протокола (A4, один старт)."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+
+    regular, bold = _pdf_font_pair()
+
+    def st(size, font=None, align=TA_LEFT, leading=None):
+        return ParagraphStyle(f'sl{size}{font}{align}', fontName=font or regular, fontSize=size,
+                              leading=leading or size * 1.25, alignment=align)
+
+    def esc(v):
+        return (str(v or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=12 * mm, rightMargin=12 * mm,
+                            topMargin=12 * mm, bottomMargin=12 * mm,
+                            title=f'Стартовый протокол — старт №{data["heat"]["number"]}')
+    story = []
+    story.append(Paragraph(esc(data['competition']), st(15, bold, TA_CENTER)))
+    story.append(Spacer(1, 3 * mm))
+    story.append(Paragraph('СТАРТОВЫЙ ПРОТОКОЛ', st(12, bold, TA_CENTER)))
+    head_bits = [f'Старт №{data["heat"]["number"]}']
+    if data['heat']['name']:
+        head_bits.append(data['heat']['name'])
+    if data['heat']['format'] == 'itt':
+        head_bits.append(f'раздельный старт, интервал {data["heat"]["interval"]} с')
+        if data['heat']['start_at']:
+            head_bits.append(f'первый старт {data["heat"]["start_at"]}')
+    else:
+        head_bits.append('групповой старт')
+    story.append(Paragraph(esc(' · '.join(head_bits)), st(9, None, TA_CENTER)))
+    story.append(Paragraph(esc(f'Участников: {data["total"]} · стартовали: {data["started"]} · финишировали: {data["finished"]}'),
+                           st(8.5, None, TA_CENTER)))
+    story.append(Spacer(1, 4 * mm))
+
+    widths_mm = [11, 13, 47, 11, 30, 20, 21, 19, 14]
+    scale = 186.0 / sum(widths_mm)
+    col_w = [w * scale * mm for w in widths_mm]
+    head = ['№<br/>п/п', 'Номер', 'ФИО', 'Год', 'Группа', 'Город', 'Команда', 'Время<br/>старта', 'Прим.']
+    head_style = st(8, bold, TA_CENTER, 9.5)
+    cell = st(8, None, TA_LEFT, 9.5)
+    cell_c = st(8, None, TA_CENTER, 9.5)
+    body = [[Paragraph(h, head_style) for h in head]]
+    for r in data['rows']:
+        note = ''
+        if r['status'] == 'dns':
+            note = 'DNS'
+        elif r['status'] == 'running':
+            note = 'на дистанции'
+        elif r['status'] == 'finished':
+            note = 'финиш ' + (r['finish_display'] or '')
+        body.append([
+            Paragraph(str(r['position'] or '—'), cell_c),
+            Paragraph(esc(r['number'] if r['number'] is not None else '—'), cell_c),
+            Paragraph(esc(r['full_name']), cell),
+            Paragraph(str(r['birth_year'] or ''), cell_c),
+            Paragraph(esc(r['category']), cell),
+            Paragraph(esc(r['city']), cell),
+            Paragraph(esc(r['team']), cell),
+            Paragraph(esc(r['actual_display'] or r['planned_display'] or '—'), cell_c),
+            Paragraph(esc(note), cell_c),
+        ])
+    t = Table(body, colWidths=col_w, repeatRows=1)
+    t.setStyle(TableStyle([
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.94, 0.94, 0.94)),
+        ('LEFTPADDING', (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 10 * mm))
+    sign = Table([[Paragraph('Главный судья ____________________', st(9)),
+                   Paragraph('Секретарь ____________________', st(9))]],
+                 colWidths=[93 * mm, 93 * mm])
+    sign.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                              ('LEFTPADDING', (0, 0), (-1, -1), 0)]))
+    story.append(sign)
+    doc.build(story)
+    return buf.getvalue()
+
 
 def _build_results_detail(conn, hid, cat_filter_id=None, include_auto=True):
     heat_row = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
@@ -4756,6 +5032,15 @@ def _build_races_heats(conn, cid):
         hd['running_list'] = [{'id': r['id'], 'number': r['number'], 'name': r['full_name'],
                                'laps': len(r['laps']), 'total': r['laps_total']}
                               for r in hd['races'] if r['status'] == 'running']
+
+        hd['is_itt'] = _heat_format(h) == 'itt'
+        hd['start_order'] = (hd.get('start_order') or 'number')
+        hd['start_at_local'] = (hd.get('start_at') or '')[:16]
+        hd['start_at_display'] = _fmt_start_at(hd.get('start_at'))
+        hd['interval'] = _itt_interval()
+        if hd['is_itt']:
+            hd['start_rows'] = _heat_start_rows(conn, h)
+            hd['order_manual'] = any(r['manual'] for r in hd['start_rows'])
         heats_data.append(hd)
     return heats_data
 
@@ -4980,6 +5265,218 @@ def heat_edit_start(hid):
         return redirect(url_for('races_page', cid=h['competition_id']))
     finally: conn.close()
 
+
+
+@app.route('/heats/<int:hid>/order', methods=['POST'])
+def heat_order_save(hid):
+    """Порядок ожидающих участников разделки (перетаскивание в карточке старта)."""
+    conn = get_db()
+    try:
+        h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
+        if not h:
+            return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
+        if _heat_format(h) != 'itt':
+            return jsonify({'ok': False, 'message': 'Порядок задаётся только в разделке'}), 400
+        raw = request.form.get('order')
+        if raw is None:
+            raw = (request.get_json(silent=True) or {}).get('order')
+        if isinstance(raw, (list, tuple)):
+            ids = [int(x) for x in raw if str(x).strip().isdigit()]
+        else:
+            ids = [int(x) for x in re.split(r'[,\s]+', str(raw or '')) if x.strip().isdigit()]
+        ids = list(dict.fromkeys(ids))
+        if not ids:
+            return jsonify({'ok': False, 'message': 'Пустой порядок'}), 400
+        members = {r['participant_id'] for r in conn.execute(
+            'SELECT participant_id FROM heat_participants WHERE heat_id = ?', (hid,)).fetchall()}
+        if not set(ids) <= members:
+            return jsonify({'ok': False, 'message': 'Участник не из этого старта'}), 400
+        started = {r['participant_id'] for r in conn.execute(
+            'SELECT participant_id FROM races WHERE heat_id = ?', (hid,)).fetchall()}
+        if started & set(ids):
+            return jsonify({'ok': False, 'message': 'Участник уже стартовал'}), 400
+        with conn:
+            for pos, pid in enumerate(ids, start=1):
+                conn.execute('UPDATE heat_participants SET sort_order = ? '
+                             'WHERE heat_id = ? AND participant_id = ?', (pos, hid, pid))
+        return jsonify({'ok': True, 'saved': len(ids)})
+    finally:
+        conn.close()
+
+
+@app.route('/heats/<int:hid>/reset_order', methods=['POST'])
+def heat_order_reset(hid):
+    """Сброс ручного порядка: по номеру или по группе."""
+    conn = get_db()
+    try:
+        h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
+        if not h:
+            return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
+        if _heat_format(h) != 'itt':
+            return jsonify({'ok': False, 'message': 'Порядок задаётся только в разделке'}), 400
+        mode = (request.form.get('mode') or 'number').strip()
+        if mode not in ('number', 'category'):
+            mode = 'number'
+        with conn:
+            conn.execute('UPDATE heat_participants SET sort_order = NULL WHERE heat_id = ?', (hid,))
+            conn.execute('UPDATE heats SET start_order = ? WHERE id = ?', (mode, hid))
+        return jsonify({'ok': True, 'mode': mode})
+    finally:
+        conn.close()
+
+
+@app.route('/heats/<int:hid>/start_at', methods=['POST'])
+def heat_start_at_save(hid):
+    """Плановое время старта первого участника."""
+    conn = get_db()
+    try:
+        h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
+        if not h:
+            return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
+        raw = (request.form.get('start_at') or '').strip()
+        value = None
+        if raw:
+            try:
+                value = datetime.fromisoformat(raw).replace(second=0, microsecond=0).isoformat()
+            except ValueError:
+                return jsonify({'ok': False, 'message': 'Неверный формат даты и времени'}), 400
+        with conn:
+            conn.execute('UPDATE heats SET start_at = ? WHERE id = ?', (value, hid))
+        return jsonify({'ok': True, 'start_at': (value or '')[:16], 'display': _fmt_start_at(value)})
+    finally:
+        conn.close()
+
+
+@app.route('/heats/<int:hid>/startlist')
+def startlist_page(hid):
+    conn = get_db()
+    try:
+        h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
+        if not h:
+            return 'Старт не найден', 404
+        comp = conn.execute('SELECT * FROM competitions WHERE id = ?', (h['competition_id'],)).fetchone()
+        data = _heat_startlist_data(conn, h, comp)
+        token = h['startlist_token'] if 'startlist_token' in h.keys() else None
+        public_url = ''
+        if token:
+            public_url = _base_url() + url_for('startlist_public', token=token)
+        return render_template('startlist.html', competition=comp, data=data, heat=h,
+                               public_url=public_url)
+    finally:
+        conn.close()
+
+
+@app.route('/heats/<int:hid>/startlist.pdf')
+def startlist_pdf(hid):
+    conn = get_db()
+    try:
+        h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
+        if not h:
+            return 'Старт не найден', 404
+        comp = conn.execute('SELECT * FROM competitions WHERE id = ?', (h['competition_id'],)).fetchone()
+        data = _heat_startlist_data(conn, h, comp)
+        pdf = _render_startlist_pdf(comp, data)
+        name = f'стартовый_протокол_старт_{data["heat"]["number"]}.pdf'
+        return send_file(io.BytesIO(pdf), as_attachment=True, download_name=name, mimetype='application/pdf')
+    finally:
+        conn.close()
+
+
+@app.route('/heats/<int:hid>/startlist.xlsx')
+def startlist_xlsx(hid):
+    conn = get_db()
+    try:
+        h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
+        if not h:
+            return 'Старт не найден', 404
+        comp = conn.execute('SELECT * FROM competitions WHERE id = ?', (h['competition_id'],)).fetchone()
+        data = _heat_startlist_data(conn, h, comp)
+        wb = Workbook()
+        ws = wb.active
+        ws.title = f'Старт {data["heat"]["number"]}'
+        ws.append([comp['name'] if comp else ''])
+        ws['A1'].font = Font(bold=True, size=13)
+        ws.append([f'Стартовый протокол · старт №{data["heat"]["number"]}'])
+        ws['A2'].font = Font(bold=True, size=11)
+        meta = []
+        if data['heat']['format'] == 'itt':
+            meta.append(f'раздельный старт, интервал {data["heat"]["interval"]} с')
+            if data['heat']['start_at']:
+                meta.append(f'первый старт {data["heat"]["start_at"]}')
+        else:
+            meta.append('групповой старт')
+        meta.append(f'участников {data["total"]}')
+        ws.append([' · '.join(meta)])
+        ws.append([])
+        headers = ['№ п/п', 'Номер', 'ФИО', 'Год', 'Группа', 'Город', 'Команда', 'Время старта', 'Прим.']
+        ws.append(headers)
+        head_row = ws.max_row
+        for c in range(1, len(headers) + 1):
+            ws.cell(row=head_row, column=c).font = Font(bold=True)
+        for r in data['rows']:
+            note = ''
+            if r['status'] == 'dns':
+                note = 'DNS'
+            elif r['status'] == 'running':
+                note = 'на дистанции'
+            elif r['status'] == 'finished':
+                note = 'финиш ' + (r['finish_display'] or '')
+            ws.append([
+                r['position'] or '',
+                r['number'] if r['number'] is not None else '',
+                r['full_name'],
+                r['birth_year'] or '',
+                r['category'],
+                r['city'],
+                r['team'],
+                r['actual_display'] or r['planned_display'] or '',
+                note,
+            ])
+        widths = [7, 8, 32, 7, 20, 16, 18, 13, 14]
+        for i, w in enumerate(widths, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        name = f'стартовый_протокол_старт_{data["heat"]["number"]}.xlsx'
+        return send_file(buf, as_attachment=True, download_name=name,
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    finally:
+        conn.close()
+
+
+@app.route('/heats/<int:hid>/startlist_link', methods=['POST'])
+def startlist_link(hid):
+    conn = get_db()
+    try:
+        h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
+        if not h:
+            return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
+        token = h['startlist_token'] if 'startlist_token' in h.keys() else None
+        if not token:
+            token = _new_startlist_token(conn)
+            with conn:
+                conn.execute('UPDATE heats SET startlist_token = ? WHERE id = ?', (token, hid))
+        url = _base_url() + url_for('startlist_public', token=token)
+        return jsonify({'ok': True, 'token': token, 'url': url})
+    finally:
+        conn.close()
+
+
+@app.route('/sl/<token>')
+def startlist_public(token):
+    found = _find_heat_by_token((token or '').strip())
+    if not found:
+        return render_template('startlist_public.html', data={
+            'competition': 'Стартовый протокол', 'heat': {'number': '', 'name': '', 'format': 'mass',
+            'interval': 0, 'start_at': ''}, 'rows': [], 'total': 0, 'started': 0, 'finished': 0,
+        }), 404
+    conn, h, comp = found
+    try:
+        data = _heat_startlist_data(conn, h, comp)
+        return render_template('startlist_public.html', data=data)
+    finally:
+        conn.close()
 
 
 @app.route('/laps/<int:lid>/edit', methods=['POST'])

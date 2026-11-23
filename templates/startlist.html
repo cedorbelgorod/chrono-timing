@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Стартовый протокол — старт №{{ data.heat.number }}{% endblock %}
+{% block content %}
+<h2>
+    Стартовый протокол
+    <small>— старт №{{ data.heat.number }}{% if data.heat.name %} · {{ data.heat.name }}{% endif %}</small>
+</h2>
+
+<div class="slt-bar">
+    <a class="btn-tpl" href="{{ url_for('startlist_pdf', hid=data.heat.id) }}">⬇ PDF</a>
+    <a class="btn-tpl" href="{{ url_for('startlist_xlsx', hid=data.heat.id) }}">⬇ Excel</a>
+    <button type="button" class="btn-tpl" onclick="window.print()">🖨 Печать</button>
+    {% if public_url %}
+        <a class="btn-tpl" href="{{ public_url }}" target="_blank" rel="noopener">🔗 Публичная страница</a>
+    {% else %}
+        <button type="button" class="btn-tpl" id="make-link" data-hid="{{ data.heat.id }}">🔗 Получить публичную ссылку</button>
+    {% endif %}
+    <span class="slt-status" id="link-status"></span>
+</div>
+
+<div class="slt-meta">
+    <b>{{ data.competition }}</b>
+    {% if data.heat.format == 'itt' %}
+        · раздельный старт · интервал {{ data.heat.interval }} с
+        {% if data.heat.start_at %} · первый старт {{ data.heat.start_at }}{% endif %}
+    {% else %}
+        · групповой старт
+    {% endif %}
+    · участников {{ data.total }}
+    {% if data.started %} · стартовали {{ data.started }}{% endif %}
+    {% if data.finished %} · финишировали {{ data.finished }}{% endif %}
+</div>
+
+<div class="slt-scroll">
+    {% include "_startlist_table.html" %}
+</div>
+
+<div class="slt-foot">
+    <span>Главный судья ____________________</span>
+    <span>Секретарь ____________________</span>
+</div>
+
+<div class="toolbar" style="margin-top:16px">
+    <a href="{{ url_for('races_page', cid=competition.id) }}" class="link">← К стартам</a>
+</div>
+
+<style>
+.slt-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0 12px; }
+.slt-status { font-size: 12px; font-weight: 600; color: #15803d; }
+.slt-meta { margin: 0 0 12px; font-size: 14px; color: #374151; }
+.slt-scroll { overflow-x: auto; }
+.slt { width: 100%; border-collapse: collapse; background: #fff; }
+.slt .c-pos { width: 48px; }
+.slt .c-num { width: 64px; }
+.slt .c-year { width: 56px; }
+.slt .c-cat { width: 170px; }
+.slt .c-city { width: 120px; }
+.slt .c-team { width: 140px; }
+.slt .c-time { width: 100px; }
+.slt .c-note { width: 110px; }
+.slt th {
+    padding: 8px 10px; font-size: 11px; font-weight: 600; color: #9ca3af;
+    text-transform: uppercase; letter-spacing: .04em; text-align: left;
+    border-bottom: 1px solid #e5e7eb; background: #fff;
+}
+.slt td { padding: 7px 10px; border-bottom: 1px solid #eef0f3; font-size: 14px; vertical-align: top; }
+.slt tbody tr:nth-child(even) { background: #fafbfc; }
+.slt tr.slt-dns { opacity: .55; }
+.slt tr.slt-running { background: #fffbeb; }
+.slt tr.slt-finished { background: #f0fdf4; }
+.slt-note { font-size: 12px; color: #6b7280; }
+.slt-foot {
+    display: flex; gap: 40px; flex-wrap: wrap;
+    margin-top: 26px; font-size: 14px; color: #374151;
+}
+@media print {
+    .slt-bar, .toolbar, header, nav { display: none !important; }
+    body { background: #fff; }
+    .slt td, .slt th { font-size: 12px; padding: 5px 6px; }
+}
+</style>
+
+<script>
+(function () {
+    var btn = document.getElementById('make-link');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        var st = document.getElementById('link-status');
+        btn.disabled = true;
+        fetch('/heats/' + btn.dataset.hid + '/startlist_link', { method: 'POST', cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) throw new Error(d.message || 'Ошибка');
+                if (st) { st.textContent = 'ссылка создана'; }
+                var a = document.createElement('a');
+                a.className = 'btn-tpl';
+                a.href = d.url;
+                a.target = '_blank';
+                a.rel = 'noopener';
+                a.textContent = '🔗 Публичная страница';
+                btn.replaceWith(a);
+                if (navigator.clipboard && d.url) navigator.clipboard.writeText(d.url).catch(function () {});
+            })
+            .catch(function (e) {
+                btn.disabled = false;
+                if (st) { st.textContent = 'не удалось: ' + (e.message || ''); st.style.color = '#b91c1c'; }
+            });
+    });
+})();
+</script>
+{% endblock %}

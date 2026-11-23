@@ -1,3 +1,55 @@
+{% macro render_start_order(h) %}
+<div class="so" data-hid="{{ h.id }}" data-interval="{{ h.interval }}" data-start-at="{{ h.start_at_local or '' }}">
+    <div class="so-head">
+        <span class="so-badge">
+            {% if h.order_manual %}порядок ручной{% elif h.start_order == 'category' %}по группе{% else %}по номеру{% endif %}
+        </span>
+        {% if h.status == 'pending' %}
+            <button type="button" class="so-reset" data-mode="number" data-hid="{{ h.id }}">↺ По номеру</button>
+            <button type="button" class="so-reset" data-mode="category" data-hid="{{ h.id }}">↺ По группе</button>
+        {% endif %}
+        <label class="so-start-at">
+            <span>Старт в</span>
+            <input type="datetime-local" class="so-start-at-input" value="{{ h.start_at_local or '' }}">
+            <button type="button" class="so-start-at-save" data-hid="{{ h.id }}">Сохранить</button>
+        </label>
+        <span class="so-status"></span>
+    </div>
+    <table class="so-table">
+        <thead>
+            <tr>
+                <th style="width:26px"></th>
+                <th style="width:44px">№</th>
+                <th style="width:76px">Номер</th>
+                <th>ФИО</th>
+                <th style="width:170px">Категория</th>
+                <th style="width:96px">Старт</th>
+                <th style="width:140px">Статус</th>
+            </tr>
+        </thead>
+        <tbody class="so-body">
+        {% for r in h.start_rows %}
+            <tr class="so-row so-{{ r.status }}" data-pid="{{ r.participant_id }}" data-status="{{ r.status }}">
+                <td class="so-drag">{% if r.status == 'waiting' %}<span class="so-handle" draggable="true"
+                        role="button" tabindex="-1" title="Перетащите, чтобы изменить порядок">⋮⋮</span>{% endif %}</td>
+                <td class="so-pos mono">{{ r.position if r.position else '—' }}</td>
+                <td class="mono" style="font-weight:700">{{ r.number if r.number is not none else '—' }}</td>
+                <td class="so-name">{{ r.full_name }}{% if r.birth_year %} <small>({{ r.birth_year }})</small>{% endif %}</td>
+                <td class="muted">{{ r.category or '—' }}</td>
+                <td class="mono so-time">{{ r.actual_display or r.planned_display or '—' }}</td>
+                <td class="so-st">
+                    {% if r.status == 'running' %}<span class="tag tag-active">на дистанции</span>
+                    {% elif r.status == 'finished' %}<span class="tag tag-ok">финиш {{ r.finish_display }}</span>
+                    {% elif r.status == 'dns' %}<span class="tag tag-dns">DNS</span>
+                    {% else %}<span class="muted">ждёт старта</span>{% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}
+
 {% macro render_races_table(races) %}
 <table>
     <thead>
@@ -113,6 +165,8 @@
                     {% if h.status == 'running' %}
                         <span class="heat-progress">{{ h.races_finished }} / {{ h.races_total }} финиш.</span>
                     {% endif %}
+                    <a href="{{ url_for('startlist_page', hid=h.id) }}" class="heat-startlist"
+                       target="_blank" rel="noopener" title="Стартовый протокол">📋 Протокол старта</a>
                     <form method="post" action="{{ url_for('heat_delete', hid=h.id) }}"
                           style="margin-left:auto"
                           data-confirm-submit="Удалить старт №{{ h.heat_number }}?{% if h.status != 'pending' %} Все результаты этого старта будут потеряны безвозвратно.{% endif %}"
@@ -125,7 +179,17 @@
 
                 <div class="heat-body">
                     {% if h.status == 'pending' %}
-                        {% if h.scheduled_participants %}
+                        {% if h.is_itt %}
+                            {{ render_start_order(h) }}
+                            <div class="heat-actions">
+                                <form method="post" action="{{ url_for('heat_start', hid=h.id) }}" style="display:inline">
+                                    <button type="submit" class="btn-start">▶ СТАРТ</button>
+                                </form>
+                                <small style="color:#6b7280;align-self:center">
+                                    Участники стартуют по очереди, интервал {{ h.interval }} с
+                                </small>
+                            </div>
+                        {% elif h.scheduled_participants %}
                             <table>
                                 <thead>
                                     <tr>
@@ -177,6 +241,8 @@
                         {% endif %}
 
                     {% elif h.status == 'running' %}
+                        {% if h.is_itt %}{{ render_start_order(h) }}
+                        <details class="so-more"><summary>Подробности: время на дистанции, правка времён</summary>{% endif %}
                         <table>
                             <thead>
                                 <tr>
@@ -252,6 +318,7 @@
                             {% endfor %}
                             </tbody>
                         </table>
+                        {% if h.is_itt %}</details>{% endif %}
                         <div class="heat-actions">
                             <a href="{{ url_for('manual_page', cid=competition.id) }}" class="btn-manual-link"
                                style="text-decoration:none;font-size:13px;padding:6px 14px">

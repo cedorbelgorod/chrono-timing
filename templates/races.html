@@ -352,6 +352,66 @@
 .heat-progress { color: #92400e; font-size: 13px; font-weight: 600; }
 
 .heat-actions { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+/* список порядка участников разделки */
+.so { margin: 2px 0 4px; }
+.so-head {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 6px 2px 10px; font-size: 13px;
+}
+.so-badge {
+    padding: 3px 9px; border-radius: 999px; background: #eef2ff; color: #3730a3;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+}
+.so-reset {
+    padding: 5px 10px; font-size: 12px; font-family: inherit; cursor: pointer;
+    border: 1px solid #d1d5db; background: #fff; color: #374151; border-radius: 7px;
+}
+.so-reset:hover { background: #f3f4f6; }
+.so-start-at { display: inline-flex; align-items: center; gap: 6px; color: #6b7280; }
+.so-start-at input {
+    padding: 5px 8px; font-size: 13px; font-family: inherit;
+    border: 1px solid #d1d5db; border-radius: 7px;
+}
+.so-start-at button {
+    padding: 5px 10px; font-size: 12px; font-family: inherit; cursor: pointer;
+    border: 1px solid #d1d5db; background: #fff; color: #374151; border-radius: 7px;
+}
+.so-start-at button:hover { background: #f3f4f6; }
+.so-status { font-size: 12px; font-weight: 600; }
+.so-status.ok { color: #15803d; }
+.so-status.err { color: #b91c1c; }
+
+.so-table { width: 100%; border-collapse: collapse; }
+.so-table th {
+    padding: 7px 10px; font-size: 11px; font-weight: 600; color: #9ca3af;
+    text-transform: uppercase; letter-spacing: .04em;
+    border-bottom: 1px solid #e5e7eb; background: #fff;
+}
+.so-table td { padding: 4px 10px; vertical-align: middle; border-bottom: 1px solid #eef0f3; }
+.so-table tbody tr:nth-child(even) { background: #fafbfc; }
+.so-table tbody tr:hover { background: #f3f6fb; }
+.so-table tr.so-running { background: #fffbeb; }
+.so-table tr.so-finished { background: #f0fdf4; }
+.so-table tr.so-dns { opacity: .55; }
+.so-table tr.dragging { opacity: .5; background: #eff6ff; }
+.so-drag { width: 26px; }
+.so-handle {
+    display: inline-block; padding: 2px 3px; color: #d3dae3; font-size: 14px;
+    line-height: 1; letter-spacing: -1px; cursor: grab; user-select: none; border-radius: 4px;
+}
+.so-table tr:hover .so-handle { color: #94a3b8; }
+.so-handle:hover { background: #eef2f7; color: #475569; }
+.so-handle:active { cursor: grabbing; }
+.heat-startlist {
+    font-size: 12px; color: #2563eb; text-decoration: none; padding: 5px 9px;
+    border: 1px solid #dbeafe; border-radius: 7px; background: #eff6ff; white-space: nowrap;
+}
+.heat-startlist:hover { background: #dbeafe; }
+.so-more { margin: 10px 0 0; }
+.so-more > summary { cursor: pointer; font-size: 12px; color: #6b7280; }
+
+
 .btn-start {
     background: #16a34a; font-size: 16px; padding: 8px 24px; font-weight: 600;
 }
@@ -870,6 +930,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function refresh() {
         if (busy || document.hidden) return;
+        if (window.__soBusy && Date.now() < window.__soBusy) return;
+        if (document.activeElement && document.activeElement.closest('#heats-list')) return;
         busy = true;
         try {
             const resp = await fetch('/races/data' + (cid ? '?cid=' + encodeURIComponent(cid) : ''), { cache: 'no-store' });
@@ -879,6 +941,7 @@ document.addEventListener('DOMContentLoaded', () => {
             last = html;
             box.innerHTML = html;
             applyCollapsed();
+            if (typeof window.initStartOrder === 'function') window.initStartOrder();
             if (typeof tick === 'function') tick();
         } catch (e) {
             /* нет связи — ждём следующего опроса */
@@ -889,6 +952,168 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setInterval(refresh, 4000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+})();
+</script>
+
+<script>
+// Порядок участников разделки в карточке старта: перетаскивание + автосохранение.
+(function () {
+    function fmtTime(base, seconds) {
+        var d = new Date(base);
+        if (isNaN(d.getTime())) return '—';
+        d.setSeconds(d.getSeconds() + seconds);
+        var p = function (n) { return (n < 10 ? '0' : '') + n; };
+        return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    }
+
+    function initOne(box) {
+        if (box.dataset.bound === '1') return;
+        box.dataset.bound = '1';
+
+        var body = box.querySelector('.so-body');
+        if (!body) return;
+        var status = box.querySelector('.so-status');
+        var interval = parseInt(box.dataset.interval, 10) || 30;
+        var dragRow = null;
+        var orderBefore = '';
+
+        function setStatus(text, kind) {
+            if (!status) return;
+            status.textContent = text || '';
+            status.className = 'so-status ' + (kind || '');
+            if (kind === 'ok') {
+                clearTimeout(box._statusTimer);
+                box._statusTimer = setTimeout(function () {
+                    status.textContent = '';
+                    status.className = 'so-status';
+                }, 2500);
+            }
+        }
+
+        function waitingRows() {
+            return Array.prototype.slice.call(body.querySelectorAll('tr.so-row[data-status="waiting"]'));
+        }
+
+        function orderNow() {
+            return waitingRows().map(function (r) { return r.dataset.pid; }).join(',');
+        }
+
+        function refreshNumbers() {
+            var rows = Array.prototype.slice.call(body.querySelectorAll('tr.so-row'));
+            var started = rows.filter(function (r) {
+                var st = r.dataset.status;
+                return st !== 'waiting' && st !== 'dns';
+            }).length;
+            var pos = started;
+            rows.forEach(function (r) {
+                var st = r.dataset.status;
+                if (st === 'dns') {
+                    var cell = r.querySelector('.so-pos');
+                    if (cell) cell.textContent = '—';
+                    return;
+                }
+                if (st !== 'waiting') return;
+                pos += 1;
+                var posCell = r.querySelector('.so-pos');
+                if (posCell) posCell.textContent = pos;
+                var timeCell = r.querySelector('.so-time');
+                if (timeCell) {
+                    timeCell.textContent = box.dataset.startAt
+                        ? fmtTime(box.dataset.startAt, interval * (pos - 1))
+                        : '—';
+                }
+            });
+        }
+
+        function saveOrder() {
+            var ids = waitingRows().map(function (r) { return r.dataset.pid; });
+            if (!ids.length) return;
+            var fd = new FormData();
+            fd.append('order', ids.join(','));
+            setStatus('Сохраняем…', '');
+            fetch('/heats/' + box.dataset.hid + '/order', {
+                method: 'POST', body: fd, cache: 'no-store',
+                headers: { 'X-Requested-With': 'fetch' }
+            }).then(function (r) { return r.json(); })
+              .then(function (data) {
+                  if (!data.ok) throw new Error(data.message || 'Ошибка');
+                  refreshNumbers();
+                  setStatus('Порядок сохранён', 'ok');
+              })
+              .catch(function (err) {
+                  setStatus('Не удалось сохранить: ' + (err.message || 'нет связи'), 'err');
+              });
+        }
+
+        body.querySelectorAll('.so-handle').forEach(function (handle) {
+            var row = handle.closest('tr');
+            if (!row) return;
+            handle.addEventListener('dragstart', function (e) {
+                dragRow = row;
+                orderBefore = orderNow();
+                row.classList.add('dragging');
+                window.__soBusy = Date.now() + 6000;
+                e.dataTransfer.effectAllowed = 'move';
+                try { e.dataTransfer.setData('text/plain', row.dataset.pid || ''); } catch (err) {}
+            });
+            handle.addEventListener('dragend', function () {
+                if (dragRow) dragRow.classList.remove('dragging');
+                dragRow = null;
+                window.__soBusy = Date.now() + 2500;
+                if (orderNow() !== orderBefore) saveOrder();
+            });
+        });
+
+        body.addEventListener('dragover', function (e) {
+            if (!dragRow) return;
+            var target = e.target.closest('tr.so-row');
+            if (!target || target === dragRow) return;
+            if (target.dataset.status !== 'waiting') return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            var rect = target.getBoundingClientRect();
+            var after = (e.clientY - rect.top) > rect.height / 2;
+            body.insertBefore(dragRow, after ? target.nextSibling : target);
+        });
+        body.addEventListener('drop', function (e) { e.preventDefault(); });
+
+        box.querySelectorAll('.so-reset').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var fd = new FormData();
+                fd.append('mode', btn.dataset.mode);
+                fetch('/heats/' + box.dataset.hid + '/reset_order', {
+                    method: 'POST', body: fd, cache: 'no-store'
+                }).then(function () { location.reload(); });
+            });
+        });
+
+        var saveAt = box.querySelector('.so-start-at-save');
+        if (saveAt) {
+            saveAt.addEventListener('click', function () {
+                var input = box.querySelector('.so-start-at-input');
+                var fd = new FormData();
+                fd.append('start_at', input ? input.value : '');
+                saveAt.disabled = true;
+                fetch('/heats/' + box.dataset.hid + '/start_at', {
+                    method: 'POST', body: fd, cache: 'no-store'
+                }).then(function (r) { return r.json(); })
+                  .then(function (data) {
+                      if (!data.ok) throw new Error(data.message || 'Ошибка');
+                      box.dataset.startAt = input ? input.value : '';
+                      refreshNumbers();
+                      setStatus('Время старта сохранено', 'ok');
+                  })
+                  .catch(function (err) { setStatus('Ошибка: ' + (err.message || 'нет связи'), 'err'); })
+                  .finally(function () { saveAt.disabled = false; });
+            });
+        }
+    }
+
+    window.initStartOrder = function () {
+        document.querySelectorAll('.so').forEach(initOne);
+    };
+
+    document.addEventListener('DOMContentLoaded', window.initStartOrder);
 })();
 </script>
 {% endblock %}
