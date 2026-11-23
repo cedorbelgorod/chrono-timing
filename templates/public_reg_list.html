@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#2563eb">
+    <title>{{ comp.name }} — участники</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; background: #f4f6f8; color: #111827;
+            font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+            padding: 0 0 calc(24px + env(safe-area-inset-bottom));
+        }
+        .bar {
+            position: sticky; top: 0; z-index: 5;
+            background: #1d4ed8; color: #fff;
+            padding: 12px 16px calc(12px + env(safe-area-inset-top));
+        }
+        .bar .kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; opacity: .8; }
+        .bar .name { font-size: 17px; font-weight: 700; margin-top: 2px; }
+        .bar .row { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; }
+        .btn-xlsx {
+            display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+            background: #16a34a; color: #fff; font-size: 13px; font-weight: 700;
+            padding: 9px 14px; border-radius: 9px; white-space: nowrap;
+        }
+        .btn-xlsx:active { background: #15803d; }
+        .wrap { max-width: 820px; margin: 0 auto; padding: 14px; }
+        .count { color: #6b7280; font-size: 13px; margin: 2px 4px 10px; }
+        .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.06); overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th {
+            text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+            color: #6b7280; padding: 10px 12px; background: #f9fafb; border-bottom: 1px solid #eef2f6;
+            white-space: nowrap;
+        }
+        td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+        tr:last-child td { border-bottom: none; }
+        .num { font-variant-numeric: tabular-nums; font-weight: 700; color: #1f2937; white-space: nowrap; }
+        .fio { font-weight: 600; }
+        .muted { color: #6b7280; font-size: 12px; }
+        .empty { padding: 30px 16px; text-align: center; color: #6b7280; }
+        .foot { text-align: center; margin-top: 18px; }
+        .foot a {
+            display: inline-block; text-decoration: none; color: #1d4ed8; font-weight: 600;
+            background: #e0edff; padding: 11px 18px; border-radius: 10px; font-size: 14px;
+        }
+        .scroll-hint { color: #9ca3af; font-size: 11px; text-align: center; margin-top: 6px; }
+        .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+        @media (max-width: 640px) {
+            table, thead, tbody, tr, td { display: block; width: 100%; }
+            thead { display: none; }
+            tr { padding: 10px 12px; border-bottom: 1px solid #eef2f6; }
+            tr:last-child { border-bottom: none; }
+            td { border: none; padding: 1px 0; }
+            td.num { font-size: 12px; color: #2563eb; }
+            td.fio-cell { font-size: 16px; margin-bottom: 2px; }
+            td.cat-cell { color: #374151; font-size: 13px; }
+            .tw { overflow: visible; }
+        }
+    </style>
+</head>
+<body>
+<div class="bar">
+    <div class="row">
+        <div>
+            <div class="kicker">Зарегистрированные участники</div>
+            <div class="name">{{ comp.name }}</div>
+        </div>
+        {% if rows %}
+            <a class="btn-xlsx" href="{{ url_for('reg_list_xlsx', slug=slug) }}">📥 Excel</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="wrap">
+    <div class="count">Всего участников: <b>{{ total }}</b></div>
+
+    {% if rows %}
+        <div class="card">
+            <div class="tw">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>№</th>
+                            <th>ФИО</th>
+                            <th>Год</th>
+                            <th>Город</th>
+                            <th>Клуб</th>
+                            <th>Категория</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for r in rows %}
+                        <tr>
+                            <td class="num" data-label="№">{{ r.number or "—" }}</td>
+                            <td class="fio fio-cell" data-label="ФИО">
+                                {{ r.full_name }}
+                                {% if r.gender %}<span class="muted">· {{ 'М' if r.gender == 'M' else 'Ж' }}</span>{% endif %}
+                            </td>
+                            <td class="muted" data-label="Год">{{ r.birth_year or '' }}</td>
+                            <td data-label="Город">{{ r.city or '' }}</td>
+                            <td data-label="Клуб">{{ r.team or '' }}</td>
+                            <td class="cat-cell" data-label="Категория">{{ r.category_name or '—' }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="scroll-hint">Телефоны участников не публикуются</div>
+    {% else %}
+        <div class="card"><div class="empty">Пока никто не зарегистрировался.</div></div>
+    {% endif %}
+
+    <div class="foot">
+        <a href="{{ url_for('reg_form', slug=slug) }}">➕ Зарегистрировать участника</a>
+    </div>
+</div>
+</body>
+</html>

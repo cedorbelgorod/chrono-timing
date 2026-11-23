@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Выдача номеров — {{ competition.name }}{% endblock %}
+{% block content %}
+<h2>Выдача стартовых номеров <small>— {{ competition.name }}</small></h2>
+
+<p class="muted" style="margin-top:-6px">
+    Участник пришёл на старт — найдите его по ФИО или ID и впишите номер. Без номера участник не может
+    попасть в старт. Номер уникален в пределах соревнования.
+</p>
+
+<div class="num-summary">
+    <span class="pill {{ 'warn' if without else 'ok' }}">
+        {% if without %}Без номера: {{ without }}{% else %}Все участники с номерами{% endif %}
+    </span>
+    <span class="hint">Следующий свободный номер: <b>{{ next_number }}</b></span>
+</div>
+
+<form method="get" class="num-search">
+    <input type="text" name="q" value="{{ q }}" placeholder="ФИО, ID или номер" autofocus>
+    <button type="submit">Найти</button>
+    {% if q %}<a class="link" href="{{ url_for('numbers_page', cid=competition.id) }}">Сбросить</a>{% endif %}
+</form>
+
+{% if rows %}
+<div class="num-list">
+    {% for p in rows %}
+        <form method="post" class="num-row {{ 'no-num' if not p.number }}">
+            <input type="hidden" name="pid" value="{{ p.id }}">
+            <input type="hidden" name="q" value="{{ q }}">
+            <div class="num-who">
+                <div class="num-id">ID {{ p.id }}</div>
+                <div class="num-name">{{ p.full_name }}</div>
+                <div class="num-meta">
+                    {{ p.birth_year or '—' }}{% if p.category_name %} · {{ p.category_name }}{% endif %}
+                    {% if p.city %} · {{ p.city }}{% endif %}
+                    {% if p.legacy_number %} · ранее №{{ p.legacy_number }}{% endif %}
+                </div>
+            </div>
+            <div class="num-now">
+                {% if p.number %}<span class="num-have">№{{ p.number }}</span>{% else %}<span class="num-none">без номера</span>{% endif %}
+            </div>
+            <div class="num-input">
+                <input type="number" name="number" min="1" inputmode="numeric"
+                       value="{{ p.number or '' }}" placeholder="{{ next_number }}">
+                <button type="submit">Выдать</button>
+            </div>
+        </form>
+    {% endfor %}
+</div>
+{% else %}
+    <div class="empty">{% if q %}Никого не найдено{% else %}В соревновании пока нет участников{% endif %}</div>
+{% endif %}
+
+<style>
+.num-summary { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.pill { font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 999px; }
+.pill.warn { background: #fef3c7; color: #92400e; }
+.pill.ok { background: #dcfce7; color: #166534; }
+.hint { color: #6b7280; font-size: 13px; }
+
+.num-search { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.num-search input {
+    flex: 1; min-width: 220px; padding: 12px 14px; font-size: 16px; font-family: inherit;
+    border: 2px solid #d1d5db; border-radius: 10px;
+}
+.num-search input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.num-search button {
+    padding: 12px 20px; font-size: 15px; font-weight: 600; font-family: inherit;
+    border: none; border-radius: 10px; background: #2563eb; color: #fff; cursor: pointer;
+}
+
+.num-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.num-row {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center;
+    background: #fff; border-radius: 12px; padding: 12px 16px; margin: 0;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06); border-left: 4px solid #16a34a;
+}
+.num-row.no-num { border-left-color: #f59e0b; background: #fffdf5; }
+.num-id { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #9ca3af; }
+.num-name { font-size: 16px; font-weight: 700; color: #111827; }
+.num-meta { font-size: 12px; color: #6b7280; margin-top: 2px; }
+.num-have { font-size: 20px; font-weight: 800; color: #15803d; font-variant-numeric: tabular-nums; }
+.num-none { font-size: 12px; font-weight: 700; color: #b45309; }
+.num-input { display: flex; gap: 8px; align-items: center; }
+.num-input input {
+    width: 100px; padding: 10px 12px; font-size: 18px; font-family: inherit; text-align: center;
+    border: 2px solid #d1d5db; border-radius: 9px; font-variant-numeric: tabular-nums;
+}
+.num-input input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.num-input button {
+    padding: 10px 14px; font-size: 14px; font-weight: 700; font-family: inherit;
+    border: none; border-radius: 9px; background: #16a34a; color: #fff; cursor: pointer; white-space: nowrap;
+}
+.num-input button:hover { background: #15803d; }
+.empty { background: #fff; border-radius: 12px; padding: 26px; text-align: center; color: #6b7280; }
+
+@media (max-width: 640px) {
+    .num-row { grid-template-columns: 1fr; gap: 10px; }
+    .num-now { order: 2; }
+    .num-input { order: 3; }
+    .num-input input { flex: 1; width: auto; }
+}
+</style>
+{% endblock %}

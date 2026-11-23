@@ -1,0 +1,894 @@
+{% extends "base.html" %}
+
+{% block title %}Старт — Хронометраж{% endblock %}
+{% block content %}
+<h2>Старт <small>— {{ competition.name }}</small></h2>
+
+{% if competition %}
+
+    {# ==================== ССЫЛКА НА ХРОНОМЕТРАЖ ==================== #}
+    <div class="manual-block">
+        <h3 style="margin:0 0 8px 0">📱 Хронометраж</h3>
+        <p style="margin:0 0 12px 0;color:#4b5563">
+            Отдельная мобильная страница для фиксации кругов и финиша.
+        </p>
+        <a href="{{ url_for('manual_page', cid=competition.id) }}" class="btn-manual-link">
+            📱 Открыть ручной хронометраж →
+        </a>
+    </div>
+
+    {# ==================== СОЗДАНИЕ СТАРТА ==================== #}
+        {# ==================== СОЗДАНИЕ СТАРТА ==================== #}
+    <div class="create-heat" id="create-heat">
+        <div class="ch-head">
+            <h3>➕ Новый старт <span class="ch-chip">№ {{ next_heat_number }}</span></h3>
+            <div class="ch-hint">
+                Категория участвует только в одном старте. Снятая галочка у участника — это DNS.
+            </div>
+        </div>
+
+        {% if has_available_categories %}
+        <form method="post" action="{{ url_for('heat_create') }}" id="create-heat-form">
+            <input type="hidden" name="competition_id" value="{{ competition.id }}">
+
+            <div class="ch-body">
+                <aside class="ch-cats">
+                    <div class="ch-panel-head">
+                        Категории <span class="ch-counter" id="ch-cat-counter"></span>
+                    </div>
+                    <div id="ch-cat-list"></div>
+                    <div class="ch-cat-actions">
+                        <button type="button" class="btn-ghost" id="ch-cats-all">Все доступные</button>
+                        <button type="button" class="btn-ghost" id="ch-cats-none">Снять</button>
+                    </div>
+                </aside>
+
+                <section class="ch-people">
+                    <div class="ch-people-head">
+                        <div class="ch-search">
+                            <input type="search" id="ch-search" placeholder="Поиск по ФИО или номеру…" autocomplete="off">
+                        </div>
+                        <div class="ch-quick">
+                            <button type="button" class="btn-ghost" data-q="all">Все</button>
+                            <button type="button" class="btn-ghost" data-q="none">Никого</button>
+                            <button type="button" class="btn-ghost" data-q="rfid">Только с меткой</button>
+                        </div>
+                    </div>
+                    <div id="ch-people-list" class="ch-people-list"></div>
+                </section>
+            </div>
+
+            <div class="ch-params" id="ch-params" hidden>
+                {% if race_format != 'itt' %}
+                <label class="ch-switch">
+                    <input type="checkbox" name="finish_on_leader" value="1" {% if heat_defaults.finish_on_leader %}checked{% endif %}>
+                    <span>🏁 Финиш после лидера</span>
+                </label>
+                {% endif %}
+                <label class="ch-switch">
+                    <input type="checkbox" name="auto_enabled" value="1" id="ch-auto" {% if heat_defaults.auto_enabled %}checked{% endif %}>
+                    <span>📡 Автохронометраж</span> <small>RFID</small>
+                </label>
+                <label class="ch-switch">
+                    <span>Минимальный круг</span>
+                    <input type="number" class="ch-num" name="min_lap_time" value="{{ heat_defaults.min_lap_time }}" min="0" step="1">
+                    <small>сек</small>
+                </label>
+                <label class="ch-switch">
+                    <span>Порядок старта</span>
+                    <select name="start_order" class="ch-num" style="width:auto">
+                        <option value="number" {{ 'selected' if heat_defaults.start_order != 'category' }}>По номеру</option>
+                        <option value="category" {{ 'selected' if heat_defaults.start_order == 'category' }}>По группе, затем номер</option>
+                    </select>
+                    <small>для разделки</small>
+                </label>
+            </div>
+
+            <div class="ch-foot">
+                <div class="ch-summary" id="ch-summary"></div>
+                <div class="ch-actions">
+                    <button type="button" class="btn-ghost" id="ch-toggle-params"
+                            title="Показать или скрыть настройки создаваемого старта: финиш после лидера, автохронометраж, минимальный круг">Параметры ▾</button>
+                    <button type="submit" name="start_now" value="0" class="ch-secondary" id="ch-btn-create" disabled>Создать</button>
+                    <button type="submit" name="start_now" value="1" class="ch-primary" id="ch-btn-start" disabled>Создать и начать</button>
+                </div>
+            </div>
+
+            <div id="ch-selected"></div>
+        </form>
+        {% else %}
+            <div class="empty">Нет доступных категорий: свободных с участниками не осталось — все уже в стартах или пусты.</div>
+        {% endif %}
+    </div>
+
+    <script type="application/json" id="ch-data">{{ heat_data|tojson }}</script>
+
+    {% if race_format == 'itt' %}
+        <div class="fmt-hint">
+            🚴 <b>Раздельный старт</b>: участники стартуют по одному с интервалом {{ itt_interval }} с,
+            порядок — по номерам. Старт отмечает стартовый судья на табло
+            <a href="{{ url_for('manual_page', mode='start') }}">«Хронометраж → Старт»</a>,
+            финиш — на странице «Хронометраж». У разделки один отрезок, круги не считаются.
+        </div>
+    {% endif %}
+
+    {% if without_number %}
+        <div class="no-num-hint">
+            Без стартового номера: <b>{{ without_number }}</b> — в стартах они не участвуют.
+            <a href="{{ url_for('numbers_page', cid=competition.id) }}">Выдать номера →</a>
+        </div>
+    {% endif %}
+
+{# ==================== СПИСОК СТАРТОВ ==================== #}
+    <h3 style="margin-top:32px">Старты</h3>
+    <div id="heats-list" data-cid="{{ competition.id if competition else '' }}">
+        {% include '_heats_list.html' %}
+    </div>
+{% else %}
+    <div class="empty" style="margin-top:16px">
+        Выберите соревнование, чтобы начать.
+    </div>
+{% endif %}
+
+{# ==================== ДИАЛОГ ПРАВКИ ФИНИША ==================== #}
+<div id="finish-dialog" class="fd-overlay" hidden>
+    <div class="fd-box" role="dialog" aria-modal="true" aria-labelledby="fd-title">
+        <h3 id="fd-title">Изменить финиш</h3>
+        <div class="fd-sub" id="fd-sub"></div>
+
+        <label class="fd-opt">
+            <input type="radio" name="fd-mode" value="finish" checked>
+            <span class="fd-label">Время финиша</span>
+            <input type="datetime-local" step="1" id="fd-finish">
+        </label>
+
+        <label class="fd-opt">
+            <input type="radio" name="fd-mode" value="elapsed">
+            <span class="fd-label">Время на дистанции</span>
+            <input type="text" id="fd-elapsed" placeholder="00:00:00" inputmode="numeric" autocomplete="off">
+        </label>
+
+        <div class="fd-hint" id="fd-hint"></div>
+
+        <div class="fd-actions">
+            <button type="button" class="btn-ghost" id="fd-cancel">Отмена</button>
+            <button type="button" class="btn-save" id="fd-ok">Сохранить</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.manual-block {
+    background: #fff; padding: 16px 20px; border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 16px;
+    border-left: 4px solid #2563eb;
+}
+.btn-manual-link {
+    display: inline-block;
+    background: #2563eb; color: #fff;
+    padding: 10px 20px; border-radius: 8px;
+    font-weight: 600; font-size: 15px;
+    text-decoration: none;
+}
+.btn-manual-link:hover { background: #1d4ed8; }
+
+.create-heat {
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.07);
+    margin-bottom: 24px;
+    border-left: 4px solid #16a34a;
+}
+.ch-head { padding: 16px 20px 12px; border-bottom: 1px solid #e5e7eb; }
+.ch-head h3 { margin: 0 0 6px; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+.ch-chip {
+    display: inline-block; background: #eff6ff; color: #1e40af;
+    border: 1px solid #bfdbfe; border-radius: 999px;
+    padding: 1px 10px; font-size: 12px; font-weight: 700;
+}
+.ch-hint { color: #6b7280; font-size: 13px; }
+
+.ch-body { display: grid; grid-template-columns: 300px 1fr; min-height: 300px; }
+@media (max-width: 900px) { .ch-body { grid-template-columns: 1fr; } }
+
+.ch-cats { border-right: 1px solid #e5e7eb; padding: 14px; background: #fcfcfd; }
+.ch-panel-head {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+    color: #6b7280; font-weight: 700; margin-bottom: 10px;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.ch-counter { background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 1px 8px; font-size: 11px; }
+
+.ch-cat {
+    width: 100%; display: grid; grid-template-columns: 22px 1fr auto; gap: 8px;
+    align-items: center; text-align: left; background: #fff;
+    border: 1px solid #e5e7eb; border-radius: 8px; padding: 9px 10px;
+    margin-bottom: 6px; cursor: pointer; font-family: inherit;
+    font-size: 14px; color: #111827;
+    transition: border-color .12s, box-shadow .12s, background .12s;
+}
+.ch-cat:hover:not(:disabled) { border-color: #93c5fd; }
+.ch-cat.on {
+    border-color: #2563eb; background: #eff6ff;
+    box-shadow: 0 0 0 2px rgba(37,99,235,.12);
+}
+.ch-cat:disabled { opacity: .55; cursor: not-allowed; background: #f9fafb; }
+.ch-box {
+    width: 18px; height: 18px; border: 1.5px solid #cbd5e1; border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: transparent; background: #fff;
+}
+.ch-cat.on .ch-box { background: #2563eb; border-color: #2563eb; color: #fff; }
+.ch-cat-name { font-weight: 600; }
+.ch-cat-meta { color: #6b7280; font-size: 12px; white-space: nowrap; }
+.ch-cat-actions { display: flex; gap: 6px; margin-top: 10px; }
+
+.ch-people { padding: 14px 16px; display: flex; flex-direction: column; min-width: 0; }
+.ch-people-head { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.ch-search { flex: 1 1 220px; }
+.ch-search input {
+    width: 100%; padding: 8px 12px; font-size: 14px; font-family: inherit;
+    border: 1px solid #d1d5db; border-radius: 8px; background: #fff;
+}
+.ch-search input:focus {
+    outline: none; border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+}
+.ch-quick { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.ch-people-list { overflow-y: auto; max-height: 360px; padding-right: 4px; }
+.ch-group {
+    font-size: 12px; font-weight: 700; color: #6b7280;
+    text-transform: uppercase; letter-spacing: .03em;
+    margin: 10px 0 6px; display: flex; gap: 8px; align-items: center;
+}
+.ch-group .rule { flex: 1; height: 1px; background: #e5e7eb; }
+
+.ch-person {
+    display: grid; grid-template-columns: 20px 56px 1fr auto; gap: 8px;
+    align-items: center; padding: 7px 8px; border-radius: 7px;
+    cursor: pointer; font-size: 14px;
+}
+.ch-person:hover { background: #f8fafc; }
+.ch-person.off { opacity: .45; }
+.ch-person input { width: 16px; height: 16px; accent-color: #2563eb; }
+.ch-person .num { color: #6b7280; font-variant-numeric: tabular-nums; font-size: 13px; }
+.ch-person .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-person .name small { color: #9ca3af; font-weight: 400; }
+.ch-badge-rfid {
+    background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;
+    border-radius: 999px; padding: 0 7px; font-size: 11px; white-space: nowrap;
+}
+.ch-badge-norfid {
+    background: #fffbeb; color: #b45309; border: 1px solid #fde68a;
+    border-radius: 999px; padding: 0 7px; font-size: 11px; white-space: nowrap;
+}
+.ch-empty { color: #6b7280; text-align: center; padding: 44px 12px; font-size: 14px; }
+
+.ch-params {
+    border-top: 1px solid #e5e7eb; padding: 14px 20px;
+    display: flex; gap: 26px; flex-wrap: wrap; background: #fcfcfd;
+}
+.ch-params[hidden] { display: none; }
+.ch-switch { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.ch-switch input[type=checkbox] { width: 16px; height: 16px; accent-color: #2563eb; }
+.ch-switch small { color: #6b7280; }
+.ch-num {
+    width: 74px; padding: 5px 8px; border: 1px solid #d1d5db;
+    border-radius: 6px; font-family: inherit;
+}
+
+.ch-foot {
+    position: sticky; bottom: 0; z-index: 5;
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    padding: 12px 20px; background: #fff; border-top: 1px solid #e5e7eb;
+    border-radius: 0 0 12px 12px;
+}
+.ch-summary { color: #6b7280; font-size: 14px; flex: 1 1 240px; }
+.ch-summary b { color: #111827; }
+.ch-summary .warn { color: #b45309; font-weight: 600; }
+.ch-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.ch-primary {
+    background: #16a34a; color: #fff; border: none;
+    padding: 9px 20px; font-weight: 600;
+}
+.ch-primary:hover { background: #15803d; }
+.ch-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+.ch-secondary {
+    background: #fff; color: #2563eb; border: 1px solid #bfdbfe;
+    padding: 8px 16px; font-weight: 600;
+}
+.ch-secondary:hover { background: #eff6ff; }
+.ch-secondary:disabled { color: #9ca3af; border-color: #e5e7eb; cursor: not-allowed; }
+.btn-ghost {
+    background: #fff; color: #374151; border: 1px solid #d1d5db;
+    padding: 6px 12px; font-size: 13px; font-weight: 500;
+}
+.btn-ghost:hover { background: #f3f4f6; }
+
+.no-num-hint {
+    margin: 14px 0 0; padding: 10px 14px; border-radius: 8px;
+    background: #fef3c7; color: #92400e; font-size: 13px; line-height: 1.5;
+    border-left: 4px solid #f59e0b;
+}
+.no-num-hint a { color: #92400e; font-weight: 700; }
+.fmt-hint {
+    margin: 14px 0 0; padding: 10px 14px; border-radius: 8px; font-size: 13px; line-height: 1.5;
+    background: #ecfdf5; color: #065f46; border-left: 4px solid #10b981;
+}
+.fmt-hint a { color: #047857; font-weight: 700; }
+
+.heat-card {
+    background: #fff; border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    padding: 14px 18px; margin-bottom: 16px;
+    border-left: 4px solid #d1d5db;
+}
+.heat-card.heat-pending  { border-left-color: #6b7280; }
+.heat-card.heat-running  { border-left-color: #f59e0b; }
+.heat-card.heat-finished { border-left-color: #16a34a; }
+
+.heat-card.collapsed .heat-body { display: none; }
+.collapse-btn {
+    background: none; border: none; color: #6b7280;
+    font-size: 14px; cursor: pointer; padding: 4px 8px;
+    border-radius: 4px;
+}
+.collapse-btn:hover { background: #e5e7eb; color: #111827; }
+
+.heat-header {
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.heat-title { font-size: 18px; font-weight: 700; }
+.badge {
+    display: inline-block; padding: 2px 10px; border-radius: 12px;
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+}
+.badge-pending  { background: #f3f4f6; color: #374151; }
+.badge-running  { background: #fef3c7; color: #92400e; }
+.badge-finished { background: #dcfce7; color: #166534; }
+.heat-cats { color: #4b5563; font-size: 14px; }
+.heat-start { color: #4b5563; font-size: 14px; }
+.heat-progress { color: #92400e; font-size: 13px; font-weight: 600; }
+
+.heat-actions { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.btn-start {
+    background: #16a34a; font-size: 16px; padding: 8px 24px; font-weight: 600;
+}
+.btn-start:hover { background: #15803d; }
+
+.row-finished { background: #f0fdf4; }
+.row-ok       { background: #f0fdf4; }
+.row-dnf      { background: #fef2f2; }
+.row-lapped   { background: #fffbeb; }
+.row-dns      { background: #f3f4f6; color: #6b7280; }
+
+.tag {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 12px; font-weight: 600;
+}
+.tag-ok     { background: #dcfce7; color: #166534; }
+.tag-dns    { background: #e5e7eb; color: #4b5563; }
+.tag-dnf    { background: #fee2e2; color: #991b1b; }
+.tag-lapped { background: #fef3c7; color: #92400e; }
+.tag-active { background: #dbeafe; color: #1e40af; }
+
+.cat-result-group {
+    margin-bottom: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.cat-result-summary {
+    padding: 10px 14px;
+    background: #f9fafb;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    list-style: none;
+}
+.cat-result-summary::-webkit-details-marker { display: none; }
+.cat-result-summary:hover { background: #f3f4f6; }
+.cat-result-group table { margin: 0; border-radius: 0; box-shadow: none; }
+
+/* ---------- диалог правки финиша ---------- */
+.fd-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(17,24,39,.45);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.fd-overlay[hidden] { display: none; }
+.fd-box {
+    background: #fff; border-radius: 12px; padding: 20px 22px 16px;
+    width: 100%; max-width: 470px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.25);
+}
+.fd-box h3 { margin: 0 0 4px; font-size: 16px; }
+.fd-sub { color: #6b7280; font-size: 13px; margin-bottom: 14px; }
+.fd-opt { display: flex; align-items: center; gap: 10px; padding: 7px 0; cursor: pointer; }
+.fd-opt input[type=radio] { width: 16px; height: 16px; accent-color: #2563eb; flex: 0 0 auto; }
+.fd-label { width: 158px; font-size: 14px; flex: 0 0 auto; }
+.fd-opt input[type=datetime-local], .fd-opt input[type=text] {
+    flex: 1 1 auto; min-width: 0; padding: 7px 10px; font-size: 14px;
+    border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit;
+}
+.fd-opt input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.fd-dim { background: #f3f4f6; color: #9ca3af; }
+.fd-hint { color: #b91c1c; font-size: 13px; min-height: 18px; margin-top: 8px; }
+.fd-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
+.fd-actions .btn-save { background: #16a34a; padding: 8px 18px; font-weight: 600; }
+.fd-actions .btn-save:hover { background: #15803d; }
+</style>
+
+<script>
+function fmtElapsed(ms) {
+    if (ms < 0) ms = 0;
+    const totalSeconds = Math.floor(ms / 1000);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    const p = (n, w) => String(n).padStart(w, '0');
+    return `${p(h,2)}:${p(m,2)}:${p(s,2)}`;
+}
+function tick() {
+    const now = Date.now();
+    document.querySelectorAll('[data-start-ms]').forEach(el => {
+        el.textContent = fmtElapsed(now - parseInt(el.dataset.startMs, 10));
+    });
+}
+setInterval(tick, 200);
+tick();
+
+function toggleHeat(btn) {
+    const card = btn.closest('.heat-card');
+    card.classList.toggle('collapsed');
+    const hid = card.dataset.hid;
+    if (hid) {
+        localStorage.setItem('heat_collapsed_' + hid,
+            card.classList.contains('collapsed') ? '1' : '0');
+    }
+    btn.textContent = card.classList.contains('collapsed') ? '▶' : '▼';
+}
+
+function editLap(lapId, currentIso) {
+    const val = prompt(
+        'Новое время круга (формат YYYY-MM-DDTHH:MM:SS):', currentIso
+    );
+    if (!val) return;
+    const f = document.createElement('form');
+    f.method = 'post'; f.action = '/laps/' + lapId + '/edit';
+    const i = document.createElement('input');
+    i.type = 'hidden'; i.name = 'lap_time'; i.value = val;
+    f.appendChild(i); document.body.appendChild(f); f.submit();
+}
+
+/* ====== Диалог правки финиша: можно ввести время финиша или время на дистанции ====== */
+(function () {
+    const overlay = document.getElementById('finish-dialog');
+    if (!overlay) return;
+
+    const finishEl = document.getElementById('fd-finish');
+    const elapsedEl = document.getElementById('fd-elapsed');
+    const hintEl = document.getElementById('fd-hint');
+    const subEl = document.getElementById('fd-sub');
+    const okBtn = document.getElementById('fd-ok');
+    const cancelBtn = document.getElementById('fd-cancel');
+    const radios = [...overlay.querySelectorAll('input[name="fd-mode"]')];
+
+    let resolver = null;
+    let startDate = null;
+    let lastFocus = null;
+
+    const pad = (n) => String(n).padStart(2, '0');
+
+    function toLocalIso(d) {
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+            'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    }
+
+    function fmtDur(sec) {
+        sec = Math.round(sec);
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        return pad(h) + ':' + pad(m) + ':' + pad(sec % 60);
+    }
+
+    function parseDur(value) {
+        const s = (value || '').trim().replace(',', '.');
+        if (!s) return null;
+        if (s.indexOf(':') >= 0) {
+            const parts = s.split(':');
+            if (parts.length > 3) return null;
+            let total = 0;
+            for (const part of parts) {
+                const n = Number(part);
+                if (!isFinite(n) || n < 0) return null;
+                total = total * 60 + n;
+            }
+            return total;
+        }
+        const n = Number(s);
+        return isFinite(n) && n > 0 ? n : null;
+    }
+
+    function currentMode() {
+        const checked = overlay.querySelector('input[name="fd-mode"]:checked');
+        return checked ? checked.value : 'finish';
+    }
+
+    function syncFromFinish() {
+        if (!startDate || !finishEl.value) { elapsedEl.value = ''; return; }
+        const d = new Date(finishEl.value);
+        if (isNaN(d)) { elapsedEl.value = ''; return; }
+        const sec = (d - startDate) / 1000;
+        elapsedEl.value = sec > 0 ? fmtDur(sec) : '';
+    }
+
+    function syncFromElapsed() {
+        if (!startDate) return;
+        const sec = parseDur(elapsedEl.value);
+        if (sec === null) return;
+        finishEl.value = toLocalIso(new Date(startDate.getTime() + sec * 1000));
+    }
+
+    function updateMode() {
+        const m = currentMode();
+        finishEl.disabled = m !== 'finish';
+        elapsedEl.disabled = m !== 'elapsed';
+        finishEl.classList.toggle('fd-dim', finishEl.disabled);
+        elapsedEl.classList.toggle('fd-dim', elapsedEl.disabled);
+        const target = m === 'elapsed' ? elapsedEl : finishEl;
+        setTimeout(() => target.focus(), 0);
+    }
+
+    function close(result) {
+        if (!resolver) return;
+        const resolve = resolver;
+        resolver = null;
+        overlay.hidden = true;
+        document.removeEventListener('keydown', onKey, true);
+        if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+        resolve(result);
+    }
+
+    function onKey(e) {
+        if (e.key === 'Escape') { e.preventDefault(); close(null); }
+    }
+
+    function openDialog(startIso, finishIso) {
+        lastFocus = document.activeElement;
+        startDate = new Date(startIso);
+        finishEl.value = finishIso || '';
+        elapsedEl.value = '';
+        syncFromFinish();
+        hintEl.textContent = '';
+        subEl.textContent = 'Старт: ' + (startIso || '').replace('T', ' ').slice(0, 19) +
+            (elapsedEl.value ? ' · на дистанции ' + elapsedEl.value : '');
+        overlay.querySelector('input[value="finish"]').checked = true;
+        overlay.hidden = false;
+        document.addEventListener('keydown', onKey, true);
+        updateMode();
+        return new Promise((resolve) => { resolver = resolve; });
+    }
+
+    radios.forEach((r) => r.addEventListener('change', updateMode));
+    finishEl.addEventListener('input', syncFromFinish);
+    elapsedEl.addEventListener('input', syncFromElapsed);
+    cancelBtn.addEventListener('click', () => close(null));
+    overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(null); });
+
+    okBtn.addEventListener('click', () => {
+        hintEl.textContent = '';
+        if (currentMode() === 'finish') {
+            if (!finishEl.value) { hintEl.textContent = 'Укажите время финиша.'; return; }
+            const iso = finishEl.value.length === 16 ? finishEl.value + ':00' : finishEl.value;
+            close({ finish_time: iso });
+        } else {
+            const sec = parseDur(elapsedEl.value);
+            if (sec === null || sec <= 0) {
+                hintEl.textContent = 'Введите ЧЧ:ММ:СС, ММ:СС или число секунд.';
+                return;
+            }
+            close({ elapsed: elapsedEl.value.trim() });
+        }
+    });
+
+    window.editFinish = function (raceId, startIso, finishIso) {
+        openDialog(startIso, finishIso).then((result) => {
+            if (!result) return;
+            const form = document.createElement('form');
+            form.method = 'post';
+            form.action = '/races/' + raceId + '/edit_finish';
+            Object.keys(result).forEach((name) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = result[name];
+                form.appendChild(input);
+            });
+            document.body.appendChild(form);
+            form.submit();
+        });
+    };
+})();
+
+/* ====== Панель создания старта ====== */
+function initCreateHeat() {
+    const dataEl = document.getElementById('ch-data');
+    const form = document.getElementById('create-heat-form');
+    if (!dataEl || !form) return;
+
+    let DATA;
+    try { DATA = JSON.parse(dataEl.textContent); } catch (e) { return; }
+    const cats = DATA.categories || [];
+
+    const el = (id) => document.getElementById(id);
+    const catList = el('ch-cat-list');
+    const peopleList = el('ch-people-list');
+    const selectedBox = el('ch-selected');
+    const counter = el('ch-cat-counter');
+    const summaryEl = el('ch-summary');
+    const searchInput = el('ch-search');
+    const btnCreate = el('ch-btn-create');
+    const btnStart = el('ch-btn-start');
+
+    const selected = new Set();
+    const active = new Set();
+    let query = '';
+
+    const norm = (s) => String(s == null ? '' : s).toLowerCase().replace(/ё/g, 'е');
+
+    function availableCats() { return cats.filter(c => !c.heat_number && c.people.length); }
+    function selectedCats() { return cats.filter(c => selected.has(c.id)); }
+
+    function matches(p) {
+        if (!query) return true;
+        return norm(p.name).indexOf(query) >= 0 || String(p.number).indexOf(query) >= 0;
+    }
+
+    function toggleCat(cat) {
+        if (selected.has(cat.id)) {
+            selected.delete(cat.id);
+            cat.people.forEach(p => active.delete(p.id));
+        } else {
+            selected.add(cat.id);
+            cat.people.forEach(p => active.add(p.id));
+        }
+        renderCats(); renderPeople(); renderSummary();
+    }
+
+    function renderCats() {
+        catList.innerHTML = '';
+        // пустые категории, которых ещё нет в стартах, не показываем —
+        // они только занимают место и выбрать их всё равно нельзя
+        cats.filter(cat => cat.heat_number != null || cat.people.length > 0).forEach(cat => {
+            const used = cat.heat_number != null;
+            const on = selected.has(cat.id);
+
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ch-cat' + (on ? ' on' : '');
+            btn.disabled = used;
+
+            const box = document.createElement('span');
+            box.className = 'ch-box';
+            box.textContent = '✓';
+
+            const name = document.createElement('span');
+            name.className = 'ch-cat-name';
+            name.textContent = cat.name;
+
+            const meta = document.createElement('span');
+            meta.className = 'ch-cat-meta';
+            meta.textContent = used ? ('в старте № ' + cat.heat_number)
+                : cat.people.length + ' уч. · ' + cat.laps + ' кр.';
+
+            btn.append(box, name, meta);
+            if (!used) btn.addEventListener('click', () => toggleCat(cat));
+            catList.appendChild(btn);
+        });
+        counter.textContent = selected.size + ' из ' + availableCats().length;
+    }
+
+    function renderPeople() {
+        peopleList.innerHTML = '';
+        const list = selectedCats();
+        if (!list.length) {
+            const d = document.createElement('div');
+            d.className = 'ch-empty';
+            d.textContent = 'Выберите категорию слева — участники появятся здесь.';
+            peopleList.appendChild(d);
+            return;
+        }
+
+        let hidden = 0;
+        list.forEach(cat => {
+            const shown = cat.people.filter(matches);
+            hidden += cat.people.length - shown.length;
+            if (!shown.length) return;
+
+            const head = document.createElement('div');
+            head.className = 'ch-group';
+            const t = document.createElement('span'); t.textContent = cat.name;
+            const rule = document.createElement('span'); rule.className = 'rule';
+            const cnt = document.createElement('span'); cnt.textContent = cat.people.length;
+            head.append(t, rule, cnt);
+            peopleList.appendChild(head);
+
+            shown.forEach(p => {
+                const row = document.createElement('label');
+                row.className = 'ch-person' + (active.has(p.id) ? '' : ' off');
+
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = active.has(p.id);
+                cb.addEventListener('change', () => {
+                    if (cb.checked) active.add(p.id); else active.delete(p.id);
+                    row.classList.toggle('off', !cb.checked);
+                    renderSummary();
+                });
+
+                const num = document.createElement('span');
+                num.className = 'num';
+                num.textContent = '№ ' + p.number;
+
+                const name = document.createElement('span');
+                name.className = 'name';
+                name.textContent = p.name;
+                const extra = [p.year || '', p.gender || ''].filter(Boolean).join(' · ');
+                if (extra) {
+                    const meta = document.createElement('small');
+                    meta.textContent = ' ' + extra;
+                    name.appendChild(meta);
+                }
+
+                const badge = document.createElement('span');
+                badge.className = p.rfid ? 'ch-badge-rfid' : 'ch-badge-norfid';
+                badge.textContent = p.rfid ? 'RFID' : 'нет метки';
+
+                row.append(cb, num, name, badge);
+                peopleList.appendChild(row);
+            });
+        });
+
+        if (hidden > 0) {
+            const note = document.createElement('div');
+            note.className = 'ch-empty';
+            note.style.padding = '10px';
+            note.style.fontSize = '13px';
+            note.textContent = 'Скрыто поиском: ' + hidden;
+            peopleList.appendChild(note);
+        }
+    }
+
+    function renderSummary() {
+        const total = selectedCats().reduce((s, c) => s + c.people.length, 0);
+        let act = 0, noRfid = 0;
+        selectedCats().forEach(c => c.people.forEach(p => {
+            if (active.has(p.id)) { act++; if (!p.rfid) noRfid++; }
+        }));
+
+        const parts = [
+            'Категорий: <b>' + selected.size + '</b>',
+            'участников: <b>' + act + '</b>',
+            'DNS: <b>' + (total - act) + '</b>'
+        ];
+        if (noRfid) parts.push('<span class="warn">без метки: ' + noRfid + '</span>');
+        summaryEl.innerHTML = parts.join(' · ');
+
+        btnCreate.disabled = act === 0;
+        btnStart.disabled = act === 0;
+
+        // скрытые поля, которые уйдут на сервер
+        selectedBox.innerHTML = '';
+        active.forEach(id => {
+            const i = document.createElement('input');
+            i.type = 'hidden';
+            i.name = 'participant_ids';
+            i.value = id;
+            selectedBox.appendChild(i);
+        });
+    }
+
+    function render() { renderCats(); renderPeople(); renderSummary(); }
+
+    searchInput.addEventListener('input', () => {
+        query = norm(searchInput.value.trim());
+        renderPeople();
+    });
+
+    document.querySelectorAll('#create-heat-form [data-q]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const mode = btn.dataset.q;
+            selectedCats().forEach(c => c.people.forEach(p => {
+                if (mode === 'all') active.add(p.id);
+                else if (mode === 'none') active.delete(p.id);
+                else if (p.rfid) active.add(p.id);
+                else active.delete(p.id);
+            }));
+            renderPeople(); renderSummary();
+        });
+    });
+
+    el('ch-cats-all').addEventListener('click', () => {
+        availableCats().forEach(c => {
+            selected.add(c.id);
+            c.people.forEach(p => active.add(p.id));
+        });
+        render();
+    });
+
+    el('ch-cats-none').addEventListener('click', () => {
+        selected.clear();
+        active.clear();
+        render();
+    });
+
+    el('ch-toggle-params').addEventListener('click', (e) => {
+        const box = el('ch-params');
+        box.hidden = !box.hidden;
+        e.currentTarget.textContent = box.hidden ? 'Параметры ▾' : 'Параметры ▴';
+    });
+
+    render();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.heat-card').forEach(card => {
+        const hid = card.dataset.hid;
+        if (localStorage.getItem('heat_collapsed_' + hid) === '1') {
+            card.classList.add('collapsed');
+            const btn = card.querySelector('.collapse-btn');
+            if (btn) btn.textContent = '▶';
+        }
+    });
+    initCreateHeat();
+});
+</script>
+
+<script>
+/* Автообновление списка стартов */
+(function () {
+    const box = document.getElementById('heats-list');
+    if (!box) return;
+    const cid = box.dataset.cid;
+    let last = box.innerHTML.trim();
+    let busy = false;
+
+    function applyCollapsed() {
+        box.querySelectorAll('.heat-card').forEach(card => {
+            const hid = card.dataset.hid;
+            if (localStorage.getItem('heat_collapsed_' + hid) === '1') {
+                card.classList.add('collapsed');
+                const btn = card.querySelector('.collapse-btn');
+                if (btn) btn.textContent = '▶';
+            }
+        });
+    }
+
+    async function refresh() {
+        if (busy || document.hidden) return;
+        busy = true;
+        try {
+            const resp = await fetch('/races/data' + (cid ? '?cid=' + encodeURIComponent(cid) : ''), { cache: 'no-store' });
+            if (!resp.ok) return;
+            const html = (await resp.text()).trim();
+            if (html === last) return;
+            last = html;
+            box.innerHTML = html;
+            applyCollapsed();
+            if (typeof tick === 'function') tick();
+        } catch (e) {
+            /* нет связи — ждём следующего опроса */
+        } finally {
+            busy = false;
+        }
+    }
+
+    setInterval(refresh, 4000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+})();
+</script>
+{% endblock %}

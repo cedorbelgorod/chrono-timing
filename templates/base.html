@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Хронометраж{% endblock %}</title>
+    {% block head %}{% endblock %}
+    <style>
+        /* ======================= БАЗОВЫЕ СТИЛИ ======================= */
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+            margin: 0; background: #f4f6f8; color: #222;
+        }
+        header {
+            background: #1f2937; color: #fff;
+            padding: 10px 24px; display: flex;
+            align-items: center; gap: 24px;
+            flex-wrap: wrap;
+        }
+        .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+        header h1 { margin: 0; font-size: 18px; font-weight: 500; white-space: nowrap; }
+        .brand-comp {
+            color: #9ca3af; font-size: 13px; white-space: nowrap;
+            border-left: 1px solid rgba(255,255,255,.15); padding-left: 10px;
+            max-width: 240px; overflow: hidden; text-overflow: ellipsis;
+        }
+        .brand-switch {
+            color: #93c5fd; text-decoration: none; font-size: 15px; line-height: 1;
+            background: rgba(147,197,253,.12); border-radius: 6px; padding: 3px 7px;
+            align-self: center;
+        }
+        .brand-switch:hover { background: rgba(147,197,253,.25); }
+        .ro-strip {
+            background: #fef3c7; color: #92400e; border-bottom: 1px solid #fcd34d;
+            padding: 6px 16px; font-size: 13px; font-weight: 600; text-align: center;
+        }
+
+        header nav { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-left: auto; }
+        header nav a {
+            color: #93c5fd; text-decoration: none;
+            padding: 6px 10px; border-radius: 6px;
+            transition: background .15s; font-size: 14px;
+        }
+        header nav a:hover { background: rgba(147,197,253,.15); }
+        header nav a.nav-link.on {
+            background: rgba(147,197,253,.22); color: #e8f1ff; font-weight: 600;
+        }
+        /* «Сейчас идёт»: живой старт — зелёная точка, нет — приглушённый пункт */
+        header nav a.nav-idle { opacity: .5; }
+        header nav a.nav-idle:hover { opacity: 1; }
+        header nav a.nav-live { color: #d9fbe5; }
+        header nav a.nav-live:hover { color: #eafff1; }
+        .nav-dot {
+            display: inline-block; width: 7px; height: 7px; margin-left: 6px;
+            border-radius: 50%; background: #4ade80; vertical-align: middle;
+            box-shadow: 0 0 0 3px rgba(74,222,128,.25);
+            animation: nav-dot-pulse 2s ease-in-out infinite;
+        }
+        @keyframes nav-dot-pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 3px rgba(74,222,128,.25); }
+            50% { opacity: .5; box-shadow: 0 0 0 5px rgba(74,222,128,.12); }
+        }
+
+        /* выпадающие группы меню */
+        .nav-group { position: relative; display: flex; }
+        .nav-toggle {
+            background: transparent; border: none; color: #93c5fd;
+            font-family: inherit; font-size: 14px; cursor: pointer;
+            padding: 6px 10px; border-radius: 6px;
+            display: inline-flex; align-items: center; gap: 5px;
+            transition: background .15s; white-space: nowrap;
+        }
+        .nav-toggle:hover { background: rgba(147,197,253,.15); }
+        .nav-group.on .nav-toggle {
+            background: rgba(147,197,253,.22); color: #e8f1ff; font-weight: 600;
+        }
+        .caret { font-size: 10px; opacity: .75; }
+        .nav-menu {
+            display: none; position: absolute; top: 100%; left: 0;
+            margin-top: 6px; min-width: 200px; padding: 6px; z-index: 300;
+            background: #fff; border-radius: 10px;
+            box-shadow: 0 12px 34px rgba(0,0,0,.25), 0 0 0 1px rgba(0,0,0,.04);
+        }
+        .nav-menu.right { left: auto; right: 0; }
+        .nav-group.open .nav-menu, .nav-group:focus-within .nav-menu { display: block; }
+        @media (hover: hover) {
+            .nav-group:hover .nav-menu { display: block; }
+        }
+        .nav-menu a, .nav-menu button {
+            display: block; width: 100%; text-align: left;
+            padding: 8px 10px; border-radius: 6px;
+            font-size: 14px; font-family: inherit; font-weight: 400;
+            color: #1f2937; text-decoration: none;
+            background: none; border: none; cursor: pointer;
+        }
+        .nav-menu a:hover, .nav-menu button:hover { background: #f3f4f6; }
+        .nav-menu a.on { background: #eff6ff; color: #1e40af; font-weight: 600; }
+        .nav-menu .menu-exit { color: #b91c1c; }
+        .nav-menu .menu-exit:hover { background: #fef2f2; }
+
+        /* вкладки «Ручной / RFID» */
+        .timing-tabs {
+            display: flex; gap: 6px; padding: 6px; margin-bottom: 14px;
+            background: #fff; border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.06);
+        }
+        .ttab {
+            flex: 1 1 auto; text-align: center; padding: 8px 14px;
+            border-radius: 8px; text-decoration: none;
+            color: #374151; font-size: 14px; font-weight: 600;
+        }
+        .ttab:hover { background: #f3f4f6; }
+        .ttab.on { background: #eff6ff; color: #1e40af; box-shadow: inset 0 0 0 1px #bfdbfe; }
+
+        /* Кнопка «Выйти» — визуально как ссылка в nav */
+        .logout-btn {
+            background: transparent; color: #93c5fd;
+            border: none; padding: 4px 8px; cursor: pointer;
+            font-size: 14px; border-radius: 6px;
+            font-family: inherit; transition: background .15s;
+        }
+        .logout-btn:hover { background: rgba(147,197,253,.15); text-decoration: underline; }
+        .logout-btn:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+
+        main { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+        h2 { margin-top: 0; }
+        h3 { color: #374151; }
+
+        /* ======================= ТАБЛИЦЫ ======================= */
+        table {
+            width: 100%; border-collapse: collapse; background: #fff;
+            border-radius: 8px; overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,.06);
+        }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th {
+            background: #f9fafb; font-size: 13px; color: #6b7280;
+            font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+        }
+        tr:last-child td { border-bottom: none; }
+
+        /* ======================= ЭЛЕМЕНТЫ ФОРМ ======================= */
+        input[type=text], input[type=number], input[type=datetime-local], input[type=password], select {
+            padding: 6px 8px; border: 1px solid #d1d5db;
+            border-radius: 6px; font-size: 14px;
+            background: #fff; color: #222;
+        }
+        input[type=text]:focus, input[type=number]:focus,
+        input[type=datetime-local]:focus, input[type=password]:focus, select:focus {
+            outline: none; border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+        }
+        button {
+            padding: 6px 12px; border: none; border-radius: 6px;
+            background: #2563eb; color: #fff; cursor: pointer; font-size: 14px;
+            transition: background .15s;
+        }
+        button:hover { background: #1d4ed8; }
+        button:disabled { opacity: .5; cursor: not-allowed; }
+        button.danger { background: #dc2626; }
+        button.danger:hover { background: #b91c1c; }
+
+        /* ======================= ВСПОМОГАТЕЛЬНЫЕ КЛАССЫ ======================= */
+        .inline { display: inline-flex; gap: 8px; align-items: center; }
+        .toolbar { margin-bottom: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+        /* ======================= УВЕДОМЛЕНИЯ ======================= */
+        .flash {
+            padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 14px;
+        }
+        .flash.success { background: #dcfce7; color: #166534; }
+        .flash.error   { background: #fee2e2; color: #991b1b; }
+
+        /* ======================= ПУСТЫЕ СОСТОЯНИЯ ======================= */
+        .empty {
+            padding: 20px; text-align: center; color: #6b7280;
+            background: #fff; border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.06);
+        }
+
+        /* ======================= ССЫЛКИ ======================= */
+        a.link { color: #2563eb; text-decoration: none; }
+        a.link:hover { text-decoration: underline; }
+
+        details summary { list-style: none; }
+        details summary::-webkit-details-marker { display: none; }
+        details summary:hover { color: #2563eb; }
+
+        small { color: #6b7280; }
+        .mono { font-family: "SF Mono", Consolas, "Liberation Mono", monospace; }
+
+        /* ======================= ОКНО ПОДТВЕРЖДЕНИЯ ======================= */
+        .ui-confirm-overlay {
+            position: fixed; inset: 0; z-index: 1000;
+            background: rgba(17, 24, 39, .45);
+            display: flex; align-items: center; justify-content: center;
+            padding: 16px;
+        }
+        .ui-confirm-overlay[hidden] { display: none; }
+        .ui-confirm {
+            background: #fff; border-radius: 12px;
+            padding: 20px 22px 16px; width: 100%; max-width: 460px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, .25);
+            animation: ui-confirm-in .12s ease-out;
+        }
+        @keyframes ui-confirm-in {
+            from { opacity: 0; transform: translateY(6px) scale(.98); }
+            to   { opacity: 1; transform: none; }
+        }
+        .ui-confirm-title { margin: 0 0 8px; font-size: 16px; color: #111827; }
+        .ui-confirm-text {
+            color: #374151; font-size: 14px; line-height: 1.5;
+            white-space: pre-line; word-wrap: break-word;
+        }
+        .ui-confirm-actions {
+            display: flex; gap: 10px; justify-content: flex-end;
+            margin-top: 20px; flex-wrap: wrap;
+        }
+        .ui-confirm-actions button {
+            padding: 8px 16px; font-size: 14px; font-weight: 600;
+            border-radius: 6px; font-family: inherit;
+        }
+        .ui-confirm-cancel {
+            background: #f3f4f6; color: #374151; border: 1px solid #d1d5db;
+        }
+        .ui-confirm-cancel:hover { background: #e5e7eb; }
+        .ui-confirm-ok { background: #2563eb; }
+        .ui-confirm-ok:hover { background: #1d4ed8; }
+        .ui-confirm-ok.is-danger { background: #dc2626; }
+        .ui-confirm-ok.is-danger:hover { background: #b91c1c; }
+
+        /* список бегущих при завершении старта */
+        .ui-finish-list { margin-top: 10px; max-height: 250px; overflow-y: auto; }
+        .ui-finish-row {
+            display: flex; align-items: center; gap: 8px; padding: 7px 4px;
+            border-bottom: 1px solid #f1f5f9; font-size: 14px; cursor: pointer;
+        }
+        .ui-finish-row:last-child { border-bottom: none; }
+        .ui-finish-row input { width: 16px; height: 16px; accent-color: #dc2626; flex: 0 0 auto; }
+        .ui-finish-row .num { color: #6b7280; width: 54px; flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+        .ui-finish-row .name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ui-finish-row .laps { color: #6b7280; font-size: 12px; flex: 0 0 auto; }
+
+        /* ======================= ПЛАНШЕТ / СЕНСОРНЫЙ ЭКРАН ======================= */
+        /* режим встраивания (мобильное приложение): никаких переходов на другие страницы */
+        body.embed header nav { display: none !important; }
+        body.embed .timing-tabs { display: none !important; }
+        body.embed .m-empty-small a { display: none !important; }
+        html { -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; }
+        body { touch-action: manipulation; }
+
+        /* широкие таблицы прокручиваются по горизонтали, а не ломают вёрстку */
+        .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+
+        @media (pointer: coarse) {
+            input[type=text], input[type=number], input[type=password], input[type=search],
+            input[type=datetime-local], select, textarea { min-height: 44px; font-size: 16px; }
+            .toolbar button, .save-bar button, .btn-ghost, .btn-save-all,
+            .ch-primary, .ch-secondary, .heat-finish-form button,
+            .ui-confirm-actions button, .name-form button, .log-filters button { min-height: 44px; }
+            header nav a, .nav-toggle { padding: 10px 12px; }
+            .ttab { padding: 12px 14px; }
+            .del-btn { min-height: 38px; }
+        }
+
+        @media (max-width: 1100px) {
+            main { padding: 0 12px; }
+            h2 { font-size: 22px; }
+            th, td { padding: 9px 10px; font-size: 14px; }
+            .tw { border-radius: 8px; }
+        }
+
+        /* ======================= МОБИЛЬНАЯ АДАПТАЦИЯ ======================= */
+        @media (max-width: 600px) {
+            header { padding: 10px 12px; gap: 10px; }
+            header h1 { font-size: 16px; }
+            .brand-comp { display: none; }
+            header nav { gap: 2px; width: 100%; margin-left: 0; }
+            header nav a { font-size: 13px; padding: 5px 6px; }
+            .nav-toggle { font-size: 13px; padding: 5px 6px; }
+            .nav-menu { min-width: 180px; }
+            .logout-btn { font-size: 13px; padding: 4px 6px; }
+            main { margin: 12px auto; padding: 0 8px; }
+            th, td { padding: 8px 6px; font-size: 13px; }
+        }
+    </style>
+</head>
+<body class="{{ 'embed' if request.args.get('embed') == '1' else '' }}">
+<header>
+    <div class="brand">
+        <h1>⏱ Хронометраж</h1>
+        {% if competition_name %}<span class="brand-comp">{{ competition_name }}</span>{% endif %}
+        {% if current_comp_slug %}
+            <a class="brand-switch" href="{{ url_for('index') }}" title="Сменить соревнование">⇄</a>
+        {% endif %}
+    </div>
+    {% set ep = request.endpoint or '' %}
+    {% set is_start = ep == 'races_page' or ep.startswith('heat_') %}
+    {% set is_manual = ep.startswith('manual') %}
+    {% set is_auto = ep.startswith('auto') %}
+    {% set is_dash = ep.startswith('dashboard') %}
+    {% set is_results = ep.startswith('results') %}
+    {% set is_logs = ep.startswith('logs') %}
+    {% set is_comp = ep.startswith('competition') or ep.startswith('categor') or ep.startswith('participant') or ep.startswith('registration') %}
+    {% set is_health = ep.startswith('health') %}
+    {% set is_summary = ep.startswith('summary') or is_health %}
+    {% set is_users = ep.startswith('user') %}
+    <nav>
+        <a class="nav-link {{ 'on' if is_start }}" href="{{ url_for('races_page') }}">Старт</a>
+        <a class="nav-link {{ 'on' if is_manual or is_auto }}" href="{{ url_for('manual_page') }}">Хронометраж</a>
+        <a class="nav-link {{ 'on' if is_dash }} {{ 'nav-live' if has_running_heat else 'nav-idle' }}"
+           href="{{ url_for('dashboard_page') }}"
+           {% if has_running_heat %}title="Есть активный старт"{% else %}title="Активных стартов нет"{% endif %}>
+            Сейчас идёт{% if has_running_heat %}<span class="nav-dot"></span>{% endif %}
+        </a>
+        <a class="nav-link {{ 'on' if is_summary }}" href="{{ url_for('summary_page') }}">Итоги</a>
+
+        <div class="nav-group {{ 'on' if is_results or is_logs }}">
+            <button type="button" class="nav-toggle">Результаты <span class="caret">▾</span></button>
+            <div class="nav-menu">
+                <a class="{{ 'on' if is_results }}" href="{{ url_for('results_page') }}">🏁 Результаты</a>
+                <a class="{{ 'on' if ep.startswith('protocol') }}" href="{{ url_for('protocol_page') }}">📄 Протокол</a>
+                <a href="{{ url_for('finish_screen') }}" target="_blank" rel="noopener">🖥️ Публичное табло ↗</a>
+                {% if session.get('role') != 'timekeeper' %}
+                    <a class="{{ 'on' if is_logs }}" href="{{ url_for('logs_page') }}">📜 Журнал</a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="nav-group {{ 'on' if is_comp or is_health }}">
+            <button type="button" class="nav-toggle">Соревнование <span class="caret">▾</span></button>
+            <div class="nav-menu">
+                {% if current_cid %}
+                    <a class="{{ 'on' if ep.startswith('categor') }}" href="{{ url_for('categories_list', cid=current_cid) }}">🗂️ Категории</a>
+                    <a class="{{ 'on' if ep.startswith('participant') }}" href="{{ url_for('participants_list', cid=current_cid) }}">👥 Участники</a>
+                    <a class="{{ 'on' if ep.startswith('numbers_page') }}" href="{{ url_for('numbers_page', cid=current_cid) }}">🔢 Выдать номера</a>
+                    <a class="{{ 'on' if ep.startswith('bib_tags_page') }}" href="{{ url_for('bib_tags_page', cid=current_cid) }}">📡 Метки</a>
+                    <a class="{{ 'on' if ep.startswith('registration') }}" href="{{ url_for('registration_page') }}">📝 Саморегистрация</a>
+                    <a class="{{ 'on' if ep.startswith('registrations') }}" href="{{ url_for('registrations_page') }}">📋 Журнал заявок</a>
+                {% endif %}
+                <a class="{{ 'on' if ep.startswith('competition') }}" href="{{ url_for('competitions_list') }}">⚙️ Настройки</a>
+                <a href="{{ url_for('app_page') }}">📱 Приложение Android</a>
+            </div>
+        </div>
+
+        {% if session.get('user') %}
+            <div class="nav-group profile">
+                <button type="button" class="nav-toggle">{{ session.get('user') }} <span class="caret">▾</span></button>
+                <div class="nav-menu right">
+                    {% if session.get('is_admin') %}
+                        <a class="{{ 'on' if is_users }}" href="{{ url_for('users_page') }}">Пользователи</a>
+                    {% endif %}
+                    <form method="post" action="{{ url_for('logout') }}" style="margin:0">
+                        <button type="submit" class="menu-exit">Выйти</button>
+                    </form>
+                </div>
+            </div>
+        {% endif %}
+    </nav>
+</header>
+{% if read_only %}
+<div class="ro-strip">🔒 Режим «только чтение» — данные можно смотреть, изменения запрещены</div>
+{% endif %}
+<main>
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in msgs %}
+            <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+</main>
+
+{# ======================= ОКНО ПОДТВЕРЖДЕНИЯ ======================= #}
+<div id="ui-confirm-overlay" class="ui-confirm-overlay" hidden>
+    <div class="ui-confirm" role="dialog" aria-modal="true"
+         aria-labelledby="ui-confirm-title" aria-describedby="ui-confirm-text">
+        <h3 id="ui-confirm-title" class="ui-confirm-title">Подтверждение</h3>
+        <div id="ui-confirm-text" class="ui-confirm-text"></div>
+        <div class="ui-confirm-actions">
+            <button type="button" class="ui-confirm-cancel" data-act="cancel">Отмена</button>
+            <button type="button" class="ui-confirm-ok" data-act="ok">ОК</button>
+        </div>
+    </div>
+</div>
+
+{# ======================= ЗАВЕРШЕНИЕ СТАРТА ======================= #}
+<div id="ui-finish-overlay" class="ui-confirm-overlay" hidden>
+    <div class="ui-confirm" role="dialog" aria-modal="true"
+         aria-labelledby="ui-finish-title" aria-describedby="ui-finish-text">
+        <h3 id="ui-finish-title" class="ui-confirm-title">Завершить старт</h3>
+        <div id="ui-finish-text" class="ui-confirm-text"></div>
+        <div id="ui-finish-list" class="ui-finish-list"></div>
+        <div class="ui-confirm-actions">
+            <button type="button" class="ui-confirm-cancel" id="ui-finish-cancel">Отмена</button>
+            <button type="button" class="ui-confirm-ok is-danger" id="ui-finish-ok">Завершить</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* Своё окно подтверждения вместо браузерного confirm().
+   Возвращает Promise<boolean>.
+   Использование: await window.uiConfirm('Текст', {okText:'Удалить', danger:true})
+   Декларативно: <form data-confirm-submit="Текст" data-confirm-ok="Удалить" data-confirm-danger> */
+(function () {
+    const overlay = document.getElementById('ui-confirm-overlay');
+    if (!overlay) return;
+
+    const titleEl = document.getElementById('ui-confirm-title');
+    const textEl = document.getElementById('ui-confirm-text');
+    const okBtn = overlay.querySelector('[data-act="ok"]');
+    const cancelBtn = overlay.querySelector('[data-act="cancel"]');
+
+    let resolver = null;
+    let lastFocus = null;
+
+    function close(result) {
+        if (!resolver) return;
+        const resolve = resolver;
+        resolver = null;
+        overlay.hidden = true;
+        document.removeEventListener('keydown', onKey, true);
+        if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+        resolve(result);
+    }
+
+    function onKey(e) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            close(false);
+            return;
+        }
+        if (e.key === 'Tab') {
+            const items = [cancelBtn, okBtn];
+            const idx = items.indexOf(document.activeElement);
+            e.preventDefault();
+            if (e.shiftKey) items[idx <= 0 ? items.length - 1 : idx - 1].focus();
+            else items[idx === items.length - 1 ? 0 : idx + 1].focus();
+        }
+    }
+
+    function uiConfirm(message, opts) {
+        opts = opts || {};
+        if (resolver) close(false);
+
+        lastFocus = document.activeElement;
+        titleEl.textContent = opts.title || 'Подтверждение';
+        textEl.textContent = message || '';
+        okBtn.textContent = opts.okText || 'ОК';
+        cancelBtn.textContent = opts.cancelText || 'Отмена';
+        okBtn.classList.toggle('is-danger', !!opts.danger);
+
+        overlay.hidden = false;
+        document.addEventListener('keydown', onKey, true);
+        setTimeout(() => cancelBtn.focus(), 0);  // безопасный вариант по умолчанию
+
+        return new Promise((resolve) => { resolver = resolve; });
+    }
+
+    okBtn.addEventListener('click', () => close(true));
+    cancelBtn.addEventListener('click', () => close(false));
+    overlay.addEventListener('mousedown', (e) => {
+        if (e.target === overlay) close(false);
+    });
+
+    window.uiConfirm = uiConfirm;
+
+    // Декларативные подтверждения для форм
+    document.addEventListener('submit', (e) => {
+        const form = e.target;
+        if (!form || form.tagName !== 'FORM') return;
+        const msg = form.getAttribute('data-confirm-submit');
+        if (msg === null) return;
+        if (form.dataset.confirmOk === '1') { delete form.dataset.confirmOk; return; }
+
+        e.preventDefault();
+        e.stopPropagation();
+        const submitter = e.submitter || null;
+
+        uiConfirm(msg, {
+            okText: form.getAttribute('data-confirm-ok') || undefined,
+            danger: form.hasAttribute('data-confirm-danger'),
+            title: form.getAttribute('data-confirm-title') || undefined
+        }).then((ok) => {
+            if (!ok) return;
+            form.dataset.confirmOk = '1';
+            // если валидация не пропустит форму, submit не случится — снимаем флаг
+            setTimeout(() => { if (form.dataset.confirmOk === '1') delete form.dataset.confirmOk; }, 0);
+            if (typeof form.requestSubmit === 'function') form.requestSubmit(submitter || undefined);
+            else form.submit();
+        });
+    }, true);
+})();
+
+/* ======================= ЗАВЕРШЕНИЕ СТАРТА С ПРОВЕРКОЙ =======================
+   Форма с data-finish-check="[{id,number,name,laps,total}, ...]" показывает
+   список тех, кто ещё на дистанции; отмеченные получают DNF. */
+(function () {
+    const overlay = document.getElementById('ui-finish-overlay');
+    if (!overlay) return;
+
+    const textEl = document.getElementById('ui-finish-text');
+    const listEl = document.getElementById('ui-finish-list');
+    const okBtn = document.getElementById('ui-finish-ok');
+    const cancelBtn = document.getElementById('ui-finish-cancel');
+
+    let resolver = null;
+    let lastFocus = null;
+
+    function close(value) {
+        if (!resolver) return;
+        const resolve = resolver;
+        resolver = null;
+        overlay.hidden = true;
+        document.removeEventListener('keydown', onKey, true);
+        if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+        resolve(value);
+    }
+
+    function onKey(e) {
+        if (e.key === 'Escape') { e.preventDefault(); close(null); }
+    }
+
+    function open(items) {
+        lastFocus = document.activeElement;
+        listEl.innerHTML = '';
+
+        if (!items.length) {
+            textEl.textContent = 'Все участники уже финишировали. Завершить старт?';
+        } else {
+            textEl.textContent = 'На дистанции ещё ' + items.length +
+                ': отметьте сошедших — они получат DNF, остальные — результат по пройденным кругам.';
+            items.forEach((it) => {
+                const row = document.createElement('label');
+                row.className = 'ui-finish-row';
+
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.value = it.id;
+                cb.setAttribute('data-dnf', '1');
+
+                const num = document.createElement('span');
+                num.className = 'num';
+                num.textContent = '№ ' + it.number;
+
+                const name = document.createElement('span');
+                name.className = 'name';
+                name.textContent = it.name;
+
+                const laps = document.createElement('span');
+                laps.className = 'laps';
+                laps.textContent = it.laps + ' / ' + it.total;
+
+                row.append(cb, num, name, laps);
+                listEl.appendChild(row);
+            });
+        }
+
+        overlay.hidden = false;
+        document.addEventListener('keydown', onKey, true);
+        setTimeout(() => cancelBtn.focus(), 0);
+        return new Promise((resolve) => { resolver = resolve; });
+    }
+
+    okBtn.addEventListener('click', () => {
+        const ids = [...listEl.querySelectorAll('input[data-dnf]')]
+            .filter((c) => c.checked).map((c) => c.value);
+        close(ids);
+    });
+    cancelBtn.addEventListener('click', () => close(null));
+    overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(null); });
+
+    window.uiHeatFinish = open;
+
+    document.addEventListener('submit', (e) => {
+        const form = e.target;
+        if (!form || form.tagName !== 'FORM') return;
+        const raw = form.getAttribute('data-finish-check');
+        if (raw === null) return;
+        if (form.dataset.finishOk === '1') { delete form.dataset.finishOk; return; }
+
+        e.preventDefault();
+        e.stopPropagation();
+        const submitter = e.submitter || null;
+        let items = [];
+        try { items = JSON.parse(raw) || []; } catch (err) { items = []; }
+
+        open(items).then((ids) => {
+            if (ids === null) return;
+            form.querySelectorAll('input[name="dnf_race_ids"]').forEach((n) => n.remove());
+            ids.forEach((id) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'dnf_race_ids';
+                input.value = id;
+                form.appendChild(input);
+            });
+            form.dataset.finishOk = '1';
+            setTimeout(() => { if (form.dataset.finishOk === '1') delete form.dataset.finishOk; }, 0);
+            if (typeof form.requestSubmit === 'function') form.requestSubmit(submitter || undefined);
+            else form.submit();
+        });
+    }, true);
+})();
+
+/* ======================= ВЫПАДАЮЩИЕ МЕНЮ В ШАПКЕ ======================= */
+(function () {
+    const groups = [...document.querySelectorAll('.nav-group')];
+    if (!groups.length) return;
+
+    function closeAll(except) {
+        groups.forEach((g) => { if (g !== except) g.classList.remove('open'); });
+    }
+
+    groups.forEach((group) => {
+        const toggle = group.querySelector('.nav-toggle');
+        if (!toggle) return;
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const willOpen = !group.classList.contains('open');
+            closeAll(group);
+            group.classList.toggle('open', willOpen);
+        });
+    });
+
+    document.addEventListener('click', () => closeAll(null));
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAll(null); });
+})();
+
+/* ======================= ТАБЛИЦЫ НА ПЛАНШЕТЕ ======================= */
+(function () {
+    function wrapTables(root) {
+        const scope = root === document ? document.querySelector('main') : root;
+        if (!scope) return;
+        scope.querySelectorAll('table').forEach((table) => {
+            if (table.parentElement && table.parentElement.classList.contains('tw')) return;
+            const wrap = document.createElement('div');
+            wrap.className = 'tw';
+            table.parentNode.insertBefore(wrap, table);
+            wrap.appendChild(table);
+        });
+    }
+    window.wrapTables = wrapTables;
+    wrapTables(document);
+})();
+</script>
+</body>
+</html>

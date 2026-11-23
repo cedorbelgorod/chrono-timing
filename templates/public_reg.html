@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#2563eb">
+    <title>{{ comp.name }} — регистрация</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; background: #f4f6f8; color: #111827;
+            font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+            min-height: 100vh; padding: 18px 14px calc(24px + env(safe-area-inset-bottom));
+        }
+        .wrap { max-width: 560px; margin: 0 auto; }
+        .top {
+            background: linear-gradient(135deg, #1d4ed8, #2563eb); color: #fff;
+            border-radius: 16px; padding: 20px 18px; margin-bottom: 14px;
+        }
+        .top .kicker { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; opacity: .8; }
+        .top h1 { margin: 6px 0 0; font-size: 22px; line-height: 1.25; font-weight: 700; }
+        .top .deadline { margin-top: 10px; font-size: 13px; background: rgba(255,255,255,.15); display: inline-block; padding: 5px 10px; border-radius: 999px; }
+        .card { background: #fff; border-radius: 14px; padding: 18px; box-shadow: 0 2px 8px rgba(0,0,0,.06); margin-bottom: 14px; }
+        .info { white-space: pre-line; font-size: 15px; line-height: 1.6; }
+        .info:empty::after { content: "Информация о соревновании появится позже."; color: #9ca3af; }
+        .btn {
+            display: block; width: 100%; text-align: center; text-decoration: none;
+            padding: 16px; border-radius: 12px; border: none; cursor: pointer;
+            background: #2563eb; color: #fff; font-size: 17px; font-weight: 700;
+            font-family: inherit;
+        }
+        .btn:active { background: #1d4ed8; }
+        .btn[disabled] { background: #cbd5e1; color: #64748b; cursor: not-allowed; }
+        .closed { background: #fef3c7; color: #92400e; border-radius: 12px; padding: 14px 16px; font-size: 14px; line-height: 1.5; }
+        .small { color: #6b7280; font-size: 12px; line-height: 1.5; margin-top: 10px; text-align: center; }
+        .foot { text-align: center; color: #9ca3af; font-size: 11px; margin-top: 18px; }
+        .foot a { color: #1d4ed8; font-weight: 600; font-size: 13px; text-decoration: none; }
+        .foot a:active { text-decoration: underline; }
+        .org { text-align: center; color: #6b7280; font-size: 12px; margin-top: 4px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="top">
+        <div class="kicker">Регистрация участника</div>
+        <h1>{{ comp.name }}</h1>
+        {% if ok and cfg.deadline %}
+            <div class="deadline">Приём заявок до {{ cfg.deadline }}</div>
+        {% endif %}
+    </div>
+
+    {% if not ok %}
+        <div class="card"><div class="closed">{{ why }}</div></div>
+    {% else %}
+        <div class="card">
+            <div class="info">{{ cfg.info }}</div>
+        </div>
+
+        <div class="card" style="padding:16px">
+            <a class="btn" href="{{ url_for('reg_form', slug=slug) }}">Согласен(на) с условиями</a>
+            <div class="small">
+                Нажимая кнопку, вы подтверждаете, что ознакомились с информацией о соревновании
+                и условиями участия.
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="org">РОО «Белгородская Региональная Федерация велосипедного спорта»</div>
+    <div class="foot">
+        <a href="{{ url_for('reg_list', slug=slug) }}">📋 Список зарегистрированных участников</a>
+    </div>
+    <div class="foot" style="margin-top:6px">Хронометраж · {{ comp.name }}</div>
+</div>
+</body>
+</html>

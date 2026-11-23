@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Импорт участников — {{ competition.name }}{% endblock %}
+{% block content %}
+<h2>{{ competition.name }} <small>— импорт участников из Excel</small></h2>
+
+{% if step == 'upload' %}
+    <div class="manual-block">
+        <h3 style="margin-top:0">Загрузка файла</h3>
+        <p style="color:#374151">
+            Файл <b>.xlsx</b> с колонками: <b>ФИО</b>, <b>Год рождения</b>, <b>Категория</b>,
+            <b>Пол</b>, <b>RFID-метка</b> (опционально).
+        </p>
+        <p>
+            <a href="{{ url_for('participants_template', cid=competition.id) }}" class="link">
+                ⬇ Скачать шаблон (.xlsx)
+            </a>
+        </p>
+        <p style="color:#6b7280;font-size:13px">
+            <b>Категория</b> должна совпадать с названием существующей категории соревнования
+            (регистр не важен). Если категории нет — её можно создать при импорте
+            <b>с 1 кругом по умолчанию</b>; количество кругов судья сможет изменить позже
+            на странице «Категории».<br>
+            <b>Пол</b>: М/Ж, M/F, Муж/Жен.
+        </p>
+        <form method="post" enctype="multipart/form-data" class="toolbar">
+            <input type="file" name="file" accept=".xlsx" required>
+            <button type="submit">Загрузить и проверить</button>
+        </form>
+    </div>
+
+{% elif step == 'preview' %}
+    {% set dup_count = parsed | selectattr('dup_kind') | list | length %}
+    <form method="post" action="{{ url_for('participants_import_confirm', cid=competition.id) }}">
+        <p style="color:#374151">
+            Проверьте данные. Номера предзаполнены по порядку — отредактируйте или очистите
+            тех, кого не нужно импортировать.
+        </p>
+        {% if dup_count %}
+            <div class="dup-banner">
+                ⚠ Дубликатов по (ФИО + Год рождения): <b>{{ dup_count }}</b>.
+                Они подсвечены красным и будут пропущены.
+            </div>
+        {% endif %}
+
+        {% if missing_categories %}
+            <div class="dup-banner" style="background:#eff6ff; color:#1e40af; border-left-color:#2563eb; margin-bottom:16px;">
+                <b>Обнаружены отсутствующие категории:</b>
+                {% for cat in missing_categories %}{{ cat }}{% if not loop.last %}, {% endif %}{% endfor %}.
+                <label style="display:block; margin-top:8px; cursor:pointer; font-weight:600;">
+                    <input type="checkbox" name="create_missing_categories" value="1" checked
+                           style="transform: scale(1.2); vertical-align: middle; margin-right: 4px;">
+                    Создать отсутствующие категории (с 1 кругом по умолчанию)
+                </label>
+            </div>
+        {% endif %}
+
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:50px">Стр.</th>
+                    <th style="width:90px">Номер</th>
+                    <th>ФИО</th>
+                    <th style="width:80px">Год</th>
+                    <th style="width:170px">Категория</th>
+                    <th style="width:70px">Пол</th>
+                    <th style="width:180px">RFID-метка</th>
+                    <th style="width:220px">Статус</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for row in parsed %}
+                <tr class="{% if row.dup_kind %}row-dup{% endif %}">
+                    <td>{{ row.row }}</td>
+                    <td>
+                        <input type="number" min="1" style="width:80px"
+                               name="row_{{ loop.index0 }}_number" value="{{ row.number or '' }}"
+                           placeholder="не выдан">
+                    </td>
+                    <td>
+                        <input type="text" style="width:100%"
+                               name="row_{{ loop.index0 }}_fio" value="{{ row.fio }}">
+                    </td>
+                    <td>
+                        <input type="number" min="1900" max="2100" style="width:70px"
+                               name="row_{{ loop.index0 }}_year"
+                               value="{{ row.year if row.year is not none else '' }}">
+                    </td>
+                    <td>
+                        <select name="row_{{ loop.index0 }}_category_id" style="width:100%">
+                            <option value="">— без группы —</option>
+                            {% for cat in categories %}
+                                <option value="{{ cat.id }}"
+                                        {% if cat.id == row.category_id %}selected{% endif %}>
+                                    {{ cat.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <input type="hidden" name="row_{{ loop.index0 }}_category_name" value="{{ row.category_name }}">
+                        {% if row.category_name and not row.category_id %}
+                            <small style="color:#dc2626">«{{ row.category_name }}» не найдена</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <select name="row_{{ loop.index0 }}_gender" style="width:60px">
+                            <option value="">—</option>
+                            <option value="M" {% if row.gender == 'M' %}selected{% endif %}>М</option>
+                            <option value="F" {% if row.gender == 'F' %}selected{% endif %}>Ж</option>
+                        </select>
+                    </td>
+                    <td>
+                        <input type="text"
+                               name="row_{{ loop.index0 }}_rfid_tag"
+                               value="{{ row.rfid_tag or '' }}"
+                               placeholder="—"
+                               class="mono"
+                               style="width:100%;font-size:12px">
+                        <input type="hidden" name="row_{{ loop.index0 }}_city" value="{{ row.city or '' }}">
+                        <input type="hidden" name="row_{{ loop.index0 }}_team" value="{{ row.team or '' }}">
+                    </td>
+                    <td>
+                        {% if row.dup_kind %}
+                            <span class="badge-dup">{{ row.dup_msg }}</span>
+                        {% elif row.tag_conflict %}
+                            <span class="badge-dup">метка занята — строка будет пропущена</span>
+                        {% elif not row.category_id %}
+                            {% if not row.category_name %}
+                                <span style="color:#6b7280">без группы</span>
+                            {% elif missing_categories %}
+                                <span style="color:#b45309">Будет создана (1 круг)</span>
+                            {% else %}
+                                <span style="color:#dc2626">нет категории</span>
+                            {% endif %}
+                        {% elif not row.gender %}
+                            <span style="color:#dc2626">не определён пол</span>
+                        {% else %}
+                            <span style="color:#16a34a">готово</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="toolbar" style="margin-top:16px">
+            <button type="submit" style="background:#16a34a;padding:10px 24px;font-weight:600">
+                Импортировать
+            </button>
+            <a href="{{ url_for('participants_import', cid=competition.id) }}" class="link">
+                ← Загрузить другой файл
+            </a>
+        </div>
+    </form>
+{% endif %}
+
+<div class="toolbar" style="margin-top:16px">
+    <a href="{{ url_for('participants_list', cid=competition.id) }}" class="link">← К списку участников</a>
+</div>
+
+<style>
+.manual-block {
+    background: #fff; padding: 16px 20px; border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 16px;
+    border-left: 4px solid #16a34a;
+}
+.dup-banner {
+    background: #fef2f2; color: #991b1b; border-left: 4px solid #dc2626;
+    padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 14px;
+}
+.row-dup { background: #fef2f2; }
+.row-dup input, .row-dup select { background: #fff7f7; }
+.badge-dup {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    background: #fee2e2; color: #991b1b; font-size: 12px; line-height: 1.4;
+}
+</style>
+{% endblock %}

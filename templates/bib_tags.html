@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Метки на номерах — {{ competition.name }}{% endblock %}
+{% block content %}
+<h2>📡 Метки на номерах <small>— {{ competition.name }}</small></h2>
+
+<p class="muted" style="margin-top:-6px">
+    Метка клеится на стартовый номер. Участник получает метки вместе с номером — отдельно
+    участнику их выдать нельзя. На номере может быть две метки: основная и резервная;
+    отметка идёт по первой считанной.
+</p>
+
+<div class="tags-import">
+    <span class="ti-label">Массово:</span>
+    <form method="post" action="{{ url_for('bib_tags_import', cid=competition.id) }}"
+          enctype="multipart/form-data" style="margin:0">
+        <label class="btn-imp">
+            📥 Импорт из Excel
+            <input type="file" name="file" accept=".xlsx" onchange="this.form.submit()">
+        </label>
+    </form>
+    <a class="btn-tpl" href="{{ url_for('bib_tags_template', cid=competition.id) }}">⬇ Шаблон</a>
+    <span class="ti-hint">колонки: Номер · Метка 1 · Метка 2</span>
+</div>
+
+<div class="tags-grid">
+    <div class="tags-form-card">
+        <h3>Привязать метки к номеру</h3>
+        <form method="post" action="{{ url_for('bib_tags_page', cid=competition.id) }}">
+            <input type="hidden" name="action" value="save">
+            <label>
+                <span>Номер</span>
+                <input type="number" name="number" min="1" required placeholder="42" inputmode="numeric">
+            </label>
+            <label>
+                <span>Основная метка</span>
+                <input type="text" name="tag1" class="mono" placeholder="EPC, например E28011700000020F5A4B1234"
+                       autocomplete="off">
+            </label>
+            <label>
+                <span>Резервная метка</span>
+                <input type="text" name="tag2" class="mono" placeholder="необязательно"
+                       autocomplete="off">
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Сохранить</button>
+            </div>
+            <div class="hint">
+                Сохранение заменяет прежние метки этого номера. Пустые поля — метки будут сняты.
+                Номер можно указать и до того, как он выдан участнику.
+            </div>
+        </form>
+    </div>
+
+    <div class="tags-list-card">
+        <h3>Номера с метками <span class="cnt">{{ groups|length }}</span></h3>
+        {% if groups %}
+        <div class="tags-rows">
+            {% for g in groups %}
+            <form method="post" action="{{ url_for('bib_tags_page', cid=competition.id) }}" class="tags-row">
+                <input type="hidden" name="action" value="save">
+                <input type="hidden" name="number" value="{{ g.number }}">
+                <div class="row-num">
+                    <div class="num">№{{ g.number }}</div>
+                    <div class="who">
+                        {% if g.full_name %}{{ g.full_name }}{% else %}<span class="muted">номер не выдан</span>{% endif %}
+                    </div>
+                </div>
+                <input type="text" name="tag1" class="mono" value="{{ g.tags[0] if g.tags|length > 0 else '' }}"
+                       placeholder="основная" autocomplete="off">
+                <input type="text" name="tag2" class="mono" value="{{ g.tags[1] if g.tags|length > 1 else '' }}"
+                       placeholder="резервная" autocomplete="off">
+                <div class="row-actions">
+                    <button type="submit" class="btn-save">Сохранить</button>
+                    <button type="submit" name="action" value="delete" class="btn-del"
+                            data-confirm="Снять метки с номера {{ g.number }}?">Снять</button>
+                </div>
+            </form>
+            {% endfor %}
+        </div>
+        {% else %}
+            <div class="empty">Пока ни одна метка не привязана к номеру</div>
+        {% endif %}
+    </div>
+</div>
+
+{% if without %}
+<div class="card-like">
+    <h3>Номера без меток <span class="cnt">{{ without|length }}</span></h3>
+    <div class="without-list">
+        {% for p in without %}
+            <span class="without-item"><b>№{{ p.number }}</b> {{ p.full_name }}</span>
+        {% endfor %}
+    </div>
+    <div class="hint">
+        В автохронометраже участвуют только номера с метками. Если номер участника ещё не помечен,
+        отметьте её считывателем или впишите EPC вручную.
+    </div>
+</div>
+{% endif %}
+
+<style>
+.tags-import {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    margin: 0 0 16px; padding: 10px 12px; background: #f9fafb;
+    border: 1px dashed #d1d5db; border-radius: 10px;
+}
+.ti-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #9ca3af; }
+.ti-hint { font-size: 12px; color: #9ca3af; }
+.btn-imp, .btn-tpl {
+    display: inline-block; padding: 8px 14px; font-size: 13px; font-weight: 600;
+    border-radius: 8px; cursor: pointer; text-decoration: none; font-family: inherit;
+}
+.btn-imp { background: #2563eb; color: #fff; position: relative; overflow: hidden; }
+.btn-imp:hover { background: #1d4ed8; }
+.btn-imp input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.btn-tpl { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+.btn-tpl:hover { background: #f3f4f6; }
+.tags-grid { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .tags-grid { grid-template-columns: 1fr; } }
+.tags-form-card, .tags-list-card, .card-like {
+    background: #fff; border-radius: 12px; padding: 16px 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.tags-form-card h3, .tags-list-card h3, .card-like h3 {
+    margin: 0 0 12px; font-size: 15px; font-weight: 700; color: #374151;
+}
+.cnt { background: #eef2ff; color: #3730a3; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 6px; }
+.tags-form-card label { display: block; margin-bottom: 10px; }
+.tags-form-card label span { display: block; font-size: 12px; color: #6b7280; font-weight: 600; margin-bottom: 4px; }
+.tags-form-card input, .tags-row input {
+    width: 100%; padding: 10px 12px; font-size: 14px; font-family: inherit;
+    border: 1px solid #d1d5db; border-radius: 8px; background: #fff;
+}
+.tags-form-card input.mono, .tags-row input.mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+.tags-form-card input:focus, .tags-row input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.form-actions { margin-top: 4px; }
+.btn-primary { padding: 10px 18px; font-size: 14px; font-weight: 700; font-family: inherit; border: none; border-radius: 8px; background: #16a34a; color: #fff; cursor: pointer; }
+.btn-primary:hover { background: #15803d; }
+
+.tags-rows { display: flex; flex-direction: column; gap: 8px; }
+.tags-row {
+    display: grid; grid-template-columns: 190px 1fr 1fr auto; gap: 8px; align-items: center;
+    padding: 8px; border-radius: 10px; background: #f9fafb; border: 1px solid #eef2f6; margin: 0;
+}
+@media (max-width: 760px) {
+    .tags-row { grid-template-columns: 1fr; }
+}
+.row-num .num { font-size: 15px; font-weight: 800; color: #111827; }
+.row-num .who { font-size: 12px; color: #6b7280; }
+.row-actions { display: flex; gap: 6px; }
+.btn-save, .btn-del {
+    padding: 9px 12px; font-size: 13px; font-weight: 600; font-family: inherit;
+    border-radius: 8px; cursor: pointer; white-space: nowrap;
+}
+.btn-save { background: #2563eb; color: #fff; border: none; }
+.btn-save:hover { background: #1d4ed8; }
+.btn-del { background: #fff; color: #b91c1c; border: 1px solid #fca5a5; }
+.btn-del:hover { background: #fee2e2; }
+.empty { color: #6b7280; font-size: 13px; padding: 16px; text-align: center; }
+.without-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.without-item {
+    font-size: 12px; background: #f3f4f6; color: #374151; padding: 4px 10px; border-radius: 999px;
+}
+</style>
+{% endblock %}

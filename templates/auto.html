@@ -1,0 +1,307 @@
+﻿{% extends "base.html" %}
+{% block title %}Автохронометраж — Хронометраж{% endblock %}
+{% block content %}
+<h2>Автохронометраж <small>— {{ competition.name }}</small></h2>
+
+{% set active_tab = 'auto' %}
+{% include '_timing_tabs.html' %}
+
+{% if not competition %}
+    <div class="empty">Выберите соревнование.</div>
+{% else %}
+
+    {# ==================== СТРОКА УСТРОЙСТВА ==================== #}
+    <div class="dev-strip {{ 'is-on' if swrfid_status.connected else '' }}">
+        <span class="dot {{ 'on' if swrfid_status.connected else ('wait' if settings.swrfid_enabled == '1' else 'off') }}"></span>
+        <div class="dev-info">
+            <b>
+                {% if swrfid_status.connected %}Считыватель подключён
+                {% elif settings.swrfid_enabled == '1' %}Подключение к считывателю…
+                {% else %}Считыватель выключен{% endif %}
+            </b>
+            <span class="dev-meta">{{ settings.swrfid_port }} · {{ settings.swrfid_baud }} бод</span>
+            {% if swrfid_status.last_error %}<span class="dev-err">{{ swrfid_status.last_error }}</span>{% endif %}
+        </div>
+        <div class="dev-actions">
+            <form method="post" action="{{ url_for('swrfid_toggle') }}" style="margin:0">
+                <input type="hidden" name="cid" value="{{ competition.id }}">
+                {% if settings.swrfid_enabled == '1' %}
+                    <button type="submit" class="btn-stop">⏹ Остановить</button>
+                {% else %}
+                    <button type="submit" class="btn-go">▶ Запустить</button>
+                {% endif %}
+            </form>
+            <a class="btn-ghost" href="{{ url_for('auto_device_page', cid=competition.id) }}">⚙ Устройство</a>
+        </div>
+    </div>
+
+    {# ==================== СТАРТЫ ==================== #}
+    {% if heats %}
+        <div class="heat-strip">
+            {% for h in heats %}
+                <a class="heat-chip {{ 'sel' if h.id == selected_heat_id else '' }}"
+                   href="{{ url_for('auto_page', cid=competition.id, hid=h.id) }}">
+                    <span class="hc-top">
+                        <span class="hc-num">№{{ h.heat_number }}</span>
+                        <span class="hc-status st-{{ h.status }}">
+                            {% if h.status == 'running' %}идёт{% elif h.status == 'finished' %}завершён{% else %}готов{% endif %}
+                        </span>
+                    </span>
+                    {% if h.name %}<span class="hc-name">{{ h.name }}</span>{% endif %}
+                    <span class="hc-meta">
+                        {{ h.tagged_count }} из {{ h.active_count }} с метками
+                        {% if h.auto_enabled %}<span class="hc-auto on">· авто вкл.</span>{% endif %}
+                    </span>
+                </a>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty" style="margin-bottom:16px">У соревнования ещё нет стартов.</div>
+    {% endif %}
+
+    <div class="auto-grid">
+        {# ==================== РЕЗУЛЬТАТЫ СТАРТА ==================== #}
+        <section class="card" id="auto-details">
+            <div class="card-head">
+                <h3>
+                    {% if selected_heat %}
+                        Старт №{{ selected_heat.heat_number }}{% if selected_heat.name %} — {{ selected_heat.name }}{% endif %}
+                    {% else %}
+                        Результаты
+                    {% endif %}
+                </h3>
+                <div class="head-actions">
+                    <span class="live" id="live-indicator">● обновляется</span>
+                    {% if selected_heat_id %}
+                        <form method="post" action="{{ url_for('auto_heat_toggle', hid=selected_heat_id) }}" style="margin:0">
+                            <input type="hidden" name="cid" value="{{ competition.id }}">
+                            {% if selected_heat and selected_heat.auto_enabled %}
+                                <button type="submit" class="btn-ghost">⏹ Выключить авто</button>
+                            {% else %}
+                                <button type="submit" class="btn-ghost">▶ Включить авто</button>
+                            {% endif %}
+                        </form>
+                        <a class="btn-ghost"
+                           href="{{ url_for('auto_export', cid=competition.id, hid=selected_heat_id) }}">📥 Excel</a>
+                    {% endif %}
+                </div>
+            </div>
+            <div id="auto-details-content">
+                {% include '_auto_details.html' %}
+            </div>
+            {% if selected_heat_id %}
+                <details class="cmp-details" id="lap-compare">
+                    <summary>Сравнение по кругам — ручной и авто</summary>
+                    <div id="lap-compare-content" class="cmp-content">
+                        <div class="dt-empty">Загрузится при открытии.</div>
+                    </div>
+                </details>
+            {% endif %}
+        </section>
+
+        {# ==================== ЛЕНТА СКАНИРОВАНИЙ ==================== #}
+        <section class="card feed-card">
+            <div class="card-head">
+                <h3>📡 Сканирования</h3>
+            </div>
+            <div id="auto-log-container" class="feed-scroll">
+                {% include '_auto_log.html' %}
+            </div>
+        </section>
+    </div>
+{% endif %}
+
+<style>
+/* ---------- строка устройства ---------- */
+.dev-strip {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: #fff; border-radius: 10px; padding: 10px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 14px;
+    border-left: 4px solid #d1d5db;
+}
+.dev-strip.is-on { border-left-color: #16a34a; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #d1d5db; flex: 0 0 auto; }
+.dot.on { background: #16a34a; box-shadow: 0 0 0 4px rgba(22,163,74,.15); }
+.dot.wait { background: #f59e0b; box-shadow: 0 0 0 4px rgba(245,158,11,.15); }
+.dev-info { display: flex; flex-direction: column; gap: 2px; flex: 1 1 240px; min-width: 0; }
+.dev-info b { font-size: 15px; }
+.dev-meta { color: #6b7280; font-size: 13px; }
+.dev-err { color: #b91c1c; font-size: 13px; }
+.dev-actions { display: flex; gap: 8px; align-items: center; }
+
+.btn-go { background: #16a34a; }
+.btn-go:hover { background: #15803d; }
+.btn-stop { background: #fff; color: #b91c1c; border: 1px solid #fca5a5; }
+.btn-stop:hover { background: #fef2f2; }
+.btn-ghost {
+    display: inline-block; background: #fff; color: #374151;
+    border: 1px solid #d1d5db; padding: 7px 12px; font-size: 13px;
+    border-radius: 6px; text-decoration: none; font-weight: 500; cursor: pointer;
+}
+.btn-ghost:hover { background: #f3f4f6; }
+
+/* ---------- полоса стартов ---------- */
+.heat-strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 16px; }
+.heat-chip {
+    flex: 0 0 auto; display: flex; flex-direction: column; gap: 3px;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 9px 14px; text-decoration: none; color: #111827;
+    min-width: 168px; box-shadow: 0 1px 2px rgba(0,0,0,.05);
+}
+.heat-chip:hover { border-color: #93c5fd; }
+.heat-chip.sel { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.15); }
+.hc-top { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.hc-num { font-weight: 700; }
+.hc-name { font-size: 13px; color: #374151; }
+.hc-meta { font-size: 12px; color: #6b7280; }
+.hc-auto.on { color: #0e7490; }
+.hc-status { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px; }
+.hc-status.st-running { background: #fef3c7; color: #92400e; }
+.hc-status.st-finished { background: #dcfce7; color: #166534; }
+.hc-status.st-pending { background: #f3f4f6; color: #4b5563; }
+
+/* ---------- сетка ---------- */
+.auto-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .auto-grid { grid-template-columns: 1fr; } }
+
+.card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; }
+.card-head {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 16px; border-bottom: 1px solid #e5e7eb;
+}
+.card-head h3 { margin: 0; font-size: 15px; }
+.head-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.live { color: #16a34a; font-size: 12px; }
+
+/* ---------- таблица результатов ---------- */
+.dt-summary {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 10px 16px; font-size: 13px; color: #4b5563;
+    border-bottom: 1px solid #f1f5f9;
+}
+.dt-summary b { color: #111827; }
+.dt-summary .sep { color: #d1d5db; }
+.dt { width: 100%; border-collapse: collapse; font-size: 14px; }
+.dt th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+    color: #6b7280; background: #f9fafb; padding: 8px 12px; border-bottom: 1px solid #e5e7eb;
+}
+.dt td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.dt tbody tr:hover { background: #f8fafc; }
+.dt .num { color: #6b7280; font-variant-numeric: tabular-nums; }
+.dt .who span { font-weight: 500; }
+.dt .who small { color: #9ca3af; margin-left: 6px; }
+
+.laps { display: flex; flex-direction: column; gap: 4px; }
+.laps-txt { font-size: 13px; color: #374151; font-weight: 600; }
+.bar { display: block; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: #16a34a; border-radius: 3px; }
+
+.delta.good { color: #15803d; font-weight: 600; }
+.delta.warn { color: #b45309; font-weight: 600; }
+.delta.bad  { color: #b91c1c; font-weight: 600; }
+
+.st { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.st-running { background: #dbeafe; color: #1e40af; }
+.st-ok { background: #dcfce7; color: #166534; }
+.st-lapped { background: #fef3c7; color: #92400e; }
+.st-dnf { background: #fee2e2; color: #991b1b; }
+
+.dt-empty { padding: 24px 16px; color: #6b7280; font-size: 14px; }
+.dt-empty ul { margin: 8px 0 0 18px; padding: 0; }
+.muted { color: #6b7280; }
+
+/* ---------- сравнение по кругам ---------- */
+.cmp-details { border-top: 1px solid #e5e7eb; }
+.cmp-details summary {
+    cursor: pointer; padding: 12px 16px; font-size: 13px; font-weight: 600;
+    color: #2563eb; list-style: none; user-select: none;
+}
+.cmp-details summary::-webkit-details-marker { display: none; }
+.cmp-details summary::before { content: '▸ '; }
+.cmp-details[open] summary::before { content: '▾ '; }
+.cmp-content { padding: 0 16px 16px; }
+.cmp-block { margin-bottom: 14px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+.cmp-head {
+    display: flex; justify-content: space-between; gap: 8px;
+    padding: 8px 12px; background: #f9fafb; font-size: 13px;
+}
+.cmp { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cmp th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+    color: #6b7280; padding: 6px 12px; background: #fff; border-bottom: 1px solid #f1f5f9;
+}
+.cmp td { padding: 6px 12px; border-bottom: 1px solid #f8fafc; }
+.cmp tbody tr:last-child td { border-bottom: none; }
+
+/* ---------- лента ---------- */
+.feed-scroll { max-height: 560px; overflow-y: auto; padding: 10px 12px; }
+.feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.feed-item {
+    display: grid; grid-template-columns: 62px 1fr; gap: 10px;
+    padding: 8px 10px; border-radius: 8px;
+    border-left: 3px solid #e5e7eb; background: #f9fafb;
+}
+.feed-item.ok { border-left-color: #16a34a; background: #f0fdf4; }
+.feed-item.err { border-left-color: #dc2626; background: #fef2f2; }
+.feed-time { font-size: 12px; color: #6b7280; padding-top: 2px; }
+.feed-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.feed-head { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.feed-num { font-weight: 700; font-size: 13px; color: #374151; flex: 0 0 auto; }
+.feed-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-tag { font-size: 12px; color: #6b7280; word-break: break-all; }
+.feed-msg { font-size: 12px; color: #4b5563; }
+.feed-item.ok .feed-msg { color: #166534; font-weight: 600; }
+.feed-item.err .feed-msg { color: #991b1b; }
+.feed-empty { padding: 32px 16px; text-align: center; color: #6b7280; font-size: 14px; }
+.feed-empty small { display: block; margin-top: 4px; font-size: 12px; color: #9ca3af; }
+</style>
+
+<script>
+(function () {
+    const HID = {{ selected_heat_id or 'null' }};
+    const logBox = document.getElementById('auto-log-container');
+    const detBox = document.getElementById('auto-details-content');
+    const indicator = document.getElementById('live-indicator');
+
+    async function refresh() {
+        try {
+            if (logBox) {
+                const r = await fetch('/auto/log', { cache: 'no-store' });
+                if (r.ok) logBox.innerHTML = await r.text();
+            }
+            if (detBox && HID) {
+                const r = await fetch('/auto/detail_rows?hid=' + HID, { cache: 'no-store' });
+                if (r.ok) {
+                    detBox.innerHTML = await r.text();
+                    if (window.wrapTables) window.wrapTables(detBox);
+                    if (indicator) {
+                        indicator.textContent = '● обновлено';
+                        setTimeout(() => { indicator.textContent = '● обновляется'; }, 800);
+                    }
+                }
+            }
+        } catch (e) { /* сеть недоступна — просто ждём следующего тика */ }
+    }
+
+    setInterval(refresh, 2000);
+
+    // подробное сравнение грузим один раз при открытии блока
+    const cmp = document.getElementById('lap-compare');
+    if (cmp && HID) {
+        cmp.addEventListener('toggle', async () => {
+            if (!cmp.open) return;
+            const box = document.getElementById('lap-compare-content');
+            if (!box || box.dataset.loaded === '1') return;
+            try {
+                const r = await fetch('/auto/lap_compare?hid=' + HID, { cache: 'no-store' });
+                if (r.ok) {
+                    box.innerHTML = await r.text();
+                    box.dataset.loaded = '1';
+                }
+            } catch (e) { /* оставим заглушку */ }
+        });
+    }
+})();
+</script>
+{% endblock %}

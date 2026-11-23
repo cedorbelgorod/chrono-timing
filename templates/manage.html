@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Управление соревнованиями</title>
+    <style>
+        * { box-sizing: border-box; }
+        [hidden] { display: none !important; }
+        body {
+            font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+            margin: 0; background: #f4f6f8; color: #111827; padding: 26px 16px;
+        }
+        .wrap { max-width: 980px; margin: 0 auto; }
+        h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; }
+        .sub { color: #6b7280; font-size: 13px; margin-bottom: 20px; }
+        .sub a { color: #2563eb; }
+        .card {
+            background: #fff; border-radius: 12px; padding: 18px 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.06); margin-bottom: 18px;
+        }
+        .card h2 { margin: 0 0 14px; font-size: 15px; font-weight: 600; color: #374151; }
+        .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+        .field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 160px; }
+        .field label { font-size: 12px; color: #6b7280; font-weight: 600; }
+        input[type=text], input[type=file], input[type=password], select {
+            padding: 9px 11px; font-size: 14px; border: 1px solid #d1d5db;
+            border-radius: 8px; font-family: inherit; width: 100%; background: #fff;
+        }
+        input:focus, select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+        button {
+            padding: 10px 16px; font-size: 14px; font-weight: 600; border: none;
+            border-radius: 8px; cursor: pointer; font-family: inherit;
+            background: #16a34a; color: #fff; white-space: nowrap;
+        }
+        button:hover { background: #15803d; }
+        .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; }
+        .badge-ro { background: #fef3c7; color: #92400e; }
+        .badge-arch { background: #e5e7eb; color: #374151; }
+        .badge-hidden { background: #ede9fe; color: #5b21b6; }
+        .flash { padding: 10px 14px; border-radius: 9px; margin-bottom: 14px; font-size: 14px; }
+        .flash-error { background: #fee2e2; color: #991b1b; }
+        .flash-success { background: #dcfce7; color: #166534; }
+        .hint { color: #6b7280; font-size: 12px; margin-top: 10px; line-height: 1.5; }
+        .top-actions { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; }
+        .top-actions form { margin: 0; }
+        .people-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .people-row code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+        /* ---------- вкладки создания/импорта ---------- */
+        .tabs { display: flex; gap: 6px; margin-bottom: 14px; border-bottom: 1px solid #eef2f6; }
+        .tab {
+            padding: 9px 14px; font-size: 14px; font-weight: 600; font-family: inherit;
+            background: none; color: #6b7280; border: none; border-bottom: 2px solid transparent;
+            border-radius: 8px 8px 0 0; cursor: pointer;
+        }
+        .tab:hover { background: #f9fafb; color: #374151; }
+        .tab.on { color: #1d4ed8; border-bottom-color: #2563eb; background: #f5f8ff; }
+
+        /* ---------- сводка-шапка ---------- */
+        .summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+        .chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 13px; font-size: 13px; font-weight: 600; font-family: inherit;
+            border: 1px solid #d1d5db; border-radius: 999px; background: #fff; color: #374151;
+            cursor: pointer;
+        }
+        .chip b { font-weight: 800; }
+        .chip:hover { background: #f3f4f6; }
+        .chip.on { background: #2563eb; border-color: #2563eb; color: #fff; }
+        .chip.on:hover { background: #1d4ed8; }
+        .chip.warn { border-color: #fcd34d; color: #92400e; background: #fffbeb; }
+        .chip.warn.on { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+        .chip.zero { opacity: .45; }
+
+        /* ---------- карточки ---------- */
+        .comp-list { display: flex; flex-direction: column; gap: 12px; }
+        .comp {
+            border: 1px solid #e5e7eb; border-radius: 12px; padding: 13px 16px;
+            border-left: 4px solid #2563eb; position: relative;
+        }
+        .comp.is-archived { background: #fafafa; border-left-color: #9ca3af; }
+        .comp.is-hidden { border-left-color: #7c3aed; }
+        .comp[hidden] { display: none; }
+        .comp-top { display: flex; gap: 12px; align-items: flex-start; }
+        .comp-main { flex: 1; min-width: 0; }
+
+        .comp-name { font-size: 16px; font-weight: 700; color: #111827; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+        .name-text { cursor: text; }
+        .name-text:hover { text-decoration: underline dotted #9ca3af; text-underline-offset: 3px; }
+        .name-edit {
+            padding: 2px 5px; font-size: 12px; background: none; color: #9ca3af;
+            border-radius: 6px; line-height: 1;
+        }
+        .name-edit:hover { background: #f3f4f6; color: #374151; }
+        .name-form { display: flex; gap: 6px; align-items: center; width: 100%; margin: 4px 0 0; }
+        .name-form input[type=text] { font-size: 15px; font-weight: 700; }
+        .name-form button {
+            padding: 8px 11px; font-size: 14px; border-radius: 8px;
+        }
+        .mini-ok { background: #16a34a; }
+        .mini-cancel { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+        .mini-cancel:hover { background: #f3f4f6; }
+
+        .comp-sub { font-size: 12px; color: #6b7280; margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .comp-sub a { color: #2563eb; text-decoration: none; }
+        .link-copy {
+            padding: 0 5px; font-size: 12px; line-height: 1.6; background: #fff; color: #6b7280;
+            border: 1px solid #e5e7eb; border-radius: 6px;
+        }
+        .link-copy:hover { background: #f3f4f6; color: #374151; }
+        .comp-stats { font-size: 12px; color: #6b7280; margin-top: 4px; }
+        .db-name { font-size: 12px; color: #9ca3af; font-style: italic; }
+
+        /* ---------- переключатели ---------- */
+        .comp-toggles { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+        .comp-toggles form { margin: 0; }
+        .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+        .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .switch .track {
+            position: relative; width: 38px; height: 21px; border-radius: 999px;
+            background: #d1d5db; transition: background .15s; flex: 0 0 auto;
+        }
+        .switch .track::after {
+            content: ''; position: absolute; top: 3px; left: 3px; width: 15px; height: 15px;
+            border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2);
+            transition: transform .15s;
+        }
+        .switch input:checked + .track { background: #2563eb; }
+        .switch input:checked + .track::after { transform: translateX(17px); }
+        .switch input[value=archive]:checked + .track,
+        .switch input[value=hide]:checked + .track { background: #7c3aed; }
+        .switch input:disabled + .track { opacity: .45; cursor: not-allowed; }
+        .switch .cap { font-size: 12px; font-weight: 600; color: #374151; }
+        .switch.is-off .cap { color: #9ca3af; }
+        .switch.disabled { cursor: not-allowed; }
+        .switch.disabled .cap { color: #d1d5db; }
+
+        /* ---------- меню «⋮» ---------- */
+        .menu { position: relative; flex: 0 0 auto; }
+        .menu > summary {
+            list-style: none; cursor: pointer; user-select: none;
+            width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+            font-size: 20px; line-height: 1; color: #374151; border: 1px solid #d1d5db;
+            border-radius: 9px; background: #fff;
+        }
+        .menu > summary::-webkit-details-marker { display: none; }
+        .menu[open] > summary { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+        .menu-panel {
+            position: absolute; right: 0; top: 40px; z-index: 30; min-width: 240px;
+            background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+            box-shadow: 0 12px 28px rgba(0,0,0,.14); padding: 6px;
+        }
+        .menu-panel form { margin: 0; }
+        .mi {
+            display: flex; align-items: center; gap: 8px; width: 100%;
+            padding: 8px 10px; font-size: 13px; font-weight: 600; font-family: inherit;
+            border: none; border-radius: 7px; background: none; color: #374151;
+            text-align: left; cursor: pointer; text-decoration: none; white-space: nowrap;
+        }
+        .mi:hover { background: #f3f4f6; }
+        .mi-danger { color: #b91c1c; }
+        .mi-danger:hover { background: #fee2e2; }
+        .mi-sep { height: 1px; background: #eef2f6; margin: 5px 4px; }
+
+        /* ---------- встроенные панели ---------- */
+        .panel-form {
+            margin-top: 12px; padding: 12px; background: #f9fafb;
+            border: 1px solid #e5e7eb; border-radius: 10px;
+        }
+        .panel-form form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0; }
+        .panel-form input[type=text], .panel-form select { width: auto; min-width: 180px; flex: 1; }
+        .panel-form label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #374151; }
+        .panel-form label.check input { width: 16px; height: 16px; accent-color: #2563eb; }
+        .panel-title { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: #9ca3af; width: 100%; }
+        .btn-cancel { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+        .btn-cancel:hover { background: #f3f4f6; }
+        .btn-danger { background: #dc2626; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-danger:disabled { background: #f3b4b4; cursor: not-allowed; }
+        .danger-note { color: #b91c1c; font-size: 13px; line-height: 1.5; width: 100%; }
+
+        /* ---------- архив ---------- */
+        .archive { margin-top: 14px; }
+        .archive > summary {
+            cursor: pointer; font-size: 14px; font-weight: 700; color: #6b7280;
+            padding: 10px 2px; list-style: none; user-select: none;
+        }
+        .archive > summary::-webkit-details-marker { display: none; }
+        .archive > summary::before { content: '▸ '; }
+        .archive[open] > summary::before { content: '▾ '; }
+        .archive > summary:hover { color: #374151; }
+        .archive .comp-list { margin-top: 6px; }
+        .empty-note { text-align: center; color: #9ca3af; font-size: 13px; padding: 18px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>Управление соревнованиями</h1>
+    <div class="sub">
+        Вы вошли как <b>{{ manage_user }}</b> ·
+        <a href="{{ url_for('index') }}">к выбору соревнования</a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="flash flash-{{ 'error' if category == 'error' else 'success' }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    {% macro comp_card(c) %}
+    <div class="comp {{ 'is-archived' if c.archived }} {{ 'is-hidden' if c.hidden }}"
+         data-archived="{{ 1 if c.archived else 0 }}"
+         data-hidden="{{ 1 if c.hidden else 0 }}"
+         data-readonly="{{ 1 if c.read_only else 0 }}"
+         data-unfinished="{{ 1 if c.unfinished else 0 }}"
+         data-name="{{ c.name }}">
+        <div class="comp-top">
+            <div class="comp-main">
+                <div class="comp-name">
+                    <span class="name-text" title="Двойной клик — переименовать">{{ c.name }}</span>
+                    <button type="button" class="name-edit" data-rename title="Переименовать">✏️</button>
+                    {% if c.archived %}<span class="badge badge-arch">архив</span>{% endif %}
+                    {% if c.hidden %}<span class="badge badge-hidden">скрыто</span>{% endif %}
+                    {% if c.read_only %}<span class="badge badge-ro">только чтение</span>{% endif %}
+                    <form class="name-form" method="post" action="{{ url_for('manage_rename') }}" hidden>
+                        <input type="hidden" name="slug" value="{{ c.slug }}">
+                        <input type="text" name="name" value="{{ c.name }}" required maxlength="120">
+                        <button type="submit" class="mini-ok" title="Сохранить">✓</button>
+                        <button type="button" class="mini-cancel" data-rename-cancel title="Отмена">✕</button>
+                    </form>
+                </div>
+
+                <div class="comp-sub">
+                    <a href="{{ url_for('select_competition', slug=c.slug) }}">/c/{{ c.slug }}</a>
+                    <button type="button" class="link-copy" data-copy="{{ url_for('select_competition', slug=c.slug, _external=True) }}"
+                            title="Скопировать ссылку на соревнование">⧉</button>
+                    <span>· создано {{ c.created[:10] if c.created else '—' }}</span>
+                    {% if c.db_name and c.db_name != c.name %}
+                        <span class="db-name" title="Название внутри соревнования — меняется в его настройках">· в приложении: {{ c.db_name }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="comp-stats">
+                    участников: <b>{{ c.participants }}</b> ·
+                    стартов: <b>{{ c.heats }}</b>{% if c.unfinished %} (незавершённых: {{ c.unfinished }}){% endif %} ·
+                    размер: {{ (c.size / 1024)|round(0)|int }} КБ
+                </div>
+
+                <div class="comp-toggles">
+                    <form method="post" action="{{ url_for('manage_flags') }}">
+                        <input type="hidden" name="slug" value="{{ c.slug }}">
+                        <input type="hidden" name="action" value="{{ 'unarchive' if c.archived else 'archive' }}">
+                        <label class="switch {{ 'is-off' if not c.archived }} {{ 'disabled' if c.unfinished }}"
+                               title="{{ 'Нельзя: есть незавершённые старты' if c.unfinished else 'Скрыть со страницы входа' }}">
+                            <input type="checkbox" name="flag_archive" value="archive" {{ 'checked' if c.archived }}
+                                   {{ 'disabled' if c.unfinished }}
+                                   onchange="this.form.querySelector('[name=action]').value = this.checked ? 'archive' : 'unarchive'; this.form.submit();">
+                            <span class="track"></span>
+                            <span class="cap">Архив</span>
+                        </label>
+                    </form>
+
+                    <form method="post" action="{{ url_for('manage_flags') }}">
+                        <input type="hidden" name="slug" value="{{ c.slug }}">
+                        <input type="hidden" name="action" value="{{ 'show' if c.hidden else 'hide' }}">
+                        <label class="switch {{ 'is-off' if not c.hidden }} {{ 'disabled' if c.unfinished }}"
+                               title="{{ 'Нельзя: есть незавершённые старты' if c.unfinished else 'Скрыть со страницы входа, оставив доступ по ссылке' }}">
+                            <input type="checkbox" name="flag_hidden" value="hide" {{ 'checked' if c.hidden }}
+                                   {{ 'disabled' if c.unfinished }}
+                                   onchange="this.form.querySelector('[name=action]').value = this.checked ? 'hide' : 'show'; this.form.submit();">
+                            <span class="track"></span>
+                            <span class="cap">Скрыто</span>
+                        </label>
+                    </form>
+
+                    <form method="post" action="{{ url_for('manage_readonly') }}">
+                        <input type="hidden" name="slug" value="{{ c.slug }}">
+                        <input type="hidden" name="read_only" value="{{ '0' if c.read_only else '1' }}">
+                        {% set ro_locked = (not c.read_only) and c.unfinished %}
+                        <label class="switch {{ 'is-off' if not c.read_only }} {{ 'disabled' if ro_locked }}"
+                               title="{{ 'Нельзя: есть незавершённые старты' if ro_locked else 'Запретить изменения данных' }}">
+                            <input type="checkbox" name="flag_ro" value="ro" {{ 'checked' if c.read_only }}
+                                   {{ 'disabled' if ro_locked }}
+                                   onchange="this.form.querySelector('[name=read_only]').value = this.checked ? '1' : '0'; this.form.submit();">
+                            <span class="track"></span>
+                            <span class="cap">Только чтение</span>
+                        </label>
+                    </form>
+                </div>
+            </div>
+
+            <details class="menu">
+                <summary title="Действия">⋮</summary>
+                <div class="menu-panel">
+                    <a class="mi" href="{{ url_for('select_competition', slug=c.slug) }}">↗ Открыть</a>
+                    <button type="button" class="mi" data-panel="password">🔑 Логин и пароль</button>
+                    <button type="button" class="mi" data-panel="copy">📄 Копировать</button>
+                    <div class="mi-sep"></div>
+                    <a class="mi" href="{{ url_for('manage_export', slug=c.slug) }}">⬇ Экспорт БД</a>
+                    <div class="mi-sep"></div>
+                    <button type="button" class="mi mi-danger" data-panel="delete">🗑 Удалить</button>
+                </div>
+            </details>
+        </div>
+
+        <div class="panel-form" data-panel-name="password" hidden>
+            <form method="post" action="{{ url_for('manage_password') }}">
+                <span class="panel-title">Логин и пароль пользователя</span>
+                <input type="hidden" name="slug" value="{{ c.slug }}">
+                <select name="username" required>
+                    {% for u in c.users %}
+                        <option value="{{ u.username }}">{{ u.username }}{% if u.role %} ({{ u.role }}){% endif %}</option>
+                    {% else %}
+                        <option value="">— нет пользователей —</option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="new_username" placeholder="Новый логин (необязательно)"
+                       maxlength="40" autocomplete="off">
+                <input type="text" name="password" placeholder="Новый пароль (необязательно)" minlength="4"
+                       autocomplete="new-password">
+                <button type="submit" {% if not c.users %}disabled{% endif %}>Сохранить</button>
+                <button type="button" class="btn-cancel" data-cancel>Отмена</button>
+                <div class="hint" style="margin:2px 0 0; width:100%">
+                    Заполните одно поле или оба. Пустое поле не меняется.
+                </div>
+            </form>
+        </div>
+
+        <div class="panel-form" data-panel-name="copy" hidden>
+            <form method="post" action="{{ url_for('manage_copy') }}">
+                <span class="panel-title">Копия соревнования</span>
+                <input type="hidden" name="slug" value="{{ c.slug }}">
+                <input type="text" name="name" value="{{ c.name }} (копия)" required>
+                <span class="panel-title" style="margin-top:6px">Что очистить в копии</span>
+                <label class="check"><input type="checkbox" name="clear" value="participants"> Участники</label>
+                <label class="check"><input type="checkbox" name="clear" value="heats"> Старты и заезды</label>
+                <label class="check"><input type="checkbox" name="clear" value="categories"> Категории (и старты)</label>
+                <label class="check"><input type="checkbox" name="clear" value="registration"> Настройки саморегистрации</label>
+                <label class="check"><input type="checkbox" name="clear" value="journal"> Журнал заявок</label>
+                <label class="check"><input type="checkbox" name="clear" value="protocol"> Данные протокола</label>
+                <div class="hint" style="margin:2px 0 0; width:100%">Пользователи и пароли копируются всегда.</div>
+                <button type="submit">Создать копию</button>
+                <button type="button" class="btn-cancel" data-cancel>Отмена</button>
+            </form>
+        </div>
+
+        <div class="panel-form" data-panel-name="delete" hidden>
+            <form method="post" action="{{ url_for('manage_delete') }}">
+                <input type="hidden" name="slug" value="{{ c.slug }}">
+                <div class="danger-note">
+                    Удаление необратимо: файл базы будет стёрт. Задача подтверждения —
+                    введите название соревнования (можно скопировать выше).
+                </div>
+                <input type="text" name="confirm" placeholder="Введите: {{ c.name }}"
+                       data-confirm="{{ c.name }}" autocomplete="off" required>
+                <button type="submit" class="btn-danger" disabled data-confirm-submit>Удалить навсегда</button>
+                <button type="button" class="btn-cancel" data-cancel>Отмена</button>
+            </form>
+        </div>
+    </div>
+    {% endmacro %}
+
+    <div class="card">
+        <h2>Соревнования ({{ counts.all }})</h2>
+
+        <div class="summary">
+            <button type="button" class="chip on" data-filter="all">Все <b>{{ counts.all }}</b></button>
+            <button type="button" class="chip" data-filter="active">Активные <b>{{ counts.active }}</b></button>
+            <button type="button" class="chip {{ 'zero' if not counts.archived }}" data-filter="archived">🗄 В архиве <b>{{ counts.archived }}</b></button>
+            <button type="button" class="chip {{ 'zero' if not counts.hidden }}" data-filter="hidden">🙈 Скрытые <b>{{ counts.hidden }}</b></button>
+            <button type="button" class="chip {{ 'zero' if not counts.readonly }}" data-filter="readonly">🔒 Только чтение <b>{{ counts.readonly }}</b></button>
+            <button type="button" class="chip warn {{ 'zero' if not counts.unfinished }}" data-filter="unfinished">⚠ С незавершёнными <b>{{ counts.unfinished }}</b></button>
+        </div>
+
+        <div class="comp-list" id="list-active">
+            {% for c in active_items %}{{ comp_card(c) }}{% endfor %}
+        </div>
+
+        <div class="empty-note" id="empty-note" hidden>Ничего не найдено по выбранному фильтру</div>
+
+        {% if archived_items %}
+        <details class="archive" id="archive">
+            <summary>Архив <span class="badge badge-arch">{{ archived_items|length }}</span></summary>
+            <div class="comp-list">
+                {% for c in archived_items %}{{ comp_card(c) }}{% endfor %}
+            </div>
+        </details>
+        {% endif %}
+
+        <div class="hint">
+            «Архив» и «Скрыто» убирают соревнование со страницы входа, но прямая ссылка <code>/c/…</code>
+            продолжает работать. Пока есть незавершённые старты, архивировать и скрывать нельзя.
+            «Удалить навсегда» стирает файл базы без резервной копии — при необходимости сначала сделайте «Экспорт БД».
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Новое соревнование</h2>
+        <div class="tabs">
+            <button type="button" class="tab on" data-tab="new">＋ Новая база</button>
+            <button type="button" class="tab" data-tab="import">📥 Из файла БД</button>
+        </div>
+
+        <div data-tab-body="new">
+            <form method="post" action="{{ url_for('manage_create') }}">
+                <div class="row">
+                    <div class="field" style="flex:2">
+                        <label for="name">Название</label>
+                        <input type="text" id="name" name="name" placeholder="Кубок города 2027" required>
+                    </div>
+                    <div class="field">
+                        <label for="admin_login">Логин администратора</label>
+                        <input type="text" id="admin_login" name="admin_login" autocomplete="off" required>
+                    </div>
+                    <div class="field">
+                        <label for="admin_password">Пароль администратора</label>
+                        <input type="text" id="admin_password" name="admin_password" autocomplete="off" required>
+                    </div>
+                    <button type="submit">Создать</button>
+                </div>
+            </form>
+            <div class="hint">
+                Создаётся отдельный файл базы. Логин и пароль — для входа в это соревнование
+                (дальше внутри можно добавить судей). Ссылка появится в списке выше.
+            </div>
+        </div>
+
+        <div data-tab-body="import" hidden>
+            <form method="post" action="{{ url_for('manage_import') }}" enctype="multipart/form-data">
+                <div class="row">
+                    <div class="field">
+                        <label for="imp-file">Файл базы (.db)</label>
+                        <input type="file" id="imp-file" name="file" accept=".db,.sqlite,.sqlite3" required>
+                    </div>
+                    <div class="field" style="flex:2">
+                        <label for="imp-name">Название (необязательно)</label>
+                        <input type="text" id="imp-name" name="name" placeholder="Возьмём из базы">
+                    </div>
+                    <button type="submit">Загрузить</button>
+                </div>
+            </form>
+            <div class="hint">
+                Подходит файл, выгруженный кнопкой «Экспорт БД» (или любая база «Хронометража»).
+                Создаётся новое соревнование с отдельной копией базы — загруженный файл не меняется.
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Список участников для подстановки</h2>
+        <div class="hint" style="margin:0 0 12px">
+            Общий список ранее регистрировавшихся участников (<code>{{ people_url }}</code>).
+            Используется во всех соревнованиях: при вводе первых букв ФИО подсказывает участника
+            и заполняет город, клуб и год рождения.
+        </div>
+        <div class="people-row">
+            <span class="badge {{ 'badge-edit' if people_count else 'badge-ro' }}" style="margin:0">
+                {{ people_count }} участников
+            </span>
+            <span class="comp-sub" style="margin:0">
+                {% if people_updated %}обновлён {{ people_updated[:16].replace('T', ' ') }}{% else %}ещё не загружен{% endif %}
+            </span>
+            <form method="post" action="{{ url_for('manage_people_refresh') }}" style="margin:0">
+                <button type="submit">🔄 Обновить список</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Доступ к управлению</h2>
+        <div class="hint" style="margin:0 0 12px">
+            Сейчас вход под логином <b>{{ manage_user }}</b>. Логин и пароль этой страницы хранятся
+            в файле данных (пароль — в виде хэша). Пока файл не создан, действуют значения
+            из переменных окружения сервера.
+        </div>
+        <form method="post" action="{{ url_for('manage_account') }}">
+            <div class="row">
+                <div class="field">
+                    <label for="cur-pass">Текущий пароль</label>
+                    <input type="password" id="cur-pass" name="current_password" required
+                           autocomplete="current-password">
+                </div>
+                <div class="field">
+                    <label for="new-user">Новый логин</label>
+                    <input type="text" id="new-user" name="new_username" maxlength="40"
+                           placeholder="{{ manage_user }}" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label for="new-pass">Новый пароль</label>
+                    <input type="password" id="new-pass" name="new_password" minlength="4"
+                           placeholder="необязательно" autocomplete="new-password">
+                </div>
+                <button type="submit">Сохранить</button>
+            </div>
+        </form>
+        <div class="hint">
+            Пустое поле не меняется. Чтобы вернуться к учётке из переменных окружения,
+            удалите файл <code>manage.json</code> в каталоге данных.
+        </div>
+    </div>
+
+    <div class="top-actions">
+        <form method="post" action="{{ url_for('manage_logout') }}">
+            <button type="submit" style="background:#fff;color:#374151;border:1px solid #d1d5db">Выйти</button>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    // ---- вкладки создания/импорта ----
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+    var bodies = Array.prototype.slice.call(document.querySelectorAll('[data-tab-body]'));
+    tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            tabs.forEach(function (t) { t.classList.toggle('on', t === tab); });
+            bodies.forEach(function (b) { b.hidden = b.dataset.tabBody !== tab.dataset.tab; });
+        });
+    });
+
+    // ---- фильтры ----
+    var chips = Array.prototype.slice.call(document.querySelectorAll('.chip'));
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.comp'));
+    var archive = document.getElementById('archive');
+    var emptyNote = document.getElementById('empty-note');
+
+    function applyFilter(f) {
+        var shown = 0;
+        cards.forEach(function (card) {
+            var show;
+            if (f === 'all') show = true;
+            else if (f === 'active') show = card.dataset.archived !== '1';
+            else if (f === 'archived') show = card.dataset.archived === '1';
+            else if (f === 'hidden') show = card.dataset.hidden === '1';
+            else if (f === 'readonly') show = card.dataset.readonly === '1';
+            else if (f === 'unfinished') show = card.dataset.unfinished === '1';
+            else show = true;
+            card.hidden = !show;
+            if (show) shown++;
+        });
+        if (archive) {
+            // архивная секция показывается, если в ней есть подходящие карточки
+            var archShown = Array.prototype.some.call(
+                archive.querySelectorAll('.comp'), function (c) { return !c.hidden; });
+            archive.hidden = !archShown;
+            archive.open = (f === 'archived') || (f !== 'all' && archShown);
+        }
+        if (emptyNote) emptyNote.hidden = shown > 0;
+    }
+
+    chips.forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            chips.forEach(function (c) { c.classList.toggle('on', c === chip); });
+            applyFilter(chip.dataset.filter || 'all');
+        });
+    });
+
+    // ---- инлайн-переименование ----
+    function openRename(card) {
+        var form = card.querySelector('.name-form');
+        if (!form || !form.hidden) return;
+        form.querySelector('input[name="name"]').value = card.dataset.name;
+        card.querySelector('.name-text').hidden = true;
+        card.querySelector('.name-edit').hidden = true;
+        form.hidden = false;
+        var inp = form.querySelector('input[name="name"]');
+        inp.focus();
+        inp.select();
+    }
+
+    function closeRename(card) {
+        var form = card.querySelector('.name-form');
+        if (!form) return;
+        form.hidden = true;
+        card.querySelector('.name-text').hidden = false;
+        card.querySelector('.name-edit').hidden = false;
+    }
+
+    document.addEventListener('click', function (e) {
+        var edit = e.target.closest('[data-rename]');
+        if (edit) {
+            openRename(edit.closest('.comp'));
+            e.preventDefault();
+            return;
+        }
+        var cancel = e.target.closest('[data-rename-cancel]');
+        if (cancel) {
+            closeRename(cancel.closest('.comp'));
+            e.preventDefault();
+        }
+    });
+
+    document.addEventListener('dblclick', function (e) {
+        var text = e.target.closest('.name-text');
+        if (text) openRename(text.closest('.comp'));
+    });
+
+    document.addEventListener('keydown', function (e) {
+        var inp = document.activeElement;
+        if (!inp || !inp.closest('.name-form')) return;
+        if (e.key === 'Escape') {
+            closeRename(inp.closest('.comp'));
+            e.preventDefault();
+        }
+    });
+
+    // ---- меню «⋮»: закрытие по клику вне ----
+    document.addEventListener('click', function (e) {
+        document.querySelectorAll('details.menu[open]').forEach(function (d) {
+            if (!d.contains(e.target)) d.open = false;
+        });
+    });
+
+    // ---- открыть встроенную панель из меню ----
+    document.addEventListener('click', function (e) {
+        var trigger = e.target.closest('[data-panel]');
+        if (trigger) {
+            var card = trigger.closest('.comp');
+            card.querySelectorAll('.panel-form').forEach(function (p) { p.hidden = true; });
+            var panel = card.querySelector('.panel-form[data-panel-name="' + trigger.dataset.panel + '"]');
+            if (panel) {
+                panel.hidden = false;
+                var field = panel.querySelector('input[name="name"], input[name="password"], input[name="confirm"], select');
+                if (field) { field.focus(); if (field.select) field.select(); }
+            }
+            var menu = trigger.closest('details.menu');
+            if (menu) menu.open = false;
+            e.preventDefault();
+            return;
+        }
+        var cancel = e.target.closest('[data-cancel]');
+        if (cancel) {
+            cancel.closest('.panel-form').hidden = true;
+            e.preventDefault();
+        }
+    });
+
+    // ---- подтверждение удаления: ввести название ----
+    document.addEventListener('input', function (e) {
+        var inp = e.target.closest('[data-confirm]');
+        if (!inp) return;
+        var btn = inp.form.querySelector('[data-confirm-submit]');
+        if (btn) btn.disabled = inp.value.trim() !== inp.dataset.confirm;
+    });
+
+    // ---- копировать ссылку ----
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-copy]');
+        if (!btn) return;
+        var url = btn.dataset.copy;
+        var done = function () {
+            var old = btn.textContent;
+            btn.textContent = '✓';
+            btn.title = 'Скопировано';
+            setTimeout(function () { btn.textContent = old; btn.title = 'Скопировать ссылку на соревнование'; }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(done, done);
+        } else {
+            var ta = document.createElement('textarea');
+            ta.value = url; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); } catch (err) {}
+            document.body.removeChild(ta);
+            done();
+        }
+        e.preventDefault();
+    });
+})();
+</script>
+</body>
+</html>

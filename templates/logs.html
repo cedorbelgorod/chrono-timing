@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Журнал хронометража — Хронометраж{% endblock %}
+{% block content %}
+<h2>Журнал хронометража</h2>
+
+<form method="get" class="log-filters">
+    <select name="hid">
+        <option value="">— все старты —</option>
+        {% for h in heats %}
+            <option value="{{ h.id }}" {% if hid == h.id %}selected{% endif %}>
+                Старт №{{ h.heat_number }}{% if h.name %} — {{ h.name }}{% endif %}
+            </option>
+        {% endfor %}
+    </select>
+
+    <select name="source">
+        <option value="">— все источники —</option>
+        <option value="manual" {% if source == 'manual' %}selected{% endif %}>Ручной</option>
+        <option value="auto" {% if source == 'auto' %}selected{% endif %}>Авто (RFID)</option>
+    </select>
+
+    <label class="chk">
+        <input type="checkbox" name="errors" value="1" {% if only_errors %}checked{% endif %}>
+        только ошибки
+    </label>
+
+    <button type="submit">Показать</button>
+    {% if hid or source or only_errors %}
+        <a class="link" href="{{ url_for('logs_page') }}">Сбросить</a>
+    {% endif %}
+</form>
+
+<div class="log-summary">
+    <span>Всего записей: <b>{{ total }}</b></span>
+    <span class="sep">·</span>
+    <span>из них ошибок: <b class="err-count">{{ errors_total }}</b></span>
+</div>
+
+{% if not rows %}
+    <div class="empty">Записей нет.</div>
+{% else %}
+<table class="log-table">
+    <thead>
+        <tr>
+            <th style="width:130px">Время</th>
+            <th style="width:90px">Источник</th>
+            <th style="width:110px">Действие</th>
+            <th style="width:70px">№</th>
+            <th>Участник</th>
+            <th style="width:90px">Итог</th>
+            <th>Причина / подробности</th>
+            <th style="width:120px">Кто</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+        <tr class="{{ 'log-err' if not r.ok else '' }}">
+            <td class="mono time">
+                {{ r.created_at[8:10] }}.{{ r.created_at[5:7] }} {{ r.created_at[11:19] }}
+            </td>
+            <td>
+                <span class="src src-{{ r.source }}">
+                    {% if r.source == 'auto' %}авто{% elif r.source == 'manual' %}ручной{% else %}{{ r.source }}{% endif %}
+                </span>
+            </td>
+            <td>
+                {% if r.action == 'lap' %}круг
+                {% elif r.action == 'finish' %}финиш
+                {% elif r.action == 'scan' %}сканирование
+                {% elif r.action == 'undo' %}отмена
+                {% else %}{{ r.action }}{% endif %}
+            </td>
+            <td class="mono">{{ r.number or '—' }}</td>
+            <td>{{ r.full_name or '' }}</td>
+            <td>
+                {% if r.ok %}
+                    <span class="res res-ok">успешно</span>
+                {% else %}
+                    <span class="res res-err">ошибка</span>
+                {% endif %}
+            </td>
+            <td class="reason">
+                {% if r.reason %}<span class="why">{{ r.reason }}</span>{% endif %}
+                {% if r.detail %}<small>{{ r.detail }}</small>{% endif %}
+            </td>
+            <td class="muted">{{ r.user_login or '' }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+{% if pages > 1 %}
+    <div class="pager">
+        {% if page > 1 %}
+            <a class="btn-ghost" href="{{ url_for('logs_page', hid=hid, source=source, errors='1' if only_errors else '', page=page-1) }}">← Новее</a>
+        {% endif %}
+        <span class="muted">страница {{ page }} из {{ pages }}</span>
+        {% if page < pages %}
+            <a class="btn-ghost" href="{{ url_for('logs_page', hid=hid, source=source, errors='1' if only_errors else '', page=page+1) }}">Старее →</a>
+        {% endif %}
+    </div>
+{% endif %}
+{% endif %}
+
+<style>
+.log-filters {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    background: #fff; padding: 12px 16px; border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 12px;
+    border-left: 4px solid #2563eb;
+}
+.log-filters select {
+    padding: 7px 10px; font-size: 14px; border: 1px solid #d1d5db;
+    border-radius: 6px; font-family: inherit; min-width: 180px;
+}
+.chk { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
+.chk input { width: 16px; height: 16px; accent-color: #2563eb; }
+
+.log-summary { color: #6b7280; font-size: 13px; margin-bottom: 10px; }
+.log-summary b { color: #111827; }
+.log-summary .sep { color: #d1d5db; }
+.err-count { color: #b91c1c; }
+
+.log-table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; }
+.log-table th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+    color: #6b7280; background: #f9fafb; padding: 8px 10px; border-bottom: 1px solid #e5e7eb;
+}
+.log-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+.log-table tr.log-err { background: #fff7f7; }
+.log-table tr.log-err td { border-bottom-color: #fecaca; }
+.log-table .time { color: #6b7280; white-space: nowrap; }
+.log-table .reason small { display: block; color: #9ca3af; font-size: 12px; margin-top: 2px; }
+.log-table .muted { color: #9ca3af; }
+
+.src { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 9px; }
+.src-manual { background: #dbeafe; color: #1e40af; }
+.src-auto { background: #cffafe; color: #0e7490; }
+
+.res { font-size: 12px; font-weight: 700; }
+.res-ok { color: #16a34a; }
+.res-err { color: #b91c1c; }
+
+.pager { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 16px; }
+.btn-ghost {
+    display: inline-block; background: #fff; color: #374151; border: 1px solid #d1d5db;
+    padding: 6px 12px; font-size: 13px; border-radius: 6px; text-decoration: none;
+}
+.btn-ghost:hover { background: #f3f4f6; }
+</style>
+{% endblock %}

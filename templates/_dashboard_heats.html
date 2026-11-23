@@ -1,0 +1,72 @@
+{% macro stat_chips(item) %}
+    <div class="dash-stats">
+        <span class="stat"><b>{{ item.total }}</b> участников</span>
+        <span class="stat running"><b>{{ item.running_count }}</b> на дистанции</span>
+        <span class="stat done"><b>{{ item.finished_count }}</b> финишировали</span>
+        {% if item.dnf_count %}<span class="stat dnf"><b>{{ item.dnf_count }}</b> DNF</span>{% endif %}
+        {% if item.lapped_count %}<span class="stat lapped"><b>{{ item.lapped_count }}</b> с отставанием</span>{% endif %}
+    </div>
+{% endmacro %}
+
+{% macro race_table(races) %}
+    <table>
+        <thead>
+            <tr>
+                <th style="width:70px">№</th>
+                <th>ФИО</th>
+                <th style="width:110px">Круги</th>
+                <th style="width:200px">Результат</th>
+                <th style="width:130px">Отставание</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for r in races %}
+            <tr class="{% if r.status == 'ok' %}row-ok{% elif r.status == 'running' %}row-running{% elif r.status == 'dnf' %}row-dnf{% elif r.status == 'lapped' %}row-lapped{% endif %}">
+                <td class="mono num">{{ r.number_display }}</td>
+                <td>{{ r.full_name }}</td>
+                <td>{{ r.laps|length }} / {{ r.planned_laps or r.laps_total }}</td>
+                <td>
+                    {% if r.status == 'ok' %}
+                        <span class="res-ok mono">{{ r.total_display }}</span>
+                    {% elif r.status == 'running' %}
+                        <span class="mono timer-live" data-start-ms="{{ r.start_epoch_ms }}">--:--:--</span>
+                    {% elif r.status == 'lapped' %}
+                        <span class="tag tag-lapped">+{{ r.laps_behind }} кр.</span>
+                    {% elif r.status == 'dnf' %}
+                        <span class="tag tag-dnf">DNF</span>
+                    {% else %}—{% endif %}
+                </td>
+                <td class="mono gap gap-{{ r.gap_kind }}">{{ r.gap_display or '' }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% endmacro %}
+
+{% if not heats %}
+    <div class="empty">Нет активных стартов.</div>
+{% else %}
+    {% for h in heats %}
+        <div class="heat-card heat-running">
+            <div class="heat-top">
+                <span class="heat-title">
+                    Старт №{{ h.heat_number }}{% if h.name %} — {{ h.name }}{% endif %}
+                </span>
+                {{ stat_chips(h) }}
+                <form method="post" action="{{ url_for('heat_force_finish_and_next', hid=h.id) }}"
+                      class="heat-finish-form"
+                      data-finish-check="{{ h.running_list|tojson|forceescape }}">
+                    <button type="submit">▶ Завершить и создать следующий</button>
+                </form>
+            </div>
+
+            {% for c in h.categories %}
+                <div class="cat-head">
+                    <span class="cat-name">{{ c.name }}</span>
+                    {{ stat_chips(c) }}
+                </div>
+                {{ race_table(c.races) }}
+            {% endfor %}
+        </div>
+    {% endfor %}
+{% endif %}

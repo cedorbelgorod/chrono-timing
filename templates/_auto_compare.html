@@ -1,0 +1,39 @@
+{% if not rows %}
+    <div class="dt-empty">Нет данных для сравнения.</div>
+{% else %}
+    {% for r in rows %}
+        <div class="cmp-block">
+            <div class="cmp-head">
+                <b>{% if r.number %}№{{ r.number }}{% else %}б/н{% endif %} — {{ r.full_name }}</b>
+                <span class="muted">{{ r.auto_laps|length }} / {{ r.planned_laps or r.laps_total }} кругов</span>
+            </div>
+            <table class="cmp">
+                <thead>
+                    <tr>
+                        <th style="width:62px">Круг</th>
+                        <th>Ручной</th>
+                        <th>Авто</th>
+                        <th style="width:80px">Δ</th>
+                        <th style="width:110px">Судья</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for c in r.compare %}
+                    <tr>
+                        <td><b>{{ c.lap }}</b></td>
+                        <td class="mono">{{ c.manual }}</td>
+                        <td class="mono">{{ c.auto }}</td>
+                        <td class="mono">
+                            {% if c.diff_sec is not none %}
+                                {% set ad = c.diff_sec if c.diff_sec >= 0 else -c.diff_sec %}
+                                <span class="delta {{ 'good' if ad <= 0.5 else ('warn' if ad <= 2 else 'bad') }}">{{ c.diff }}</span>
+                            {% else %}—{% endif %}
+                        </td>
+                        <td class="muted">{{ c.user or '—' }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endfor %}
+{% endif %}

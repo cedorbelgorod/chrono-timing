@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Журнал заявок — {{ competition.name }}{% endblock %}
+{% block content %}
+<h2>Журнал саморегистраций <small>— {{ competition.name }}</small></h2>
+
+<p class="muted" style="margin-top:-6px">
+    Все заявки, поданные через публичную форму. Записи сохраняются навсегда: удаление участника
+    из списка не удаляет заявку и техническую информацию о том, кто её подавал.
+</p>
+
+<div class="reg-summary">
+    <span class="pill">Всего заявок: <b>{{ total }}</b></span>
+    <span class="pill ok">В списке: <b>{{ alive }}</b></span>
+    <span class="pill del">Удалены: <b>{{ deleted }}</b></span>
+    <a class="xlsx-btn" href="{{ url_for('registrations_xlsx') }}">⬇ Excel</a>
+</div>
+
+{% if rows %}
+<div class="reg-cards">
+    {% for r in rows %}
+    <div class="reg-card {{ 'is-deleted' if not r.alive_id }}">
+        <div class="reg-top">
+            <div>
+                <div class="reg-name">{{ r.full_name or '—' }}</div>
+                <div class="reg-meta">
+                    {{ r.birth_year or '—' }} г.
+                    {% if r.gender %}· {{ 'М' if r.gender == 'M' else 'Ж' }}{% endif %}
+                    {% if r.city %}· {{ r.city }}{% endif %}
+                    {% if r.team %}· {{ r.team }}{% endif %}
+                </div>
+            </div>
+            <div class="reg-status">
+                {% if r.alive_id %}
+                    <span class="st-ok">{{ ('№' ~ r.participant_number) if r.participant_number else 'в списке' }}</span>
+                {% else %}
+                    <span class="st-del">удалён</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="reg-fields">
+            <div><span>Категория</span>{{ r.category_name or '—' }}</div>
+            <div><span>Телефон</span>{{ r.phone or '—' }}</div>
+            <div><span>Подана</span>{{ (r.created_at or '')[:16].replace('T', ' ') }}</div>
+            <div><span>Согласие</span>{{ (r.consent_at or '—')[:16].replace('T', ' ') }}</div>
+        </div>
+
+        <div class="reg-tech">
+            <div class="tech-title">Техническая информация</div>
+            <div class="tech-grid">
+                <div><span>IP</span><code>{{ r.ip or '—' }}</code></div>
+                <div><span>Устройство</span>{{ r.device or '—' }}</div>
+                <div><span>Браузер</span>{{ r.browser or '—' }}</div>
+                <div><span>ОС</span>{{ r.os or '—' }}</div>
+                <div class="wide"><span>User-Agent</span><code class="ua">{{ r.user_agent or '—' }}</code></div>
+                {% if r.accept_language %}<div><span>Язык</span>{{ r.accept_language }}</div>{% endif %}
+                {% if r.referer %}<div class="wide"><span>Источник</span><code class="ua">{{ r.referer }}</code></div>{% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+    <div class="empty">Пока никто не регистрировался через публичную форму</div>
+{% endif %}
+
+<style>
+.reg-summary { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.pill { font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; background: #f3f4f6; color: #374151; }
+.pill.ok { background: #dcfce7; color: #166534; }
+.pill.del { background: #fee2e2; color: #991b1b; }
+.xlsx-btn {
+    margin-left: auto; padding: 9px 16px; border-radius: 9px; background: #16a34a; color: #fff;
+    font-size: 14px; font-weight: 600; text-decoration: none;
+}
+.reg-cards { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+.reg-card {
+    background: #fff; border-radius: 12px; padding: 14px 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06); border-left: 4px solid #2563eb;
+}
+.reg-card.is-deleted { border-left-color: #ef4444; background: #fffafa; }
+.reg-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.reg-name { font-size: 16px; font-weight: 700; color: #111827; }
+.reg-meta { font-size: 12px; color: #6b7280; margin-top: 2px; }
+.st-ok { color: #15803d; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.st-del { color: #b91c1c; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.reg-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 16px; margin-top: 10px; font-size: 13px; }
+.reg-fields span, .tech-grid span {
+    display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: #9ca3af; margin-bottom: 1px;
+}
+.reg-tech { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #e5e7eb; }
+.tech-title { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #9ca3af; margin-bottom: 8px; }
+.tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px 16px; font-size: 13px; color: #374151; }
+.tech-grid .wide { grid-column: 1 / -1; }
+.tech-grid code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: #1f2937; word-break: break-all; }
+.tech-grid code.ua { color: #6b7280; font-size: 11px; }
+.empty { background: #fff; border-radius: 12px; padding: 26px; text-align: center; color: #6b7280; }
+</style>
+{% endblock %}

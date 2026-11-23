@@ -1,0 +1,313 @@
+{% macro render_races_table(races) %}
+<table>
+    <thead>
+        <tr>
+            <th style="width:60px">№</th>
+            <th>ФИО</th>
+            <th style="width:150px">Категория</th>
+            <th style="width:120px">Круги</th>
+            <th style="width:220px">Результат</th>
+            <th style="width:100px">DNF</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for r in races %}
+        <tr class="{% if r.status == 'dns' %}row-dns{% elif r.status == 'dnf' %}row-dnf{% elif r.status == 'lapped' %}row-lapped{% elif r.status == 'ok' %}row-ok{% endif %}">
+            <td class="mono" style="font-weight:700">{{ r.number_display }}</td>
+            <td>
+                {{ r.full_name }}
+                {% if r.birth_year %}<small>({{ r.birth_year }})</small>{% endif %}
+                {% if r.gender %}<small>{{ 'М' if r.gender == 'M' else 'Ж' }}</small>{% endif %}
+            </td>
+            <td>{{ r.category_name or '—' }}</td>
+            <td>{{ r.laps|length }} / {{ r.planned_laps or r.laps_total }}</td>
+            <td>
+                {% if r.status == 'ok' %}
+                    <span class="mono" style="color:#16a34a;font-weight:700">
+                        {{ r.total_display }}
+                    </span>
+                    {% if r.laps_behind > 0 %}
+                        <span class="tag tag-lapped" style="margin-left:4px">+{{ r.laps_behind }} кр.</span>
+                    {% endif %}
+                    <button type="button"
+                            onclick="editFinish({{ r.id }}, '{{ r.start_time[:19] }}', '{{ r.finish_time[:19] }}')"
+                            title="Изменить время финиша"
+                            style="padding:1px 6px;font-size:11px;background:#3b82f6;margin-left:4px">✎</button>
+                {% elif r.status == 'lapped' %}
+                    <span class="tag tag-lapped">+{{ r.laps_behind }} кр.</span>
+                    {% if r.last_lap_display %}
+                        <small class="mono" style="color:#6b7280;">({{ r.last_lap_display }})</small>
+                    {% endif %}
+                {% elif r.status == 'dnf' %}
+                    <span class="tag tag-dnf">DNF</span>
+                {% elif r.status == 'dns' %}
+                    <span class="tag tag-dns">DNS</span>
+                {% else %}
+                    <span class="mono">{{ r.total_display or '—' }}</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if r.status != 'dns' %}
+                    <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer">
+                        <input type="checkbox" name="dnf_race_ids" value="{{ r.id }}"
+                               {% if r.status == 'dnf' %}checked{% endif %}>
+                        <small>DNF</small>
+                    </label>
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endmacro %}
+    {% if heats %}
+        {% for h in heats %}
+            <div class="heat-card heat-{{ h.status }}" data-hid="{{ h.id }}">
+                <div class="heat-header">
+                    <button type="button" class="collapse-btn" onclick="toggleHeat(this)"
+                            title="Свернуть/развернуть">▼</button>
+                    <span class="heat-title">Старт №{{ h.heat_number }}</span>
+                    <form method="post" action="{{ url_for('heat_rename', hid=h.id) }}"
+                          style="display:inline-flex;gap:4px;align-items:center;margin:0">
+                        <input type="text" name="name"
+                               value="{{ h.name or '' }}"
+                               placeholder="Название старта"
+                               style="padding:3px 8px;font-size:13px;width:170px;
+                                      border:1px solid #d1d5db;border-radius:6px">
+                        <button type="submit" style="padding:3px 10px;font-size:12px">OK</button>
+                    </form>
+                    <span class="badge badge-{{ h.status }}">
+                        {% if h.status == 'pending' %}готов
+                        {% elif h.status == 'running' %}идёт
+                        {% else %}завершён{% endif %}
+                    </span>
+                    {% if h.categories %}
+                        <span class="heat-cats">
+                            {% for cat in h.categories %}{{ cat.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+                        </span>
+                    {% endif %}
+                    {% if h.finish_on_leader %}
+                        <span class="badge" style="background:#e0e7ff;color:#3730a3;border:1px solid #a5b4fc;">🏁 Финиш после лидера</span>
+                    {% endif %}
+                    {% if h.auto_enabled %}
+                        <span class="badge" style="background:#cffafe;color:#0e7490;border:1px solid #67e8f9;">📡 Авто</span>
+                    {% endif %}
+                    {% if h.min_lap_time > 0 %}
+                        <span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;">⏱ Мин. круг: {{ h.min_lap_time }} с</span>
+                    {% endif %}
+                    {% if h.started_display %}
+                        <span class="heat-start">
+                            Старт: <span class="mono">{{ h.started_display }}</span>
+                            <details style="display:inline-block;margin-left:4px">
+                                <summary style="cursor:pointer;color:#2563eb">✎</summary>
+                                <form method="post" action="{{ url_for('heat_edit_start', hid=h.id) }}"
+                                      style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+                                    <input type="datetime-local" name="start_time"
+                                           value="{{ h.started_dt_local }}" step="1" required
+                                           style="padding:4px;font-size:12px">
+                                    <button type="submit" style="padding:4px 8px;font-size:12px">OK</button>
+                                </form>
+                            </details>
+                        </span>
+                    {% endif %}
+                    {% if h.status == 'running' %}
+                        <span class="heat-progress">{{ h.races_finished }} / {{ h.races_total }} финиш.</span>
+                    {% endif %}
+                    <form method="post" action="{{ url_for('heat_delete', hid=h.id) }}"
+                          style="margin-left:auto"
+                          data-confirm-submit="Удалить старт №{{ h.heat_number }}?{% if h.status != 'pending' %} Все результаты этого старта будут потеряны безвозвратно.{% endif %}"
+                          data-confirm-ok="Удалить" data-confirm-danger>
+                        <button type="submit" class="danger" style="padding:6px 12px;font-size:13px">
+                            🗑 Удалить
+                        </button>
+                    </form>
+                </div>
+
+                <div class="heat-body">
+                    {% if h.status == 'pending' %}
+                        {% if h.scheduled_participants %}
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width:110px">Рег. №</th>
+                                        <th>ФИО</th>
+                                        <th style="width:170px">Категория</th>
+                                        <th style="width:100px">Статус</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                {% for p in h.scheduled_participants %}
+                                    <tr class="{% if p.status == 'dns' %}row-dns{% endif %}">
+                                        <td class="mono">{{ p.number or "—" }}</td>
+                                        <td>{{ p.full_name }}</td>
+                                        <td>{{ p.category_name }}</td>
+                                        <td>
+                                            {% if p.status == 'dns' %}
+                                                <span class="tag tag-dns">DNS</span>
+                                            {% else %}
+                                                <span class="tag tag-active">участник</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                            <div class="heat-actions">
+                                <form method="post" action="{{ url_for('heat_start', hid=h.id) }}" style="display:inline">
+                                    <button type="submit" class="btn-start">▶ СТАРТ</button>
+                                </form>
+                                <small style="color:#6b7280;align-self:center">
+                                    {% if h.auto_enabled %}
+                                        При старте автохронометраж включится автоматически
+                                    {% else %}
+                                        Активные участники стартуют одновременно, DNS — пропускают заезд
+                                    {% endif %}
+                                </small>
+                            </div>
+                        {% else %}
+                            <div class="empty">
+                                В этом старте нет участников —
+                                <form method="post" action="{{ url_for('heat_delete', hid=h.id) }}"
+                                      style="display:inline"
+                                      data-confirm-submit="Удалить пустой старт?"
+                                      data-confirm-ok="Удалить" data-confirm-danger>
+                                    <button type="submit" class="danger" style="padding:2px 8px;font-size:12px">удалить</button>
+                                </form>
+                            </div>
+                        {% endif %}
+
+                    {% elif h.status == 'running' %}
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:100px">№</th>
+                                    <th>ФИО</th>
+                                    <th style="width:150px">Категория</th>
+                                    <th style="width:170px">Прошло</th>
+                                    <th style="width:200px">Круги</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for r in h.races %}
+                                {% if r.status != 'dns' %}
+                                <tr class="{% if r.status != 'running' %}row-finished{% endif %}">
+                                    <td class="mono" style="font-weight:700">{{ r.number_display }}</td>
+                                    <td>
+                                        {{ r.full_name }}
+                                        {% if r.birth_year %}<small>({{ r.birth_year }})</small>{% endif %}
+                                        {% if r.gender %}<small>{{ 'М' if r.gender == 'M' else 'Ж' }}</small>{% endif %}
+                                    </td>
+                                    <td>{{ r.category_name or '—' }}</td>
+                                    <td>
+                                        {% if r.status == 'running' %}
+                                            <span data-start-ms="{{ r.start_epoch_ms }}"
+                                                  class="mono timer-live" style="font-size:18px;font-weight:600">
+                                                --:--:--.---
+                                            </span>
+                                        {% elif r.status == 'ok' %}
+                                            <span class="mono" style="color:#16a34a;font-weight:700;font-size:15px">
+                                                {{ r.total_display }}
+                                            </span>
+                                            <button type="button"
+                                                    onclick="editFinish({{ r.id }}, '{{ r.start_time[:19] }}', '{{ r.finish_time[:19] }}')"
+                                                    title="Изменить время финиша"
+                                                    style="padding:1px 6px;font-size:11px;background:#3b82f6;margin-left:4px">✎</button>
+                                        {% else %}
+                                            <span class="mono" style="font-size:14px;color:#b45309">
+                                                {{ r.status_display }}
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {{ r.laps|length }} / {{ r.planned_laps or r.laps_total }}
+                                        {% if r.laps %}
+                                        <details>
+                                            <summary style="cursor:pointer;font-size:12px;color:#6b7280">времена</summary>
+                                            <ul style="margin:6px 0 0;padding-left:16px;font-size:12px" class="mono">
+                                            {% for lap in r.laps %}
+                                                <li style="margin-bottom:2px">
+                                                    К{{ lap.lap_number }}: {{ lap.elapsed_display }} ({{ lap.split_display }})
+                                                    <button type="button"
+                                                            onclick="editLap({{ lap.id }}, '{{ lap.lap_time[:19] }}')"
+                                                            title="Изменить время круга"
+                                                            style="padding:0 6px;font-size:10px;background:#3b82f6;line-height:1.6">✎</button>
+                                                    {% if loop.last %}
+                                                    <form method="post" action="{{ url_for('lap_delete', lid=lap.id) }}"
+                                                          style="display:inline;margin:0"
+                                                          data-confirm-submit="Удалить последний круг?{% if r.finish_time %} Финиш будет снят.{% endif %}"
+                                                          data-confirm-ok="Удалить" data-confirm-danger>
+                                                        <button type="submit"
+                                                                title="Удалить последний круг"
+                                                                style="padding:0 6px;font-size:10px;background:#dc2626;line-height:1.6">🗑</button>
+                                                    </form>
+                                                    {% endif %}
+                                                </li>
+                                            {% endfor %}
+                                            </ul>
+                                        </details>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                        <div class="heat-actions">
+                            <a href="{{ url_for('manual_page', cid=competition.id) }}" class="btn-manual-link"
+                               style="text-decoration:none;font-size:13px;padding:6px 14px">
+                                📱 Хронометраж
+                            </a>
+                            <a href="{{ url_for('auto_page', cid=competition.id, hid=h.id) }}" class="btn-manual-link"
+                               style="text-decoration:none;font-size:13px;padding:6px 14px;background:#0e7490">
+                                📡 Авто
+                            </a>
+                            <form method="post" action="{{ url_for('heat_force_finish_and_next', hid=h.id) }}"
+                                  data-finish-check="{{ h.running_list|tojson|forceescape }}"
+                                  style="display:inline">
+                                <button type="submit" style="background:#f59e0b">▶ Завершить и создать следующий</button>
+                            </form>
+                            <form method="post" action="{{ url_for('heat_force_finish', hid=h.id) }}"
+                                  data-finish-check="{{ h.running_list|tojson|forceescape }}">
+                                <button type="submit" style="background:#6b7280">Завершить принудительно</button>
+                            </form>
+                        </div>
+
+                    {% else %}
+                        {# ===== FINISHED ===== #}
+                        <form method="post" action="{{ url_for('heat_mark_dnf', hid=h.id) }}">
+                            {% if h.categories|length > 1 %}
+                                {% for category_name, races_in_cat in h.races|groupby('category_name') %}
+                                    <details class="cat-result-group" open>
+                                        <summary class="cat-result-summary">
+                                            <b>{{ category_name or 'Без категории' }}</b>
+                                            <small>({{ races_in_cat|length }} уч.)</small>
+                                        </summary>
+                                        {{ render_races_table(races_in_cat) }}
+                                    </details>
+                                {% endfor %}
+                            {% else %}
+                                {{ render_races_table(h.races) }}
+                            {% endif %}
+                            <div class="heat-actions">
+                                <button type="submit" style="background:#b45309">
+                                    💾 Сохранить DNF
+                                </button>
+                                <a href="{{ url_for('auto_page', cid=competition.id, hid=h.id) }}" class="btn-manual-link"
+                                   style="text-decoration:none;font-size:13px;padding:6px 14px;background:#0e7490">
+                                    📡 Авто
+                                </a>
+                                <small style="color:#6b7280;align-self:center">
+                                    Отметьте DNF для тех, кто не финишировал по уважительной причине.
+                                    Остальные сохранят свой результат.
+                                </small>
+                            </div>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty" style="margin-top:16px">
+            Ещё нет ни одного старта. Создайте первый выше.
+        </div>
+    {% endif %}

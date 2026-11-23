@@ -1,0 +1,155 @@
+﻿{% extends "base.html" %}
+{% block title %}Устройство — Хронометраж{% endblock %}
+{% block content %}
+<h2>Устройство <small>— считыватель RFID</small></h2>
+
+<p style="margin-top:-8px">
+    <a class="link" href="{{ url_for('auto_page', cid=cid) if cid else url_for('auto_page') }}">← К автохронометражу</a>
+</p>
+
+<div class="dev-grid">
+    <section class="card">
+        <div class="card-head">
+            <h3>Подключение</h3>
+            <span class="pill {{ 'ok' if swrfid_status.connected else ('wait' if settings.swrfid_enabled == '1' else 'off') }}">
+                {% if swrfid_status.connected %}подключено
+                {% elif settings.swrfid_enabled == '1' %}подключение…
+                {% else %}выключено{% endif %}
+            </span>
+        </div>
+
+        <div class="card-body">
+            <form method="post" action="{{ url_for('swrfid_settings_save') }}" class="dev-form">
+                <input type="hidden" name="cid" value="{{ cid or '' }}">
+                <input type="hidden" name="back" value="device">
+                <label>
+                    <span>COM-порт</span>
+                    <input list="com-ports" name="swrfid_port" value="{{ settings.swrfid_port }}"
+                           required autocomplete="off" placeholder="COM3">
+                    <datalist id="com-ports">
+                        {% for p in ports %}<option value="{{ p }}">{% endfor %}
+                    </datalist>
+                </label>
+                <label>
+                    <span>Скорость (бод)</span>
+                    <input name="swrfid_baud" value="{{ settings.swrfid_baud }}" required
+                           inputmode="numeric" placeholder="115200">
+                </label>
+                <button type="submit" class="btn-save">💾 Сохранить</button>
+            </form>
+
+            <form method="post" action="{{ url_for('swrfid_toggle') }}" style="margin-top:14px">
+                <input type="hidden" name="cid" value="{{ cid or '' }}">
+                <input type="hidden" name="back" value="device">
+                {% if settings.swrfid_enabled == '1' %}
+                    <button type="submit" class="btn-stop big">⏹ Остановить считыватель</button>
+                {% else %}
+                    <button type="submit" class="btn-go big">▶ Запустить считыватель</button>
+                {% endif %}
+            </form>
+
+            <div class="dev-state">
+                {% if swrfid_status.connected %}
+                    <span class="dot on"></span> Порт {{ swrfid_status.port or settings.swrfid_port }} открыт
+                {% elif settings.swrfid_enabled == '1' %}
+                    <span class="dot wait"></span> Пытаемся открыть порт…
+                {% else %}
+                    <span class="dot off"></span> Считыватель не запущен
+                {% endif %}
+            </div>
+
+            {% if swrfid_status.last_error %}
+                <div class="alert err">Последняя ошибка: {{ swrfid_status.last_error }}</div>
+            {% endif %}
+            {% if not swrfid_available %}
+                <div class="alert warn">
+                    Библиотека <b>swrfid</b> не установлена — подключение к считывателю недоступно.
+                    Установите зависимости из <span class="mono">requirements.txt</span>.
+                </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="card">
+        <div class="card-head"><h3>Как подключить</h3></div>
+        <div class="card-body">
+            <ol class="steps">
+                <li>Подключите считыватель по USB и дождитесь, пока Windows покажет COM-порт.</li>
+                <li>Укажите порт в списке (или впишите вручную, например <span class="mono">COM3</span>).</li>
+                <li>Скорость оставьте <b>115200</b>, если в инструкции к считывателю не указано другое.</li>
+                <li>Нажмите «Запустить считыватель» и дождитесь зелёной отметки.</li>
+            </ol>
+            <p class="hint">
+                Метки сопоставляются с участниками автоматически. Если метка не привязана
+                к участнику, событие попадёт в журнал сканирований с пометкой «Метка не найдена».
+            </p>
+            <p class="hint">
+                Порты, найденные системой: {% if ports %}<b class="mono">{{ ports|join(', ') }}</b>{% else %}<span class="muted">не обнаружены</span>{% endif %}.
+            </p>
+        </div>
+    </section>
+</div>
+
+{% if log_tail %}
+    <section class="card" style="margin-top:16px">
+        <div class="card-head">
+            <h3>Журнал подключения</h3>
+            <small class="muted">log/swrfid.log — последние строки</small>
+        </div>
+        <pre class="log-tail">{% for line in log_tail %}{{ line }}
+{% endfor %}</pre>
+    </section>
+{% endif %}
+
+<style>
+.dev-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .dev-grid { grid-template-columns: 1fr; } }
+
+.card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; }
+.card-head {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 16px; border-bottom: 1px solid #e5e7eb;
+}
+.card-head h3 { margin: 0; font-size: 15px; }
+.card-body { padding: 16px; }
+
+.pill { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 10px; }
+.pill.ok { background: #dcfce7; color: #166534; }
+.pill.wait { background: #fef3c7; color: #92400e; }
+.pill.off { background: #f3f4f6; color: #4b5563; }
+
+.dev-form { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
+.dev-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #374151; }
+.dev-form input {
+    padding: 8px 10px; font-size: 14px; font-family: inherit;
+    border: 1px solid #d1d5db; border-radius: 6px; min-width: 130px;
+}
+.dev-form input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.btn-save { background: #2563eb; padding: 9px 16px; }
+.btn-save:hover { background: #1d4ed8; }
+.btn-go.big, .btn-stop.big { padding: 11px 20px; font-size: 15px; font-weight: 600; width: 100%; }
+.btn-go { background: #16a34a; }
+.btn-go:hover { background: #15803d; }
+.btn-stop { background: #fff; color: #b91c1c; border: 1px solid #fca5a5; }
+.btn-stop:hover { background: #fef2f2; }
+
+.dev-state { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 14px; color: #374151; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #d1d5db; }
+.dot.on { background: #16a34a; box-shadow: 0 0 0 4px rgba(22,163,74,.15); }
+.dot.wait { background: #f59e0b; box-shadow: 0 0 0 4px rgba(245,158,11,.15); }
+.dot.off { background: #d1d5db; }
+
+.alert { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+.alert.err { background: #fef2f2; color: #991b1b; border-left: 3px solid #dc2626; }
+.alert.warn { background: #fffbeb; color: #92400e; border-left: 3px solid #f59e0b; }
+
+.steps { margin: 0 0 12px 18px; padding: 0; color: #374151; font-size: 14px; line-height: 1.7; }
+.hint { color: #6b7280; font-size: 13px; line-height: 1.6; margin: 8px 0 0; }
+.muted { color: #9ca3af; }
+.log-tail {
+    margin: 0; padding: 12px 16px; background: #0f172a; color: #cbd5e1;
+    font-family: "SF Mono", Consolas, monospace; font-size: 12px; line-height: 1.6;
+    max-height: 260px; overflow: auto; white-space: pre-wrap;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+{% block title %}Старт (разделка) — Хронометраж{% endblock %}
+
+{% block head %}
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#15803d">
+    <style>
+        body { background: #eef2f7; }
+        .board { max-width: 720px; margin: 0 auto; padding: 12px 12px 20px; }
+        .board-top {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            margin-bottom: 10px; color: #374151; font-size: 13px;
+        }
+        .board-top .link { color: #2563eb; text-decoration: none; font-weight: 600; }
+        .board-top .spacer { margin-left: auto; }
+        .sound-btn {
+            border: 1px solid #d1d5db; background: #fff; border-radius: 8px;
+            padding: 6px 10px; font-size: 13px; cursor: pointer; font-family: inherit;
+        }
+        .sound-btn.off { color: #9ca3af; }
+
+        .now-card {
+            background: #fff; border-radius: 16px; padding: 18px 18px 16px;
+            box-shadow: 0 3px 14px rgba(0,0,0,.08); text-align: center; margin-bottom: 12px;
+        }
+        .now-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; font-weight: 700; }
+        .now-number { font-size: 64px; line-height: 1.05; font-weight: 900; color: #111827; font-variant-numeric: tabular-nums; }
+        .now-name { font-size: 18px; font-weight: 700; color: #374151; margin-top: 2px; }
+        .now-cat { font-size: 13px; color: #6b7280; margin-top: 2px; }
+        .countdown {
+            margin-top: 10px; font-size: 44px; font-weight: 900; font-variant-numeric: tabular-nums;
+            color: #15803d; letter-spacing: .02em;
+        }
+        .countdown.soon { color: #b45309; }
+        .countdown.go { color: #dc2626; }
+        .countdown.idle { font-size: 22px; color: #6b7280; font-weight: 700; }
+
+        .start-btn {
+            width: 100%; margin-top: 12px; padding: 20px; border: none; border-radius: 14px;
+            background: #16a34a; color: #fff; font-size: 22px; font-weight: 900; font-family: inherit;
+            cursor: pointer; letter-spacing: .04em;
+        }
+        .start-btn:active { background: #15803d; }
+        .start-btn:disabled { background: #cbd5e1; cursor: not-allowed; }
+        .sub-actions { display: flex; gap: 8px; margin-top: 10px; }
+        .sub-actions button {
+            flex: 1; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 700;
+            font-family: inherit; cursor: pointer; border: 1px solid #d1d5db; background: #fff; color: #374151;
+        }
+        .sub-actions button:active { background: #f3f4f6; }
+        .begin-btn { background: #2563eb; margin-top: 8px; }
+        .begin-btn:hover { background: #1d4ed8; }
+        .preview-note {
+            background: #eff6ff; color: #1e3a8a; border: 1px solid #bfdbfe; border-radius: 10px;
+            padding: 8px 12px; font-size: 13px; margin-bottom: 10px; text-align: left; line-height: 1.45;
+        }
+        .q-pos { color: #9ca3af; font-size: 12px; width: 20px; text-align: right; font-variant-numeric: tabular-nums; }
+        .q-cat { font-size: 12px; color: #6b7280; margin-left: 6px; }
+        .order-mode { font-weight: 600; color: #9ca3af; font-size: 11px; text-transform: none; letter-spacing: 0; }
+        .q-move { display: inline-flex; gap: 4px; margin-left: auto; }
+        .q-move button {
+            width: 30px; height: 30px; padding: 0; font-size: 15px; line-height: 1;
+            border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #374151;
+            cursor: pointer; font-family: inherit;
+        }
+        .q-move button:active { background: #e5e7eb; }
+
+        .panel {
+            background: #fff; border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;
+            box-shadow: 0 1px 6px rgba(0,0,0,.05);
+        }
+        .panel h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #9ca3af; }
+        .queue-row, .last-row {
+            display: flex; align-items: baseline; gap: 10px; padding: 6px 0;
+            border-bottom: 1px solid #f1f5f9; font-size: 14px;
+        }
+        .queue-row:last-child, .last-row:last-child { border-bottom: none; }
+        .q-num { font-weight: 800; font-variant-numeric: tabular-nums; width: 52px; color: #111827; }
+        .q-name { flex: 1; color: #374151; }
+        .q-time { font-variant-numeric: tabular-nums; color: #16a34a; font-weight: 700; font-size: 13px; }
+        .q-done { color: #16a34a; }
+        .queue-row.next-row { background: #f0fdf4; border-radius: 8px; margin: 0 -6px; padding: 8px 6px; }
+        .stats { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; color: #6b7280; }
+        .stats b { color: #111827; }
+        .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 10px; }
+        .toast {
+            position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+            background: #111827; color: #fff; padding: 10px 16px; border-radius: 10px;
+            font-size: 14px; z-index: 50; opacity: 0; pointer-events: none; transition: opacity .2s;
+            max-width: 90vw; text-align: center;
+        }
+        .toast.show { opacity: 1; }
+        .toast.err { background: #b91c1c; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="board" id="board"
+     data-cid="{{ competition.id if competition else '' }}"
+     data-sound="{{ '1' if state.sound else '0' }}">
+
+    <div class="board-top">
+        <span>🚴 Раздельный старт</span>
+        {% if state.heat %}<span>· старт №{{ state.heat.number }}{% if state.heat.name %} «{{ state.heat.name }}»{% endif %}</span>{% endif %}
+        <span class="spacer"></span>
+        <button type="button" class="sound-btn" id="sound-btn" title="Звуковой отсчёт">🔔</button>
+        <a class="link" href="{{ url_for('manual_page') }}">Финиш →</a>
+    </div>
+
+    {% if not state.heat %}
+        <div class="panel">
+            <div class="empty">
+                Нет запущенного старта.<br>
+                Создайте и запустите старт в разделе
+                <a class="link" href="{{ url_for('races_page') }}">«Старт»</a>.
+            </div>
+        </div>
+    {% else %}
+        <div class="now-card">
+            <div class="preview-note" id="preview-note" hidden>
+                Старт ещё не запущен. Переставьте очередь стрелками ↑ ↓ и нажмите «Начать старт».
+            </div>
+            <div class="now-label">Стартует</div>
+            <div class="now-number" id="now-number">{{ state.next.number if state.next else '—' }}</div>
+            <div class="now-name" id="now-name">{{ state.next.name if state.next else 'Все стартовали' }}</div>
+            <div class="now-cat" id="now-cat">{{ state.next.category if state.next else '' }}</div>
+            <div class="countdown idle" id="countdown">…</div>
+            <button type="button" class="start-btn" id="start-btn" {{ 'disabled' if not state.next }}>СТАРТ</button>
+            <button type="button" class="start-btn begin-btn" id="begin-btn" hidden>▶ Начать старт</button>
+            <div class="sub-actions">
+                <button type="button" id="skip-btn" {{ 'disabled' if not state.next }}>Пропустить (DNS)</button>
+                <button type="button" id="undo-btn">↶ Отменить старт</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>Дальше в очереди<span id="order-mode" class="order-mode"></span></h3>
+            <div id="queue"></div>
+        </div>
+
+        <div class="panel">
+            <h3>Последние старты</h3>
+            <div id="last"></div>
+        </div>
+
+        <div class="panel">
+            <div class="stats" id="stats"></div>
+        </div>
+    {% endif %}
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+    var board = document.getElementById('board');
+    if (!board) return;
+    var cid = board.dataset.cid;
+    var soundOn = localStorage.getItem('itt_sound') !== '0';
+
+    var el = {
+        num: document.getElementById('now-number'),
+        name: document.getElementById('now-name'),
+        cat: document.getElementById('now-cat'),
+        countdown: document.getElementById('countdown'),
+        start: document.getElementById('start-btn'),
+        skip: document.getElementById('skip-btn'),
+        undo: document.getElementById('undo-btn'),
+        queue: document.getElementById('queue'),
+        last: document.getElementById('last'),
+        stats: document.getElementById('stats'),
+        soundBtn: document.getElementById('sound-btn'),
+        beginBtn: document.getElementById('begin-btn'),
+        previewNote: document.getElementById('preview-note'),
+        orderMode: document.getElementById('order-mode'),
+        toast: document.getElementById('toast')
+    };
+
+    var state = null;
+    var serverOffset = 0;
+    var lastBeep = null;
+
+    function now() { return (Date.now() / 1000) + serverOffset; }
+
+    function toast(msg, isErr) {
+        if (!el.toast) return;
+        el.toast.textContent = msg || '';
+        el.toast.classList.toggle('err', !!isErr);
+        el.toast.classList.add('show');
+        clearTimeout(el.toast._t);
+        el.toast._t = setTimeout(function () { el.toast.classList.remove('show'); }, 2400);
+    }
+
+    // --- звук ---
+    var audioCtx = null;
+    function beep(freq, dur) {
+        if (!soundOn) return;
+        try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.frequency.value = freq || 880;
+            o.type = 'sine';
+            o.connect(g); g.connect(audioCtx.destination);
+            g.gain.setValueAtTime(0.25, audioCtx.currentTime);
+            o.start();
+            o.stop(audioCtx.currentTime + (dur || 0.12));
+        } catch (e) {}
+    }
+
+    function syncSoundBtn() {
+        el.soundBtn.textContent = soundOn ? '🔔' : '🔕';
+        el.soundBtn.classList.toggle('off', !soundOn);
+    }
+    el.soundBtn.addEventListener('click', function () {
+        soundOn = !soundOn;
+        localStorage.setItem('itt_sound', soundOn ? '1' : '0');
+        syncSoundBtn();
+        if (soundOn) beep(880, 0.1);
+    });
+    syncSoundBtn();
+
+    function fmt(sec) {
+        var s = Math.max(0, Math.ceil(sec));
+        var m = Math.floor(s / 60);
+        return m + ':' + ('0' + (s % 60)).slice(-2);
+    }
+
+    function render() {
+        if (!state || !state.heat) return;
+        var running = state.mode === 'running';
+        var next = state.next;
+        el.num.textContent = next ? next.number : '—';
+        el.name.textContent = next ? next.name : 'Все стартовали';
+        el.cat.textContent = next ? (next.category || '') : '';
+        el.start.disabled = !running || !next;
+        el.skip.disabled = !running || !next;
+        if (el.beginBtn) el.beginBtn.hidden = running;
+        if (el.previewNote) el.previewNote.hidden = running;
+
+        el.queue.innerHTML = (state.queue || []).map(function (q, i) {
+            return '<div class="queue-row' + (i === 0 && running ? ' next-row' : '') + '">' +
+                   '<span class="q-pos">' + (i + 1) + '</span>' +
+                   '<span class="q-num">№' + q.number + '</span>' +
+                   '<span class="q-name">' + escapeHtml(q.name) +
+                   (q.category ? '<span class="q-cat">' + escapeHtml(q.category) + '</span>' : '') + '</span>' +
+                   '<span class="q-move">' +
+                   (i > 0 ? '<button type="button" data-move="up" data-pid="' + q.pid + '" title="Выше">↑</button>' : '') +
+                   '<button type="button" data-move="down" data-pid="' + q.pid + '" title="Ниже">↓</button>' +
+                   '</span></div>';
+        }).join('') || '<div class="empty">Очередь пуста</div>';
+
+        if (el.orderMode) {
+            el.orderMode.textContent = (state.heat && state.heat.start_order === 'category')
+                ? ' · по группе, затем номер' : ' · по номеру';
+        }
+
+        el.last.innerHTML = (state.last || []).map(function (r) {
+            return '<div class="last-row"><span class="q-num">№' + r.number + '</span>' +
+                   '<span class="q-name">' + escapeHtml(r.name) + '</span>' +
+                   '<span class="q-time ' + (r.finished ? 'q-done' : '') + '">' + escapeHtml(r.time || '') +
+                   (r.finished ? ' ✓' : '') + '</span></div>';
+        }).join('') || '<div class="empty">Ещё никто не стартовал</div>';
+
+        el.stats.innerHTML =
+            '<span>участников: <b>' + state.total + '</b></span>' +
+            '<span>стартовали: <b>' + state.started + '</b></span>' +
+            '<span>финишировали: <b>' + state.finished + '</b></span>' +
+            '<span>ждут старта: <b>' + state.waiting + '</b></span>' +
+            '<span>DNS: <b>' + state.dns + '</b></span>';
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+        });
+    }
+
+    function tick() {
+        if (!state || !state.heat || !el.countdown) return;
+        if (state.mode !== 'running') {
+            el.countdown.className = 'countdown idle';
+            el.countdown.textContent = 'Старт не запущен';
+            return;
+        }
+        if (!state.next) {
+            el.countdown.className = 'countdown idle';
+            el.countdown.textContent = 'Все участники стартовали';
+            return;
+        }
+        if (!state.planned_ts) {
+            el.countdown.className = 'countdown idle';
+            el.countdown.textContent = 'Готов к первому старту';
+            return;
+        }
+        var left = state.planned_ts - now();
+        el.countdown.className = 'countdown' + (left <= 0 ? ' go' : (left <= 5 ? ' soon' : ''));
+        el.countdown.textContent = (left >= 0 ? '−' : '+') + fmt(Math.abs(left));
+        if (left <= 5.4 && left > -0.6) {
+            var mark = Math.ceil(left);
+            if (mark !== lastBeep && mark >= 1 && mark <= 5) { beep(880, 0.1); lastBeep = mark; }
+        } else if (left <= -0.6) {
+            lastBeep = null;
+        }
+    }
+
+    function load() {
+        var url = '/manual/start/data' + (cid ? '?cid=' + encodeURIComponent(cid) : '');
+        fetch(url, {cache: 'no-store'})
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                state = data;
+                if (data.now_ts) serverOffset = data.now_ts - (Date.now() / 1000);
+                render();
+                tick();
+            })
+            .catch(function () {});
+    }
+
+    function act(action) {
+        var form = new FormData();
+        form.append('competition_id', cid);
+        form.append('action', action);
+        fetch('/manual/start/action', {method: 'POST', body: form, cache: 'no-store'})
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                toast(data.message || '', !data.ok);
+                if (action === 'start' && data.ok) { beep(1320, 0.14); }
+                lastBeep = null;
+                load();
+            })
+            .catch(function () { toast('Нет связи с сервером', true); });
+    }
+
+    el.start.addEventListener('click', function () { act('start'); });
+    if (el.beginBtn) el.beginBtn.addEventListener('click', function () {
+        if (confirm('Запустить старт?')) act('begin');
+    });
+    el.skip.addEventListener('click', function () {
+        if (confirm('Пропустить участника (DNS)? Он не поедет.')) act('skip');
+    });
+    el.undo.addEventListener('click', function () {
+        var target = state && state.undo_target;
+        var msg = target
+            ? 'Отменить старт №' + target.number + ' (' + target.name + ')?\nУчастник вернётся в очередь.'
+            : 'Отменить последний старт?\nУчастник вернётся в очередь.';
+        if (confirm(msg)) act('undo');
+    });
+
+    // ---- перестановка очереди ----
+    function reorder(pid, direction) {
+        var form = new FormData();
+        form.append('competition_id', cid);
+        form.append('action', 'reorder');
+        form.append('pid', pid);
+        form.append('direction', direction);
+        fetch('/manual/start/action', {method: 'POST', body: form, cache: 'no-store'})
+            .then(function (r) { return r.json(); })
+            .then(function (data) { if (!data.ok) toast(data.message || '', true); load(); })
+            .catch(function () { toast('Нет связи с сервером', true); });
+    }
+
+    var queueBox = document.getElementById('queue');
+    if (queueBox) {
+        queueBox.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-move]');
+            if (!btn) return;
+            e.preventDefault();
+            reorder(btn.dataset.pid, btn.dataset.move);
+        });
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); act('start'); }
+    });
+
+    load();
+    setInterval(load, 2000);
+    setInterval(tick, 200);
+})();
+</script>
+{% endblock %}

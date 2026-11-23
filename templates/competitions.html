@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block title %}Соревнование — Хронометраж{% endblock %}
+{% block content %}
+<h2>Соревнование</h2>
+
+<div class="comp-grid">
+    <section class="card">
+        <div class="card-head"><h3>Название</h3></div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('competition_edit', cid=competition.id) }}" class="name-form">
+                <input type="text" name="name" value="{{ competition.name }}" required
+                       placeholder="Название соревнования" autocomplete="off">
+                <button type="submit">Сохранить</button>
+            </form>
+            <p class="hint">Название видно в шапке всех страниц и в экспорте результатов.</p>
+        </div>
+    </section>
+
+    <section class="card">
+        <div class="card-head"><h3>Формат стартов</h3></div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('competition_format_save') }}" class="format-form">
+                <label class="fmt-row">
+                    <span>Тип стартов</span>
+                    <select name="format" id="fmt-select">
+                        {% for key, label in formats.items() %}
+                            <option value="{{ key }}" {{ 'selected' if race_format == key }}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <div class="fmt-itt" id="fmt-itt" {{ '' if race_format == 'itt' else 'hidden' }}>
+                    <label class="fmt-row">
+                        <span>Интервал старта, секунд</span>
+                        <input type="number" name="itt_start_interval" min="5" max="600" step="5"
+                               value="{{ settings.itt_start_interval }}">
+                    </label>
+                    <label class="fmt-check">
+                        <input type="checkbox" name="itt_countdown_sound" value="1"
+                               {{ 'checked' if settings.itt_countdown_sound == '1' }}>
+                        Звуковой отсчёт 5-4-3-2-1 на старте
+                    </label>
+                </div>
+                <button type="submit">Сохранить</button>
+            </form>
+            <p class="hint">
+                Формат действует на все старты соревнования. В разделке участники стартуют по номерам
+                по одному; старт фиксирует стартовый судья (табло в «Хронометраже»), результат —
+                личное время. Уже созданные старты сохраняют свой формат.
+            </p>
+        </div>
+    </section>
+
+    <section class="card">
+        <div class="card-head"><h3>Что уже заведено</h3></div>
+        <div class="card-body">
+            <div class="stats">
+                <a class="stat-box" href="{{ url_for('categories_list', cid=competition.id) }}">
+                    <span class="num">{{ stats.categories }}</span>
+                    <span class="lbl">категорий</span>
+                </a>
+                <a class="stat-box" href="{{ url_for('participants_list', cid=competition.id) }}">
+                    <span class="num">{{ stats.participants }}</span>
+                    <span class="lbl">участников</span>
+                </a>
+                <a class="stat-box" href="{{ url_for('participants_list', cid=competition.id) }}">
+                    <span class="num">{{ stats.tagged }}</span>
+                    <span class="lbl">с RFID-метками</span>
+                </a>
+                <a class="stat-box" href="{{ url_for('races_page') }}">
+                    <span class="num">{{ stats.heats }}</span>
+                    <span class="lbl">стартов</span>
+                </a>
+            </div>
+        </div>
+    </section>
+</div>
+
+<section class="card" style="margin-top:16px">
+    <div class="card-head">
+        <h3>Данные для протокола</h3>
+        <a class="link" href="{{ url_for('protocol_page') }}" style="margin-left:auto;font-size:13px">Открыть протокол →</a>
+    </div>
+    <div class="card-body">
+        <p class="hint" style="margin-top:0">
+            Эти данные попадают в шапку и подвал официального протокола результатов.
+            Пустые поля печатаются как «—». Дата гонки и время старта/финиша берутся
+            из фактических стартов, а длина круга, круги и перепады высот задаются
+            у каждой категории на странице
+            <a class="link" href="{{ url_for('categories_list', cid=competition.id) }}">Категории</a>.
+        </p>
+
+        <form method="post" action="{{ url_for('protocol_settings_save') }}">
+            <div class="proto-group">
+                <h4>Заголовок протокола</h4>
+                <label class="wide">Текст заголовка — каждая строка выводится отдельной строкой
+                    <textarea name="proto_title" rows="4"
+                              placeholder="МИНИСТЕРСТВО СПОРТА БЕЛГОРОДСКОЙ ОБЛАСТИ&#10;РОО «Федерация велосипедного спорта»&#10;открытый Чемпионат и Первенство области">{{ settings.proto_title }}</textarea>
+                </label>
+                <label class="wide">Место проведения<input type="text" name="proto_venue" value="{{ settings.proto_venue }}"
+                        placeholder="г. Белгород, урочище Массив, квартал 107, участок №1"></label>
+            </div>
+
+            <div class="proto-group">
+                <h4>Судьи</h4>
+                <label>Главный судья<input type="text" name="proto_chief_judge" value="{{ settings.proto_chief_judge }}"></label>
+                <label>Судья на старте<input type="text" name="proto_start_judge" value="{{ settings.proto_start_judge }}"></label>
+                <label>Судья на финише<input type="text" name="proto_finish_judge" value="{{ settings.proto_finish_judge }}"></label>
+                <label>Главный секретарь<input type="text" name="proto_chief_secretary" value="{{ settings.proto_chief_secretary }}"></label>
+            </div>
+
+            <div class="proto-group">
+                <h4>Трасса</h4>
+                <label>Название трассы<input type="text" name="proto_track_name" value="{{ settings.proto_track_name }}"></label>
+                <label>Рег. номер<input type="text" name="proto_track_reg" value="{{ settings.proto_track_reg }}"></label>
+            </div>
+
+            <div class="proto-group">
+                <h4>Погода</h4>
+                <label>Город<input type="text" name="proto_weather_city" value="{{ settings.proto_weather_city }}"
+                        placeholder="Белгород"></label>
+                <label>Широта<input type="text" name="proto_weather_lat" value="{{ settings.proto_weather_lat }}"
+                        placeholder="50.595"></label>
+                <label>Долгота<input type="text" name="proto_weather_lon" value="{{ settings.proto_weather_lon }}"
+                        placeholder="36.587"></label>
+                <label>В начале<input type="text" name="proto_weather_start" value="{{ settings.proto_weather_start }}" placeholder="Пасмурно"></label>
+                <label>В конце<input type="text" name="proto_weather_end" value="{{ settings.proto_weather_end }}" placeholder="Дождь"></label>
+                <label>Т в начале<input type="text" name="proto_temp_start" value="{{ settings.proto_temp_start }}" placeholder="+12"></label>
+                <label>Т в конце<input type="text" name="proto_temp_end" value="{{ settings.proto_temp_end }}" placeholder="+16"></label>
+                <label>Влажность<input type="text" name="proto_humidity" value="{{ settings.proto_humidity }}" placeholder="100"></label>
+            </div>
+
+            <div class="proto-actions">
+                <button type="submit" class="btn-save">💾 Сохранить данные протокола</button>
+                <button type="submit" class="btn-weather" formmethod="post"
+                        formaction="{{ url_for('weather_fetch') }}">🌤 Узнать погоду</button>
+                <span class="weather-hint">по городу или координатам, на дату гонки</span>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="card" style="margin-top:16px">
+    <div class="card-head"><h3>Дальше по шагам</h3></div>
+    <div class="card-body">
+        <ol class="steps">
+            <li>
+                <a class="link" href="{{ url_for('categories_list', cid=competition.id) }}">Категории</a> —
+                заведите группы и количество кругов для каждой.
+            </li>
+            <li>
+                <a class="link" href="{{ url_for('participants_list', cid=competition.id) }}">Участники</a> —
+                добавьте вручную или импортируйте из Excel, привяжите RFID-метки.
+            </li>
+            <li>
+                <a class="link" href="{{ url_for('races_page') }}">Старт</a> —
+                соберите заезд и запустите хронометраж.
+            </li>
+            <li>
+                <a class="link" href="{{ url_for('results_page') }}">Результаты</a> —
+                смотрите итоги и выгружайте в Excel.
+            </li>
+        </ol>
+    </div>
+</section>
+
+<section class="card info-card" style="margin-top:16px">
+    <div class="card-head"><h3>Новое соревнование — новая база</h3></div>
+    <div class="card-body">
+        <p>
+            Одно приложение обслуживает одно соревнование. Чтобы провести следующее,
+            начните с чистой базы: закройте приложение, сохраните папку с текущей
+            <span class="mono">chrono.db</span> в архив и уберите файл базы (вместе с
+            <span class="mono">chrono.db-wal</span> и <span class="mono">chrono.db-shm</span>,
+            если они есть). При следующем запуске база создастся заново, и приложение
+            предложит завести категории и участников с нуля.
+        </p>
+        <p class="hint">
+            Сохранить результаты прошлого соревнования можно заранее: «Результаты» → «Экспорт в Excel».
+        </p>
+    </div>
+</section>
+
+<style>
+.comp-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .comp-grid { grid-template-columns: 1fr; } }
+
+.card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; }
+.card-head { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; }
+.card-head h3 { margin: 0; font-size: 15px; }
+.card-body { padding: 16px; }
+
+.name-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.format-form { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.fmt-row { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #6b7280; font-weight: 600; }
+.fmt-row select, .fmt-row input {
+    padding: 9px 11px; font-size: 14px; font-family: inherit; border: 1px solid #d1d5db;
+    border-radius: 8px; background: #fff; color: #111827; min-width: 220px;
+}
+.fmt-row select:focus, .fmt-row input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.fmt-itt { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.fmt-itt[hidden] { display: none; }
+.fmt-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; }
+.fmt-check input { width: 16px; height: 16px; accent-color: #2563eb; }
+.format-form button { background: #16a34a; padding: 9px 20px; font-weight: 600; border: none; border-radius: 8px; color: #fff; cursor: pointer; }
+.format-form button:hover { background: #15803d; }
+.name-form input {
+    flex: 1 1 220px; padding: 9px 12px; font-size: 15px; font-family: inherit;
+    border: 1px solid #d1d5db; border-radius: 8px;
+}
+.name-form input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.name-form button { background: #16a34a; padding: 9px 20px; font-weight: 600; }
+.name-form button:hover { background: #15803d; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+.stat-box {
+    display: block; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
+    padding: 12px 10px; text-align: center; text-decoration: none; color: inherit;
+    transition: border-color .12s, background .12s, box-shadow .12s;
+}
+.stat-box:hover {
+    border-color: #93c5fd; background: #eff6ff;
+    box-shadow: 0 0 0 2px rgba(37,99,235,.10);
+}
+.stat-box:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.stat-box .num { display: block; font-size: 22px; font-weight: 700; color: #111827; }
+.stat-box .lbl { display: block; font-size: 12px; color: #6b7280; margin-top: 2px; }
+.stat-box:hover .lbl { color: #1e40af; }
+
+.steps { margin: 0 0 0 18px; padding: 0; font-size: 14px; line-height: 1.9; color: #374151; }
+.hint { color: #6b7280; font-size: 13px; margin: 10px 0 0; }
+.info-card .card-body p { margin: 0 0 8px; font-size: 14px; line-height: 1.6; color: #374151; }
+.info-card .card-body p:last-child { margin-bottom: 0; }
+.mono { font-family: "SF Mono", Consolas, monospace; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
+
+/* форма данных протокола */
+.card-head { display: flex; align-items: center; gap: 10px; }
+.proto-group { margin-bottom: 16px; }
+.proto-group h4 {
+    margin: 0 0 8px; font-size: 13px; color: #374151;
+    text-transform: uppercase; letter-spacing: .03em;
+}
+.proto-group {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 10px 14px; align-items: start;
+}
+.proto-group h4 { grid-column: 1 / -1; }
+.proto-group label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #6b7280; }
+.proto-group label.wide { grid-column: 1 / -1; }
+.proto-group input {
+    padding: 8px 10px; font-size: 14px; font-family: inherit;
+    border: 1px solid #d1d5db; border-radius: 6px; width: 100%;
+}
+.proto-group input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.proto-actions { margin-top: 4px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.proto-actions .btn-save { background: #16a34a; padding: 9px 20px; font-weight: 600; }
+.proto-group textarea {
+    padding: 8px 10px; font-size: 14px; font-family: inherit; line-height: 1.4;
+    border: 1px solid #d1d5db; border-radius: 6px; width: 100%; resize: vertical;
+}
+.proto-group textarea:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.btn-weather {
+    background: #0e7490; color: #fff; border: none; border-radius: 6px;
+    padding: 9px 18px; font-size: 14px; font-family: inherit; font-weight: 600; cursor: pointer;
+}
+.btn-weather:hover { background: #155e75; }
+.weather-hint { color: #9ca3af; font-size: 12px; }
+</style>
+
+<script>
+(function () {
+    var sel = document.getElementById('fmt-select');
+    var box = document.getElementById('fmt-itt');
+    if (!sel || !box) return;
+    function sync() { box.hidden = sel.value !== 'itt'; }
+    sel.addEventListener('change', sync);
+    sync();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}RFID Сканер{% endblock %}
+
+{% block head %}
+    <meta name="theme-color" content="#111827">
+    <style>
+        @media (display-mode: standalone) { header { display: none !important; } main { margin: 0; padding: 0; max-width: none; } }
+        @media (max-width: 768px) { header { display: none !important; } main { margin: 0 !important; padding: 0 !important; max-width: none !important; } }
+        body { background: #111827; color: #fff; }
+        .scan-wrap { display: flex; flex-direction: column; height: 100vh; padding: 16px; box-sizing: border-box; max-width: 800px; margin: 0 auto; }
+        .scan-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+        .scan-header h1 { font-size: 22px; margin: 0; }
+        .scan-header select { padding: 8px 12px; border-radius: 8px; border: 1px solid #374151; background: #1f2937; color: #e5e7eb; font-size: 15px; width: 100%; max-width: 300px; }
+        .scan-result { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border-radius: 24px; margin-bottom: 16px; padding: 24px; transition: background 0.2s, border-color 0.2s; border: 4px dashed #374151; }
+        .scan-result.success { background: #052e16; border-color: #4ade80; border-style: solid; }
+        .scan-result.error   { background: #450a0a; border-color: #f87171; border-style: solid; }
+        .scan-num { font-size: 72px; font-weight: 900; line-height: 1; margin-bottom: 8px; }
+        .scan-name { font-size: 28px; font-weight: 600; margin-bottom: 16px; }
+        .scan-action { font-size: 36px; font-weight: 800; color: #4ade80; }
+        .scan-result.error .scan-num, .scan-result.error .scan-name, .scan-result.error .scan-action { color: #f87171; font-size: 28px; }
+        .scan-input-form { display: flex; gap: 8px; }
+        .scan-input-form input { flex: 1; padding: 16px; font-size: 18px; border-radius: 12px; border: 2px solid #374151; background: #1f2937; color: #fff; text-align: center; outline: none; }
+        .scan-input-form input:focus { border-color: #3b82f6; }
+        .scan-input-form button { padding: 16px 24px; font-size: 18px; font-weight: 700; border-radius: 12px; background: #2563eb; color: #fff; border: none; cursor: pointer; }
+        .scan-hint { text-align: center; color: #6b7280; font-size: 13px; margin-top: 12px; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="scan-wrap">
+    <div class="scan-header">
+        <h1>📡 RFID Сканер</h1>
+        <form method="get">
+            <select name="cid" onchange="this.form.submit()">
+                {% for c in competitions %}
+                    <option value="{{ c.id }}" {% if competition and competition.id == c.id %}selected{% endif %}>
+                        {{ c.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    <div id="scan-result" class="scan-result">
+        <div class="scan-num" style="font-size:36px; color:#6b7280">Ожидание метки</div>
+        <div class="scan-hint" style="margin-top:16px">Наведите считыватель на участника</div>
+    </div>
+
+    <form id="scan-form" class="scan-input-form">
+        <input type="text" id="rfid-input" inputmode="none" autocomplete="off" placeholder="Метка (вручную)">
+        <button type="submit">Ввод</button>
+    </form>
+    <div class="scan-hint">
+        Подключите RFID-считыватель (режим HID) к этому устройству. Он будет автоматически отправлять номер метки.
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const input = document.getElementById('rfid-input');
+    const form = document.getElementById('scan-form');
+    const result = document.getElementById('scan-result');
+    const cid = {{ cid or 'null' }};
+
+    if (input) input.focus();
+    document.body.addEventListener('click', () => { if (input) input.focus(); });
+    setInterval(() => { if (document.activeElement !== input) input.focus(); }, 2000);
+
+    let audioCtx = null;
+    function beep(success, isFinish) {
+        try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const ctx = audioCtx; const now = ctx.currentTime;
+            const osc = ctx.createOscillator(); const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            
+            if (success) {
+                osc.type = 'triangle';
+                if (isFinish) {
+                    osc.frequency.setValueAtTime(880, now);
+                    osc.frequency.setValueAtTime(1108, now + 0.1);
+                    osc.frequency.setValueAtTime(1318, now + 0.2);
+                    gain.gain.setValueAtTime(0.0001, now);
+                    gain.gain.exponentialRampToValueAtTime(0.3, now + 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+                    osc.start(now); osc.stop(now + 0.4);
+                } else {
+                    osc.frequency.value = 880;
+                    gain.gain.setValueAtTime(0.0001, now);
+                    gain.gain.exponentialRampToValueAtTime(0.3, now + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+                    osc.start(now); osc.stop(now + 0.15);
+                }
+            } else {
+                osc.type = 'sawtooth'; osc.frequency.value = 200;
+                gain.gain.setValueAtTime(0.0001, now);
+                gain.gain.exponentialRampToValueAtTime(0.3, now + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+                osc.start(now); osc.stop(now + 0.4);
+            }
+        } catch (e) { }
+    }
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const tag = input.value.trim();
+        if (!tag) return;
+        input.value = '';
+        
+        try {
+            const resp = await fetch('/api/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tag: tag, competition_id: cid })
+            });
+            const data = await resp.json();
+            
+            if (data.ok) {
+                result.className = 'scan-result success';
+                result.innerHTML = `<div class="scan-num">№${data.number}</div><div class="scan-name">${data.full_name}</div><div class="scan-action">${data.message}</div>`;
+                beep(true, data.is_finish);
+                if (navigator.vibrate) navigator.vibrate(data.is_finish ? [200, 100, 200, 100, 300] : 150);
+            } else {
+                result.className = 'scan-result error';
+                result.innerHTML = `<div class="scan-num" style="font-size:32px">Ошибка</div><div class="scan-name">${data.error}</div><div style="font-size:14px; opacity:0.7; margin-top:8px;">Метка: ${tag}</div>`;
+                beep(false);
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            }
+        } catch (err) {
+            result.className = 'scan-result error';
+            result.innerHTML = `<div class="scan-num" style="font-size:32px">Ошибка сети</div>`;
+            beep(false);
+        } finally {
+            input.focus();
+        }
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); form.dispatchEvent(new Event('submit', { cancelable: true })); }
+    });
+});
+</script>
+{% endblock %}

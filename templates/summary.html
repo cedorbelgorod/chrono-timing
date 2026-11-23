@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Итоги — Хронометраж{% endblock %}
+{% block content %}
+<h2>Итоги <small>— {{ competition.name }}</small></h2>
+
+<div class="kpi-grid">
+    <div class="kpi">
+        <span class="kpi-num">{{ s.participants }}</span>
+        <span class="kpi-lbl">заявлено участников</span>
+    </div>
+    <div class="kpi">
+        <span class="kpi-num">{{ s.started }}</span>
+        <span class="kpi-lbl">стартовало</span>
+        <span class="kpi-sub">{{ s.started_share }}% от заявленных</span>
+        <span class="bar"><i style="width: {{ s.started_share }}%"></i></span>
+    </div>
+    <div class="kpi">
+        <span class="kpi-num">{{ s.finished }}</span>
+        <span class="kpi-lbl">финишировало</span>
+        <span class="kpi-sub">{{ s.finished_share }}% от стартовавших</span>
+        <span class="bar"><i style="width: {{ s.finished_share }}%"></i></span>
+    </div>
+    <div class="kpi accent">
+        <span class="kpi-num">{{ s.auto_share }}%</span>
+        <span class="kpi-lbl">отметок от RFID</span>
+        <span class="kpi-sub">{{ s.auto_laps }} из {{ s.marks }}</span>
+        <span class="bar"><i style="width: {{ s.auto_share }}%"></i></span>
+    </div>
+</div>
+
+<div class="groups">
+    <section class="grp">
+        <h3>Участники</h3>
+        <div class="row"><span class="lbl">Заявлено</span><span class="val">{{ s.participants }}</span></div>
+        <div class="row"><span class="lbl">С RFID-меткой</span><span class="val">{{ s.tagged }} <small>{{ s.tagged_share }}%</small></span></div>
+        <div class="row"><span class="lbl">Мужчины / женщины</span><span class="val">{{ s.male }} / {{ s.female }}</span></div>
+        <div class="row"><span class="lbl">Категорий</span><span class="val">{{ s.categories }}</span></div>
+        {% if s.empty_categories %}
+            <div class="row warn"><span class="lbl">Пустых категорий</span><span class="val">{{ s.empty_categories }}</span></div>
+        {% endif %}
+    </section>
+
+    <section class="grp">
+        <h3>Старты</h3>
+        <div class="row"><span class="lbl">Всего</span><span class="val">{{ s.heats }}</span></div>
+        <div class="row"><span class="lbl">Ожидают старта</span><span class="val">{{ s.heats_pending }}</span></div>
+        <div class="row"><span class="lbl">Идут сейчас</span><span class="val">{{ s.heats_running }}</span></div>
+        <div class="row"><span class="lbl">Завершены</span><span class="val">{{ s.heats_finished }}</span></div>
+        <div class="row"><span class="lbl">Участников в ожидающих</span><span class="val">{{ s.awaiting }}</span></div>
+    </section>
+
+    <section class="grp">
+        <h3>Заезды</h3>
+        <div class="row"><span class="lbl">Стартовало участников</span><span class="val">{{ s.started }}</span></div>
+        <div class="row"><span class="lbl">На дистанции</span><span class="val">{{ s.running }}</span></div>
+        <div class="row"><span class="lbl">Финишировали</span><span class="val">{{ s.finished }}</span></div>
+        <div class="row"><span class="lbl">С отставанием</span><span class="val">{{ s.lapped }}</span></div>
+        <div class="row"><span class="lbl">Не финишировали (DNF)</span><span class="val">{{ s.dnf }}</span></div>
+        <div class="row"><span class="lbl">Не вышли (DNS)</span><span class="val">{{ s.dns }}</span></div>
+    </section>
+
+    <section class="grp">
+        <h3>Отметки времени</h3>
+        <div class="row"><span class="lbl">Всего отметок</span><span class="val">{{ s.marks }}</span></div>
+        <div class="row"><span class="lbl">Авто (RFID)</span><span class="val">{{ s.auto_laps }} <small>{{ s.auto_share }}%</small></span></div>
+        <div class="row"><span class="lbl">Ручных</span><span class="val">{{ s.manual_laps }}</span></div>
+        <div class="row"><span class="lbl">Последняя отметка</span><span class="val mono">{{ s.last_mark[11:19] if s.last_mark else '—' }}</span></div>
+    </section>
+</div>
+
+<div class="timeline">
+    <span>Первый старт: <b class="mono">{{ s.first_start[11:16] if s.first_start else '—' }}</b></span>
+    <span class="dot">·</span>
+    <span>Последний финиш: <b class="mono">{{ s.last_finish[11:16] if s.last_finish else '—' }}</b></span>
+    <span class="dot">·</span>
+    <span>На дистанции сейчас: <b>{{ s.unfinished }}</b></span>
+</div>
+
+{% if issues %}
+    <section class="issues">
+        <h3>На что обратить внимание</h3>
+        {% for i in issues %}
+            <a class="issue" href="{{ i.url }}">
+                <span class="issue-count">{{ i.count }}</span>
+                <span class="issue-label">{{ i.label }}</span>
+                <span class="issue-arrow">→</span>
+            </a>
+        {% endfor %}
+    </section>
+{% else %}
+    <div class="all-ok">Замечаний нет — данные заполнены.</div>
+{% endif %}
+
+<style>
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.kpi {
+    background: #fff; border-radius: 10px; padding: 14px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); border-left: 4px solid #cbd5e1;
+    display: flex; flex-direction: column; gap: 2px;
+}
+.kpi.accent { border-left-color: #0e7490; }
+.kpi-num { font-size: 26px; font-weight: 700; color: #111827; line-height: 1.15; }
+.kpi-lbl { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: .03em; }
+.kpi-sub { font-size: 12px; color: #9ca3af; }
+.bar { display: block; height: 5px; background: #eef2f7; border-radius: 3px; overflow: hidden; margin-top: 6px; }
+.bar i { display: block; height: 100%; background: #2563eb; border-radius: 3px; }
+.kpi.accent .bar i { background: #0e7490; }
+
+.groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.grp { background: #fff; border-radius: 10px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.grp h3 { margin: 0 0 10px; font-size: 14px; color: #374151; }
+.row {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 6px 0; border-bottom: 1px solid #f8fafc; font-size: 14px;
+}
+.row:last-child { border-bottom: none; }
+.row .lbl { color: #6b7280; }
+.row .val { font-weight: 600; color: #111827; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row .val small { color: #9ca3af; font-weight: 500; }
+.row.warn .val { color: #b45309; }
+
+.timeline {
+    margin-top: 14px; padding: 10px 16px; background: #fff; border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); font-size: 13px; color: #4b5563;
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+}
+.timeline .dot { color: #d1d5db; }
+.timeline b { color: #111827; }
+
+.issues { margin-top: 18px; }
+.issues h3 { margin: 0 0 10px; font-size: 14px; color: #374151; }
+.issue {
+    display: flex; align-items: center; gap: 10px; text-decoration: none;
+    background: #fffbeb; border-left: 3px solid #f59e0b; border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 8px; color: #92400e; font-size: 14px;
+}
+.issue:hover { background: #fef3c7; }
+.issue-count {
+    font-weight: 700; background: #fde68a; color: #92400e;
+    border-radius: 999px; padding: 1px 9px; font-size: 13px;
+}
+.issue-label { flex: 1; }
+.issue-arrow { color: #b45309; }
+.all-ok {
+    margin-top: 18px; padding: 12px 16px; border-radius: 8px;
+    background: #f0fdf4; color: #166534; font-size: 14px; border-left: 4px solid #16a34a;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,20 @@
+services:
+  chrono:
+    build: .
+    image: chrono:latest
+    container_name: chrono
+    restart: unless-stopped
+    ports:
+      - "5000:5000"   # HTTP
+      - "5001:5001"   # HTTPS
+    environment:
+      CHRONO_DB: /data/chrono.db
+      CHRONO_LOG_DIR: /data/log
+      CHRONO_CERT_DIR: /data/cert
+      CHRONO_SECRET_KEY: ${CHRONO_SECRET_KEY:-}
+      CHRONO_USER: ${CHRONO_USER:-admin}
+      CHRONO_PASS: ${CHRONO_PASS:-admin}
+      CHRONO_COMPETITION: ${CHRONO_COMPETITION:-Соревнование}
+      TZ: Europe/Moscow
+    volumes:
+      - ./data:/data

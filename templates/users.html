@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Пользователи — Хронометраж{% endblock %}
+{% block content %}
+<h2>Пользователи</h2>
+
+<form method="post" action="{{ url_for('user_add') }}" class="toolbar">
+    <input type="text" name="username" placeholder="Логин" required
+           pattern="[A-Za-z0-9_.\-]{2,32}"
+           title="2–32 символа: латиница, цифры, _, ., -"
+           style="width:180px" autocomplete="off">
+    <input type="password" name="password" placeholder="Пароль (мин. 4)" required minlength="4"
+           style="width:200px" autocomplete="new-password">
+    <select name="role" required style="width:160px;padding:6px;font-size:14px;border:1px solid #d1d5db;border-radius:6px">
+        <option value="judge" selected>Судья</option>
+        <option value="timekeeper">Хронометрист</option>
+        <option value="admin">Администратор</option>
+    </select>
+    <button type="submit">Добавить</button>
+</form>
+
+{% if users %}
+<table>
+    <thead>
+        <tr>
+            <th style="width:60px">ID</th>
+            <th>Логин</th>
+            <th style="width:140px">Роль</th>
+            <th style="width:180px">Создан</th>
+            <th style="width:520px">Действия</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for u in users %}
+        <tr>
+            <td>{{ u.id }}</td>
+            <td>
+                <b>{{ u.username }}</b>
+                {% if u.username == session.get('user') %}<small>(вы)</small>{% endif %}
+            </td>
+            <td>
+                {% if u.role == 'admin' %}
+                    <span style="background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600">админ</span>
+                {% elif u.role == 'timekeeper' %}
+                    <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600">хронометрист</span>
+                {% else %}
+                    <span style="background:#f3f4f6;color:#374151;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600">судья</span>
+                {% endif %}
+            </td>
+            <td class="mono" style="font-size:13px">{{ u.created_at[:19].replace('T', ' ') }}</td>
+            <td class="inline" style="flex-wrap:wrap;gap:6px">
+                <form method="post" action="{{ url_for('user_change_password', uid=u.id) }}"
+                      style="display:inline-flex;gap:4px;align-items:center">
+                    <input type="password" name="password" placeholder="Новый пароль" required minlength="4"
+                           style="width:150px;padding:4px 8px;font-size:13px" autocomplete="new-password">
+                    <button type="submit" style="padding:4px 10px;font-size:13px">🔑 Сменить</button>
+                </form>
+                {% if u.username != session.get('user') %}
+                    <form method="post" action="{{ url_for('user_change_role', uid=u.id) }}"
+                          style="display:inline-flex;gap:4px;align-items:center"
+                          data-confirm-submit="Изменить роль пользователя «{{ u.username }}»?"
+                          data-confirm-ok="Изменить">
+                        <select name="role" style="width:140px;padding:4px 8px;font-size:13px">
+                            <option value="judge" {% if u.role == 'judge' %}selected{% endif %}>Судья</option>
+                            <option value="timekeeper" {% if u.role == 'timekeeper' %}selected{% endif %}>Хронометрист</option>
+                            <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Администратор</option>
+                        </select>
+                        <button type="submit" style="padding:4px 10px;font-size:13px;background:#6b7280">OK</button>
+                    </form>
+                    <form method="post" action="{{ url_for('user_delete', uid=u.id) }}"
+                          style="display:inline"
+                          data-confirm-submit="Удалить пользователя «{{ u.username }}»?&#10;&#10;Ранее зафиксированные им круги сохранят его логин как снимок."
+                          data-confirm-ok="Удалить" data-confirm-danger>
+                        <button type="submit" class="danger" style="padding:4px 10px;font-size:13px">Удалить</button>
+                    </form>
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty">Пользователей пока нет.</div>
+{% endif %}
+
+<p style="color:#6b7280;font-size:13px;margin-top:16px">
+    <b>Администратор</b> — полный доступ, включая эту страницу.<br>
+    <b>Судья</b> — доступ ко всем разделам, кроме управления пользователями.<br>
+    <b>Хронометрист</b> — доступ только к странице ручного хронометража (<code>/manual</code>).<br><br>
+    При ручной фиксации круга сохраняется логин судьи, выполнившего действие.
+    В итоговых результатах и в экспорте Excel на месте отметки <code>M</code> будет показан логин.
+    Автоматические отметки RFID отображаются как <code>AUTO</code>.
+</p>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% if last %}
+<div id="last-action-marker"
+     data-action-ts="{{ last.action_ts or '' }}"
+     data-is-finish="{{ '1' if last.is_finish else '0' }}"
+     data-ok="{{ '1' if last.ok else '0' }}"
+     data-number="{{ last.number or '' }}"
+     data-name="{{ last.full_name or '' }}"
+     hidden></div>
+{% endif %}
+
+{% if not active_races %}
+    <div class="m-empty-small" style="margin-top:12px">
+        Нет активных участников на дистанции.<br>
+        <a href="{{ url_for('races_page', cid=competition.id) if competition else '#' }}"
+           class="m-link">Перейти к стартам →</a>
+    </div>
+{% else %}
+    {# ===== СПИСОК АКТИВНЫХ (по ближайшему пересечению линии) ===== #}
+    <div class="m-section-title">
+        На дистанции
+        <span class="m-sort-hint">по ETA круга</span>
+    </div>
+    <div class="m-active-list">
+        {% for r in active_races %}
+            {% set laps_done = r.laps|length %}
+            {% set is_last = laps_done + 1 >= r.laps_total %}
+            {% set hot = r.eta_next_event_secs is not none and r.eta_next_event_secs < 10 %}
+            <div class="m-active-row {{ 'm-active-hot' if hot else '' }} {{ 'm-active-finish' if r.is_finishing else '' }}"
+                 data-race-id="{{ r.id }}"
+                 data-number="{{ r.number or "" }}"
+                 data-name="{{ r.full_name }}"
+                 data-laps="{{ laps_done }}"
+                 data-total="{{ r.laps_total }}">
+                <div class="m-active-info">
+                    <div class="m-active-num">{{ r.number or "—" }}</div>
+                    <div class="m-active-name">{{ r.full_name }}</div>
+                    <div class="m-active-meta">
+                        <span style="font-weight:600;color:#4b5563;">Ст. №{{ r.heat_number }}</span>
+                        · {{ r.category_name }}
+                        {% if competition and competition.format == 'itt' %}
+                            · <span class="m-eta" style="font-weight:700">⏱ в пути: {{ r.elapsed_display }}</span>
+                            · старт {{ (r.start_time or '')[11:19] }}
+                        {% else %}
+                        · Круги: {{ laps_done }} / {{ r.planned_laps or r.laps_total }}
+
+                        {% if r.eta_next_event_secs is not none %}
+                            · <span class="{{ 'm-eta-soon' if hot else 'm-eta' }}">
+                                {% if r.is_finishing %}
+                                    🏁 финиш: {{ r.eta_next_display }}
+                                {% else %}
+                                    {{ r.next_event_label }}: {{ r.eta_next_display }}
+                                {% endif %}
+                            </span>
+                        {% endif %}
+
+                        {% if not r.is_finishing and r.eta_finish_secs is not none %}
+                            · <span class="m-eta-finish">🏁 ~{{ r.eta_finish_display }}</span>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+                <form method="post" action="{{ url_for('manual_action') }}">
+                    <input type="hidden" name="competition_id" value="{{ competition.id }}">
+                    <input type="hidden" name="number" value="{{ r.number or "" }}">
+                    <button type="submit" class="m-tap {{ 'm-tap-finish' if is_last else 'm-tap-lap' }}">
+                        {% if is_last %}
+                            ФИНИШ {% if r.finish_on_leader %}🏁{% endif %}
+                        {% else %}
+                            КРУГ {{ laps_done + 1 }}
+                        {% endif %}
+                    </button>
+                </form>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+{# ===== ЖУРНАЛ ===== #}
+{% if log %}
+    <div class="m-section-title">Журнал</div>
+    <div class="m-log">
+        {% for e in log %}
+            <div class="m-log-row {{ 'm-ok-t' if e.ok else 'm-err-t' }}">
+                <span class="m-log-time mono">{{ e.time }}</span>
+                <span class="m-log-num">№{{ e.number }}</span>
+                <span class="m-log-act">
+                    {% if e.message %}{{ e.message }}{% elif e.action %}{{ e.action }}{% endif %}
+                </span>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Вход — Хронометраж</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+            margin: 0; background: #f4f6f8; color: #222;
+            display: flex; align-items: center; justify-content: center;
+            min-height: 100vh; padding: 16px;
+        }
+        .login-card {
+            background: #fff; padding: 32px 28px; border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,.08);
+            width: 100%; max-width: 360px;
+            border-top: 4px solid #2563eb;
+        }
+        .login-card h1 {
+            margin: 0 0 24px 0; font-size: 22px; text-align: center;
+            color: #1f2937; font-weight: 600;
+        }
+        .login-card label {
+            display: block; margin-bottom: 14px; font-size: 14px;
+            color: #374151; font-weight: 500;
+        }
+        .login-card input[type=text],
+        .login-card input[type=password] {
+            width: 100%; padding: 10px 12px; margin-top: 6px;
+            border: 1px solid #d1d5db; border-radius: 8px;
+            font-size: 15px; background: #fff; color: #222;
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .login-card input:focus {
+            outline: none; border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+        }
+        .login-card button {
+            width: 100%; padding: 12px; margin-top: 8px;
+            background: #2563eb; color: #fff; border: none;
+            border-radius: 8px; font-size: 15px; font-weight: 600;
+            cursor: pointer; transition: background .15s;
+        }
+        .login-card button:hover { background: #1d4ed8; }
+        .login-flash {
+            padding: 10px 12px; border-radius: 8px; margin-bottom: 16px;
+            font-size: 14px; background: #fee2e2; color: #991b1b;
+        }
+        .login-flash.success { background: #dcfce7; color: #166534; }
+        .login-comp {
+            text-align: center; color: #6b7280; font-size: 13px; margin: -14px 0 18px;
+        }
+    </style>
+</head>
+<body>
+<div class="login-card">
+    <h1>⏱ Хронометраж</h1>
+    {% if competition %}
+        <div class="login-comp">{{ competition.name }}{% if competition.read_only %} · только чтение{% endif %}</div>
+    {% endif %}
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in msgs %}
+            <div class="login-flash {{ cat if cat != 'error' else '' }}">{{ msg }}</div>
+        {% endfor %}
+    {% endwith %}
+    <form method="post" autocomplete="on">
+        <input type="hidden" name="next" value="{{ next or '' }}">
+        <label>
+            Логин
+            <input type="text" name="username" required autofocus
+                   autocomplete="username" autocapitalize="off" spellcheck="false">
+        </label>
+        <label>
+            Пароль
+            <input type="password" name="password" required
+                   autocomplete="current-password">
+        </label>
+        <button type="submit">Войти</button>
+    </form>
+</div>
+</body>
+</html>

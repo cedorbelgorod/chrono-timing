@@ -1,0 +1,727 @@
+{% extends "base.html" %}
+{% block title %}{{ competition.name }} — Стартовый лист{% endblock %}
+
+{% macro sort_th(col, label, style='', cls='') %}
+<th style="{{ style }}" class="{{ cls }} sortable sort-{{ sort_urls[col].state or 'off' }}">
+    <a href="{{ sort_urls[col].desc if sort_urls[col].state == 'asc' else sort_urls[col].asc }}"
+       title="Сортировать: {{ label }}">
+        {{ label }}{% if sort_urls[col].state == 'asc' %} <span class="sort-arrow">▲</span>{% elif sort_urls[col].state == 'desc' %} <span class="sort-arrow">▼</span>{% endif %}
+    </a>
+</th>
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+    <div class="page-head-text">
+        <h2>Участники <small>— {{ competition.name }}</small></h2>
+        <div class="page-summary">
+            {% if shown != total %}показано <b>{{ shown }}</b> из <b>{{ total }}</b>{% else %}всего участников: <b>{{ total }}</b>{% endif %}
+            {% if has_none_category %}<span class="summary-warn">· есть участники без группы</span>{% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-ghost" href="{{ url_for('participants_import', cid=competition.id) }}">📥 Импорт из Excel</a>
+        <a class="btn btn-ghost" href="{{ url_for('participants_template', cid=competition.id) }}">⬇ Шаблон</a>
+        {% if categories %}
+            <button type="button" class="btn btn-primary" id="toggle-add">＋ Добавить участника</button>
+        {% endif %}
+    </div>
+</div>
+
+{% if not categories %}
+    <div class="empty" style="margin-bottom:16px">
+        Сначала добавьте категории —
+        <a href="{{ url_for('categories_list', cid=competition.id) }}" class="link">перейти к категориям</a>.
+        Пока их нет, регистрировать участников некуда.
+    </div>
+{% else %}
+<section class="add-panel" id="add-panel" hidden>
+    <form method="post" action="{{ url_for('participant_add', cid=competition.id) }}" class="add-form">
+        <div class="add-grid">
+            <label>
+                <span>Номер на старте</span>
+                <input type="number" name="number" value="" min="1"
+                       placeholder="не выдан"
+                       title="Можно оставить пустым — номер выдаётся на старте">
+                <small>пусто — выдадим на старте</small>
+            </label>
+            <label class="wide">
+                <span>ФИО <b class="req">*</b></span>
+                <input type="text" name="full_name" required autocomplete="off" placeholder="Фамилия Имя">
+            </label>
+            <label>
+                <span>Год рождения</span>
+                <input type="number" name="birth_year" min="0" max="2100" placeholder="ГГ"
+                       title="Две последние цифры: 16 → 2016, 90 → 1990">
+                <small>две цифры: 16 → 2016</small>
+            </label>
+            <label>
+                <span>Группа</span>
+                <select name="category_id">
+                    <option value="">— без группы —</option>
+                    {% for cat in categories %}
+                        <option value="{{ cat.id }}">{{ cat.name }} ({{ cat.laps_total }} кр.)</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                <span>Пол <b class="req">*</b></span>
+                <select name="gender" required>
+                    <option value="">—</option>
+                    <option value="M">М</option>
+                    <option value="F">Ж</option>
+                </select>
+            </label>
+        </div>
+        <div class="add-actions">
+            <button type="submit" class="btn-primary">Добавить</button>
+            <button type="button" class="btn-ghost" id="cancel-add">Отмена</button>
+        </div>
+        <div class="hint" style="margin:8px 0 0">
+            Метки наклеиваются на номер: <a href="{{ url_for('bib_tags_page', cid=competition.id) }}">настроить метки номеров →</a>
+        </div>
+    </form>
+</section>
+{% endif %}
+
+<section class="controls-card">
+    <div class="search-row">
+        <input type="text" id="fio-filter"
+               value="{{ q }}" placeholder="Быстрый поиск по ФИО — начните вводить…"
+               autocomplete="off" spellcheck="false" autofocus
+               aria-label="Фильтр по ФИО" aria-controls="participants-table">
+        <button type="button" id="fio-clear" class="clear-btn" hidden>✕ Сбросить</button>
+        <span id="fio-count" class="filter-count" aria-live="polite"></span>
+    </div>
+
+    <form method="get" class="filters-bar" id="filters-form">
+        <label class="f-item">
+            <span>Группа</span>
+            <select name="cat">
+                <option value="">все</option>
+                <option value="0" {% if filters.cat == '0' %}selected{% endif %}>Без группы</option>
+                {% for cat in categories %}
+                    <option value="{{ cat.id }}" {% if filters.cat == cat.id|string %}selected{% endif %}>{{ cat.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label class="f-item"><span>Город</span><input type="text" name="city" value="{{ filters.city }}" placeholder="содержит"></label>
+        <label class="f-item"><span>Команда</span><input type="text" name="team" value="{{ filters.team }}" placeholder="содержит"></label>
+        <label class="f-item">
+            <span>Пол</span>
+            <select name="gender">
+                <option value="" {% if not filters.gender %}selected{% endif %}>все</option>
+                <option value="M" {% if filters.gender == 'M' %}selected{% endif %}>М</option>
+                <option value="F" {% if filters.gender == 'F' %}selected{% endif %}>Ж</option>
+            </select>
+        </label>
+        <label class="f-item">
+            <span>Год рождения</span>
+            <select name="year_op" id="year-op">
+                <option value="" {% if not filters.year_op %}selected{% endif %}>все</option>
+                <option value="eq" {% if filters.year_op == 'eq' %}selected{% endif %}>=</option>
+                <option value="gt" {% if filters.year_op == 'gt' %}selected{% endif %}>больше</option>
+                <option value="lt" {% if filters.year_op == 'lt' %}selected{% endif %}>меньше</option>
+                <option value="between" {% if filters.year_op == 'between' %}selected{% endif %}>между</option>
+            </select>
+        </label>
+        <label class="f-item f-year"><span>Год</span><input type="text" name="year1" value="{{ filters.year1 }}" placeholder="ГГ" inputmode="numeric"></label>
+        <label class="f-item f-year" id="year2-wrap"><span>и</span><input type="text" name="year2" value="{{ filters.year2 }}" placeholder="ГГ" inputmode="numeric"></label>
+        <button type="submit" class="btn-primary">Применить</button>
+        <a class="link reset-link" href="{{ url_for('participants_list', cid=competition.id) }}">Сбросить фильтры</a>
+    </form>
+</section>
+
+<form id="bulk-form" method="post" action="{{ url_for('participants_bulk', cid=competition.id) }}">
+    <input type="hidden" name="back" value="{{ qs }}">
+    <div class="bulk-bar" id="bulk-bar" hidden>
+        <span class="bulk-count">Выбрано: <b id="sel-count">0</b></span>
+        <select name="bulk_category">
+            <option value="">— без группы —</option>
+            {% for cat in categories %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}
+        </select>
+        <button type="submit" name="bulk" value="category">Назначить группу</button>
+        <input type="text" name="bulk_city" placeholder="Город">
+        <button type="submit" name="bulk" value="city">Задать город</button>
+        <input type="text" name="bulk_team" placeholder="Команда">
+        <button type="submit" name="bulk" value="team">Задать команду</button>
+        <button type="submit" name="bulk" value="delete" class="danger">Удалить</button>
+    </div>
+</form>
+
+{% if participants %}
+<form method="post"
+      action="{{ url_for('participants_save_all', cid=competition.id) }}"
+      id="save-all-form" novalidate>
+    <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="back" value="{{ qs }}">
+
+    <div class="table-hint">Клик по заголовку — сортировка · чекбоксы слева — массовые операции · правки в строках сохраняются кнопкой внизу</div>
+
+    <div class="tw">
+    <table id="participants-table">
+        <thead>
+            <tr>
+                <th style="width:34px"><input type="checkbox" id="sel-all" form="bulk-form" title="Выбрать все"></th>
+                <th style="width:56px" title="ID участника — постоянный, не меняется">ID</th>
+                {{ sort_th('number', 'Номер', 'width:70px') }}
+                {{ sort_th('name', 'ФИО', '', 'fio-cell') }}
+                {{ sort_th('year', 'Год', 'width:70px') }}
+                {{ sort_th('category', 'Категория', 'width:130px') }}
+                {{ sort_th('gender', 'Пол', 'width:55px') }}
+                {{ sort_th('city', 'Город', 'width:100px') }}
+                {{ sort_th('team', 'Команда', 'width:120px') }}
+                <th style="width:180px">Метки номера</th>
+                <th style="width:100px">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for p in participants %}
+            <tr class="part-row" data-pid="{{ p.id }}">
+                <td data-label="">
+                    <input type="checkbox" name="pid" value="{{ p.id }}" form="bulk-form" class="row-check">
+                </td>
+                <td data-label="ID"><span class="pid">{{ p.id }}</span></td>
+                <td data-label="Номер">
+                    <input type="number" name="number_{{ p.id }}"
+                           value="{{ p.number or '' }}" min="1"
+                           placeholder="—"
+                           class="row-input {{ 'no-number' if not p.number }}"
+                           title="Номер выдаётся на старте; пусто — номер ещё не выдан"
+                           style="width:60px">
+                </td>
+                <td data-label="ФИО" class="fio-cell">
+                    <input type="text" name="full_name_{{ p.id }}"
+                           value="{{ p.full_name }}" required
+                           class="row-input fio-input" style="width:100%">
+                </td>
+                <td data-label="Год">
+                    <input type="number" name="birth_year_{{ p.id }}"
+                           value="{{ (p.birth_year|string)[-2:] if p.birth_year else '' }}"
+                           min="0" max="2100"
+                           class="row-input" style="width:60px"
+                           title="Две последние цифры: 16 → 2016, 90 → 1990">
+                </td>
+                <td data-label="Категория">
+                    <select name="category_id_{{ p.id }}"
+                            class="row-input" style="width:100%">
+                        <option value="">— без группы —</option>
+                        {% for cat in categories %}
+                            <option value="{{ cat.id }}"
+                                    {% if cat.id == p.category_id %}selected{% endif %}>
+                                {{ cat.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td data-label="Пол">
+                    <select name="gender_{{ p.id }}" required
+                            class="row-input" style="width:50px">
+                        <option value="M" {% if p.gender == 'M' %}selected{% endif %}>М</option>
+                        <option value="F" {% if p.gender == 'F' %}selected{% endif %}>Ж</option>
+                    </select>
+                </td>
+                <td data-label="Город">
+                    <input type="text" name="city_{{ p.id }}"
+                           value="{{ p.city or '' }}"
+                           class="row-input" style="width:100%">
+                </td>
+                <td data-label="Команда">
+                    <input type="text" name="team_{{ p.id }}"
+                           value="{{ p.team or '' }}"
+                           class="row-input" style="width:100%">
+                </td>
+                <td data-label="Метки">
+                    {% set tags = tags_by_number.get(p.number) if p.number else None %}
+                    {% if tags %}
+                        {% for t in tags %}
+                            <span class="tag-chip {{ 'tag-main' if loop.first else 'tag-spare' }}"
+                                  title="{{ 'основная' if loop.first else 'резервная' }} метка">{{ t }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="muted">—</span>
+                    {% endif %}
+                </td>
+                <td data-label="">
+                    <button type="submit" class="danger del-btn"
+                            formaction="{{ url_for('participant_delete', pid=p.id) }}"
+                            formmethod="post"
+                            data-confirm="Удалить участника {{ p.full_name }}?">
+                        Удалить
+                    </button>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    <div class="save-bar">
+        <button type="submit" class="btn-save-all" id="save-all-btn">
+            💾 Сохранить все изменения
+        </button>
+        <span id="changed-count" class="changed-count"></span>
+    </div>
+</form>
+
+<div class="empty" id="fio-empty" hidden>
+    По фильтру «<span class="fio-empty-term"></span>» никого не найдено.
+    <a href="#" id="fio-empty-clear" class="link">Сбросить фильтр</a>.
+</div>
+{% else %}
+<div class="empty">Пока нет участников. Добавьте первого или импортируйте из Excel.</div>
+{% endif %}
+
+<div class="toolbar" style="margin-top:16px">
+    <a href="{{ url_for('categories_list', cid=competition.id) }}" class="link">Категории →</a>
+</div>
+
+<style>
+/* шапка страницы */
+.page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.page-head h2 { margin: 0 0 2px; }
+.page-summary { font-size: 13px; color: #6b7280; }
+.page-summary b { color: #111827; }
+.summary-warn { color: #b45309; }
+.page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn {
+    display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+    border-radius: 8px; padding: 9px 16px; font-size: 14px; font-weight: 600;
+    font-family: inherit; cursor: pointer; border: 1px solid transparent;
+}
+.btn-ghost { background: #fff; color: #374151; border-color: #d1d5db; }
+.btn-ghost:hover { background: #f3f4f6; }
+.btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+.btn-primary:hover { background: #1d4ed8; }
+
+/* панель добавления */
+.add-panel {
+    background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    border-left: 4px solid #2563eb; padding: 16px 18px; margin-bottom: 14px;
+}
+.add-panel[hidden] { display: none; }
+.add-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px 14px; }
+.add-grid label { display: flex; flex-direction: column; gap: 4px; }
+.add-grid label.wide { grid-column: 1 / -1; }
+.add-grid label span {
+    font-weight: 600; color: #374151; font-size: 11px;
+    text-transform: uppercase; letter-spacing: .03em;
+}
+.add-grid label small { color: #9ca3af; font-size: 11px; }
+.add-grid input, .add-grid select { font-size: 14px; padding: 8px 10px; }
+.add-grid .req { color: #dc2626; }
+.add-actions { display: flex; gap: 10px; margin-top: 14px; }
+.add-actions .btn-primary { padding: 9px 22px; }
+
+/* карточка поиска и фильтров */
+.controls-card {
+    background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    border-left: 4px solid #0e7490; padding: 12px 16px; margin-bottom: 12px;
+}
+.search-row {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid #f1f5f9;
+}
+.search-row input[type=text] { flex: 1 1 260px; max-width: 460px; padding: 8px 12px; font-size: 15px; }
+.controls-card .filters-bar {
+    box-shadow: none; border-left: none; padding: 0; margin: 0; background: transparent;
+}
+.table-hint { font-size: 12px; color: #9ca3af; margin-bottom: 8px; }
+.reset-link { font-size: 13px; }
+
+.part-row.row-changed { background: #fffbeb; }
+.part-row.row-changed td { border-bottom-color: #fcd34d; }
+.part-row.row-changed td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
+
+.save-bar {
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    margin-top: 16px; padding: 12px 16px;
+    background: #fff; border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    border-left: 4px solid #16a34a;
+    position: sticky; bottom: 12px;
+    z-index: 5;
+}
+.btn-save-all {
+    background: #16a34a; font-size: 16px;
+    padding: 10px 24px; font-weight: 700;
+}
+.btn-save-all:hover { background: #15803d; }
+.btn-save-all:disabled { background: #9ca3af; cursor: not-allowed; }
+.changed-count { color: #b45309; font-weight: 600; font-size: 14px; }
+
+/* Фильтр по ФИО */
+.filter-count {
+    margin-left: auto; font-size: 13px; color: #6b7280;
+    white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.filter-count.is-filtered { color: #1d4ed8; font-weight: 600; }
+.clear-btn {
+    background: #fff; color: #374151; border: 1px solid #d1d5db;
+    padding: 8px 12px; font-size: 14px; white-space: nowrap;
+}
+.clear-btn:hover { background: #f3f4f6; }
+.part-row.is-hidden { display: none !important; }
+.pid { color: #6b7280; font-size: 12px; font-variant-numeric: tabular-nums; }
+.tag-chip {
+    display: inline-block; font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+    padding: 2px 6px; border-radius: 6px; margin: 1px 3px 1px 0; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
+}
+.tag-main { background: #dbeafe; color: #1e40af; }
+.tag-spare { background: #ede9fe; color: #5b21b6; }
+.row-input.no-number { background: #fffbeb; border-color: #fcd34d; }
+
+/* ФИО всегда читаемо: не уже ~15 символов, при нехватке места таблица прокручивается */
+@media (min-width: 901px) {
+    #participants-table .fio-cell { min-width: 210px; }
+    #participants-table .fio-input { min-width: 195px; }
+}
+
+/* сортировка по клику на заголовок */
+#participants-table th.sortable { padding: 0; }
+#participants-table th.sortable a {
+    display: flex; align-items: center; gap: 4px;
+    padding: 10px 12px; color: inherit; text-decoration: none;
+    text-transform: inherit; letter-spacing: inherit; font-weight: inherit;
+}
+#participants-table th.sortable a:hover { color: #1d4ed8; background: #eef2ff; }
+#participants-table th.sort-asc a, #participants-table th.sort-desc a { color: #1e40af; }
+#participants-table .sort-arrow { font-size: 10px; }
+
+/* фильтры и массовые операции */
+.filters-bar {
+    display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;
+    background: #fff; padding: 12px 16px; border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 12px;
+    border-left: 4px solid #0e7490;
+}
+.filters-bar .f-item {
+    display: flex; flex-direction: column; gap: 3px;
+    font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .03em;
+}
+.filters-bar input, .filters-bar select {
+    font-size: 14px; padding: 6px 8px; text-transform: none; letter-spacing: 0;
+}
+.filters-bar .f-year input { width: 70px; }
+.filters-bar button { align-self: flex-end; }
+
+.bulk-bar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 12px; font-size: 14px;
+    position: sticky; top: 8px; z-index: 6;
+    box-shadow: 0 4px 14px rgba(30, 64, 175, .12);
+}
+.bulk-bar[hidden] { display: none; }
+.bulk-bar .bulk-count { font-weight: 600; color: #1e40af; white-space: nowrap; }
+.bulk-bar input[type=text] { width: 130px; }
+.bulk-bar button { background: #1d4ed8; }
+.bulk-bar button.danger { background: #dc2626; }
+.bulk-bar button.danger:hover { background: #b91c1c; }
+tr.row-selected td { background: #eff6ff; }
+
+/* карточки на узком экране */
+@media (max-width: 900px) {
+    #participants-table thead { display: none; }
+    #participants-table, #participants-table tbody, #participants-table tr, #participants-table td {
+        display: block; width: 100%;
+    }
+    #participants-table tr {
+        border: 1px solid #e5e7eb; border-radius: 8px;
+        margin-bottom: 10px; padding: 10px 12px; background: #fff;
+    }
+    #participants-table tr.row-changed { border-color: #fcd34d; }
+    #participants-table td {
+        border: none; padding: 5px 0;
+        display: flex; align-items: center; gap: 10px;
+    }
+    #participants-table td::before {
+        content: attr(data-label);
+        flex: 0 0 104px; color: #6b7280; font-size: 11px;
+        text-transform: uppercase; letter-spacing: .03em;
+    }
+    #participants-table td > input,
+    #participants-table td > select { flex: 1 1 auto; width: auto !important; min-width: 0; }
+    #participants-table td > button { width: 100%; }
+}
+</style>
+
+<script>
+/* Мгновенный фильтр по ФИО — без перезагрузки страницы */
+(function () {
+    const input = document.getElementById('fio-filter');
+    const table = document.getElementById('participants-table');
+    if (!input || !table) return;
+
+    const rows = [...table.querySelectorAll('tr.part-row')];
+    const countEl = document.getElementById('fio-count');
+    const clearBtn = document.getElementById('fio-clear');
+    const emptyEl = document.getElementById('fio-empty');
+    const emptyTerm = emptyEl ? emptyEl.querySelector('.fio-empty-term') : null;
+    const emptyClear = document.getElementById('fio-empty-clear');
+
+    // Та же нормализация, что и в серверном _norm_name(): регистр, ё → е
+    function norm(s) {
+        return (s || '').toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
+    }
+
+    function nameOf(row) {
+        const el = row.querySelector('input[name^="full_name_"]');
+        return norm(el ? el.value : row.textContent);
+    }
+
+    function apply() {
+        const term = norm(input.value);
+        const tokens = term ? term.split(' ') : [];
+        let shown = 0;
+
+        rows.forEach((row) => {
+            const match = !tokens.length || tokens.every(t => nameOf(row).includes(t));
+            row.classList.toggle('is-hidden', !match);
+            if (match) shown++;
+        });
+
+        if (clearBtn) clearBtn.hidden = !term;
+        if (countEl) {
+            countEl.textContent = term
+                ? `Найдено: ${shown} из ${rows.length}`
+                : `Всего участников: ${rows.length}`;
+            countEl.classList.toggle('is-filtered', !!term);
+        }
+        if (emptyEl) {
+            emptyEl.hidden = !term || shown > 0;
+            if (emptyTerm) emptyTerm.textContent = input.value.trim();
+        }
+    }
+
+    input.addEventListener('input', apply);
+    input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== 'Escape') return;
+        e.preventDefault();
+        if (e.key === 'Escape') { input.value = ''; apply(); }
+    });
+
+    function reset() { input.value = ''; apply(); input.focus(); }
+    if (clearBtn) clearBtn.addEventListener('click', reset);
+    if (emptyClear) emptyClear.addEventListener('click', (e) => { e.preventDefault(); reset(); });
+
+    apply();
+})();
+</script>
+
+<script>
+(function () {
+    const form = document.getElementById('save-all-form');
+    if (!form) return;
+
+    const rows = [...form.querySelectorAll('tr.part-row')];
+    const initialState = new WeakMap();
+    let unsavedCount = 0;
+
+    function updateCount() {
+        const cnt = document.getElementById('changed-count');
+        const btn = document.getElementById('save-all-btn');
+        if (!cnt) return;
+        if (unsavedCount === 0) {
+            cnt.textContent = 'Все изменения сохранены';
+            cnt.style.color = '#6b7280';
+            if (btn) btn.disabled = true;
+        } else {
+            cnt.textContent = `Изменено строк: ${unsavedCount} (не сохранено)`;
+            cnt.style.color = '#b45309';
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    function checkRow(row) {
+        const snap = initialState.get(row);
+        let changed = false;
+        row.querySelectorAll('input, select').forEach(el => {
+            if (snap[el.name] !== el.value) changed = true;
+        });
+        row.classList.toggle('row-changed', changed);
+        return changed;
+    }
+
+    function refreshAll() {
+        unsavedCount = 0;
+        rows.forEach(r => { if (checkRow(r)) unsavedCount++; });
+        updateCount();
+    }
+
+    rows.forEach(row => {
+        const snap = {};
+        row.querySelectorAll('input, select').forEach(el => {
+            snap[el.name] = el.value;
+        });
+        initialState.set(row, snap);
+
+        const check = () => {
+            const was = row.classList.contains('row-changed');
+            const now = checkRow(row);
+            if (was !== now) {
+                unsavedCount += (now ? 1 : -1);
+                if (unsavedCount < 0) unsavedCount = 0;
+                updateCount();
+            }
+        };
+
+        row.querySelectorAll('input, select').forEach(el => {
+            el.addEventListener('input', check);
+            el.addEventListener('change', check);
+        });
+    });
+
+    refreshAll();
+
+    const saveBtn = document.getElementById('save-all-btn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', (e) => {
+            if (!form.checkValidity()) {
+                e.preventDefault();
+                form.reportValidity();
+            }
+        });
+    }
+
+    form.querySelectorAll('.del-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const base = btn.dataset.confirm || 'Удалить?';
+            let msg = base;
+            if (unsavedCount > 0) {
+                msg = `У вас есть несохранённые изменения (${unsavedCount} строк). `
+                    + `Они будут потеряны.\n\n` + base;
+            }
+            const ok = await window.uiConfirm(msg, { okText: 'Удалить', danger: true });
+            if (!ok) return;
+            // повторяем отправку именно этой кнопкой, чтобы сработал её formaction
+            if (typeof form.requestSubmit === 'function') form.requestSubmit(btn);
+            else { form.action = btn.formAction || form.action; form.submit(); }
+        });
+    });
+
+    form.addEventListener('submit', () => {
+        window.__formSubmitting = true;
+        // сохраняем текущий фильтр, чтобы он не сбросился после сохранения
+        const qh = form.querySelector('input[name="q"]');
+        const fi = document.getElementById('fio-filter');
+        if (qh && fi) qh.value = fi.value.trim();
+    });
+
+    window.addEventListener('beforeunload', (e) => {
+        if (window.__formSubmitting) return;
+        if (unsavedCount > 0) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+})();
+</script>
+
+<script>
+/* Фильтры (год «между») и массовые операции над выбранными участниками */
+(function () {
+    const yearOp = document.getElementById('year-op');
+    const year2Wrap = document.getElementById('year2-wrap');
+    function toggleYear2() {
+        if (year2Wrap) year2Wrap.style.display = (yearOp && yearOp.value === 'between') ? '' : 'none';
+    }
+    if (yearOp) yearOp.addEventListener('change', toggleYear2);
+    toggleYear2();
+
+    const bulkForm = document.getElementById('bulk-form');
+    if (!bulkForm) return;
+
+    const allBoxes = () => [...document.querySelectorAll('input[name="pid"][form="bulk-form"]')];
+    const selAll = document.getElementById('sel-all');
+    const selCount = document.getElementById('sel-count');
+    const bulkBar = document.getElementById('bulk-bar');
+
+    function refresh() {
+        const list = allBoxes();
+        const n = list.filter(b => b.checked).length;
+        if (selCount) selCount.textContent = n;
+        if (bulkBar) bulkBar.hidden = n === 0;
+        if (selAll) selAll.checked = n > 0 && n === list.length;
+        list.forEach(b => {
+            const tr = b.closest('tr');
+            if (tr) tr.classList.toggle('row-selected', b.checked);
+        });
+    }
+
+    document.addEventListener('change', (e) => {
+        const t = e.target;
+        if (t && t.matches && (t.matches('input[name="pid"]') || t.id === 'sel-all')) refresh();
+    });
+
+    if (selAll) {
+        selAll.addEventListener('change', () => {
+            allBoxes().forEach(b => {
+                const tr = b.closest('tr');
+                if (tr && tr.classList.contains('is-hidden')) return; // скрытые фильтром ФИО не трогаем
+                b.checked = selAll.checked;
+            });
+            refresh();
+        });
+    }
+
+    bulkForm.addEventListener('submit', async (e) => {
+        const btn = e.submitter;
+        if (!btn || btn.value !== 'delete') return;
+        if (bulkForm.dataset.confirmed === '1') { delete bulkForm.dataset.confirmed; return; }
+        const n = allBoxes().filter(b => b.checked).length;
+        if (!n) { e.preventDefault(); return; }
+        e.preventDefault();
+        const ok = await window.uiConfirm(`Удалить выбранных участников (${n})?`, { okText: 'Удалить', danger: true });
+        if (!ok) return;
+        bulkForm.dataset.confirmed = '1';
+        if (typeof bulkForm.requestSubmit === 'function') bulkForm.requestSubmit(btn);
+        else bulkForm.submit();
+    }, true);
+
+    refresh();
+})();
+</script>
+
+<script>
+/* Панель «Добавить участника» */
+(function () {
+    const panel = document.getElementById('add-panel');
+    const openBtn = document.getElementById('toggle-add');
+    const cancelBtn = document.getElementById('cancel-add');
+    if (!panel || !openBtn) return;
+
+    function show(open) {
+        panel.hidden = !open;
+        if (open) {
+            const first = panel.querySelector('input[name="full_name"]');
+            if (first) first.focus();
+        } else {
+            openBtn.focus();
+        }
+    }
+
+    openBtn.addEventListener('click', () => show(panel.hidden));
+    if (cancelBtn) cancelBtn.addEventListener('click', () => show(false));
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !panel.hidden) show(false);
+    });
+})();
+</script>
+<script src="{{ url_for('static', filename='people.js') }}"></script>
+<script>
+/* автоподстановка данных из списка ранее регистрировавшихся (панель «Добавить участника») */
+(function () {
+    var panel = document.getElementById('add-panel');
+    if (!panel || !window.PeopleAC) return;
+    PeopleAC.attach(panel.querySelector('[name="full_name"]'), {
+        year: function () { return panel.querySelector('[name="birth_year"]'); },
+        city: function () { return panel.querySelector('[name="city"]'); },
+        team: function () { return panel.querySelector('[name="team"]'); },
+        gender: function () { return panel.querySelector('[name="gender"]'); }
+    });
+})();
+</script>
+{% endblock %}

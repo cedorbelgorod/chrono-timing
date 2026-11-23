@@ -1,0 +1,76 @@
+{% if not rows %}
+    <div class="dt-empty">
+        <b>Нет данных для отображения.</b>
+        <ul>
+            <li>Ни одному участнику этого старта не привязана RFID-метка.</li>
+            <li>Считыватель ещё не считал ни одной метки.</li>
+        </ul>
+    </div>
+{% else %}
+    {% set running = rows | selectattr('status', 'equalto', 'running') | list | length %}
+    {% set finished = rows | selectattr('status', 'equalto', 'ok') | list | length %}
+    {% set scans = rows | map(attribute='last_scan_at') | select | list %}
+    <div class="dt-summary">
+        <span>Участников с метками: <b>{{ rows|length }}</b></span>
+        <span class="sep">·</span>
+        <span>на дистанции: <b>{{ running }}</b></span>
+        <span class="sep">·</span>
+        <span>финишировали: <b>{{ finished }}</b></span>
+        {% if scans %}
+            <span class="sep">·</span>
+            <span class="muted">последняя метка: <b class="mono">{{ scans|max }}</b></span>
+        {% endif %}
+    </div>
+
+    <table class="dt">
+        <thead>
+            <tr>
+                <th style="width:54px">№</th>
+                <th>Участник</th>
+                <th style="width:132px">Круги</th>
+                <th style="width:86px">Авто</th>
+                <th style="width:86px">Ручной</th>
+                <th style="width:70px">Δ</th>
+                <th style="width:126px">Статус</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+            {% set done = r.auto_laps|length %}
+            {% set total = r.laps_total or 1 %}
+            {% set pct = ((done / total) * 100)|round|int %}
+            {% set last_auto = r.auto_laps[-1] if r.auto_laps else None %}
+            {% set last_manual = r.manual_laps[-1] if r.manual_laps else None %}
+            {% set last_cmp = r.compare[-1] if r.compare else None %}
+            <tr class="dt-row">
+                <td class="num">{{ r.number or "—" }}</td>
+                <td class="who">
+                    <span>{{ r.full_name }}</span>
+                    {% if r.birth_year %}<small>{{ r.birth_year }}</small>{% endif %}
+                </td>
+                <td>
+                    <div class="laps">
+                        <span class="laps-txt">{{ done }} / {{ r.planned_laps or r.laps_total }}</span>
+                        <span class="bar"><i style="width:{{ pct }}%"></i></span>
+                    </div>
+                </td>
+                <td class="mono">{{ last_auto.split if last_auto else '—' }}</td>
+                <td class="mono">{{ last_manual.split if last_manual else '—' }}</td>
+                <td class="mono">
+                    {% if last_cmp and last_cmp.diff_sec is not none %}
+                        {% set ad = last_cmp.diff_sec if last_cmp.diff_sec >= 0 else -last_cmp.diff_sec %}
+                        <span class="delta {{ 'good' if ad <= 0.5 else ('warn' if ad <= 2 else 'bad') }}">{{ last_cmp.diff }}</span>
+                    {% else %}—{% endif %}
+                </td>
+                <td>
+                    {% if r.status == 'running' %}<span class="st st-running">на дистанции</span>
+                    {% elif r.status == 'ok' %}<span class="st st-ok">финиш</span>
+                    {% elif r.status == 'lapped' %}<span class="st st-lapped">отставание</span>
+                    {% elif r.status == 'dnf' %}<span class="st st-dnf">DNF</span>
+                    {% else %}<span class="st">{{ r.status }}</span>{% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% endif %}

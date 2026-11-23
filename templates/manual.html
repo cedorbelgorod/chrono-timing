@@ -1,0 +1,706 @@
+{% extends "base.html" %}
+{% block title %}Хронометраж{% endblock %}
+
+{% block head %}
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#2563eb">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232563eb'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='central' text-anchor='middle' font-size='60' fill='white'%3E%E2%8F%B1%3C/text%3E%3C/svg%3E">
+    <style>
+        @media (display-mode: standalone) {
+            header { display: none !important; }
+            body { background: #f4f6f8; }
+            main { margin: 0; padding: 0; max-width: none; }
+        }
+        
+        @media (max-width: 600px) {
+            header { display: none !important; }
+            main { margin: 0 !important; padding: 0 !important; max-width: none !important; }
+        }
+        
+        html, body { touch-action: manipulation; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="m">
+    {% set active_tab = 'manual' %}
+    {% include '_timing_tabs.html' %}
+    {% if not competition %}
+        <div class="m-empty">Выберите соревнование</div>
+    {% else %}
+        {% if race_format == 'itt' %}
+            <div class="m-itt-switch">
+                <span>Раздельный старт · режим «Финиш»</span>
+                <a href="{{ url_for('manual_page', mode='start') }}">⏱ Табло старта →</a>
+            </div>
+        {% endif %}
+        {# ===== КОМПАКТНАЯ ШАПКА СТАТУСА ===== #}
+        <div class="m-compact-head">
+            <div class="m-status-line">
+                <span id="live-indicator" class="m-live-dot">● онлайн</span>
+                <span class="m-active-count">Активных: <span id="active-count-label">{{ active_races|length }}</span></span>
+            </div>
+        </div>
+
+        {# ===== STICKY ФОРМА ВВОДА И ОТМЕНЫ ===== #}
+        <div class="m-input-bar">
+            <form method="post" action="{{ url_for('manual_action') }}" id="m-form">
+                <input type="hidden" name="competition_id" value="{{ competition.id }}">
+                <input type="number" name="number" id="m-number"
+                       placeholder="Номер" inputmode="numeric"
+                       pattern="[0-9]*" required autocomplete="off"
+                       autofocus>
+                <button type="submit">ВВОД</button>
+            </form>
+            
+            {# Убрал onsubmit, так как подтверждение теперь в JS #}
+            <form method="post" action="{{ url_for('manual_undo') }}" class="m-undo-form-inline">
+                <input type="hidden" name="competition_id" value="{{ competition.id }}">
+                <button type="submit" class="m-undo-btn-inline" title="Отменить последнее действие">↶</button>
+            </form>
+        </div>
+
+        {# ===== ОБНОВЛЯЕМАЯ ЧАСТЬ ===== #}
+        <div id="manual-content">
+            {% include '_manual_active.html' %}
+        </div>
+    {% endif %}
+</div>
+
+<style>
+/* ======================= БАЗОВАЯ РАСКЛАДКА ======================= */
+.m {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 0 8px 40px;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ======================= ШАПКА СТАТУСА ======================= */
+.m-itt-switch {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46;
+    border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; font-size: 13px;
+}
+.m-itt-switch a { color: #047857; font-weight: 700; text-decoration: none; margin-left: auto; }
+.m-compact-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 4px 4px 4px;
+    color: #6b7280;
+    font-size: 13px;
+}
+.m-status-line {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+.m-live-dot {
+    color: #16a34a;
+    font-weight: 600;
+}
+.m-active-count {
+    font-weight: 600;
+    color: #4b5563;
+}
+
+/* ======================= ФОРМА ВВОДА ======================= */
+.m-input-bar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #f4f6f8;
+    padding: 4px 0 8px 0;
+    margin: 0 -8px;
+    padding-left: 8px;
+    padding-right: 8px;
+    display: flex;
+    gap: 8px;
+    box-shadow: 0 4px 6px -4px rgba(0,0,0,0.1);
+}
+
+#m-form { display: flex; gap: 6px; flex: 1; }
+#m-number {
+    flex: 1;
+    font-size: 28px;
+    padding: 10px 14px;
+    font-weight: 800;
+    text-align: center;
+    border: 2px solid #2563eb;
+    border-radius: 10px;
+    background: #fff;
+    -moz-appearance: textfield;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 56px;
+}
+#m-number::-webkit-inner-spin-button,
+#m-number::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+#m-form button {
+    font-size: 16px;
+    padding: 10px 16px;
+    font-weight: 800;
+    border-radius: 10px;
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    min-height: 56px;
+}
+#m-form button:active { background: #1d4ed8; }
+
+/* фильтрация списка по введённому номеру */
+.m-active-row.m-row-hidden { display: none !important; }
+.m-active-row.m-active-selected {
+    outline: 3px solid #2563eb;
+    outline-offset: -3px;
+    background: #eff6ff;
+}
+
+.m-undo-form-inline { margin: 0; display: flex; }
+.m-undo-btn-inline {
+    padding: 0 16px;
+    font-size: 22px;
+    font-weight: 800;
+    border-radius: 10px;
+    background: #475569;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    touch-action: manipulation;
+    min-height: 56px;
+}
+.m-undo-btn-inline:active { background: #334155; }
+
+/* ======================= ВЫБОР СОРЕВНОВАНИЯ ======================= */
+.m-comp-bottom {
+    margin-top: 32px;
+    margin-bottom: 24px;
+}
+.m-comp-bottom select {
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    color: #6b7280;
+}
+
+/* ======================= СЕКЦИИ ======================= */
+.m-section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #6b7280;
+    font-weight: 700;
+    margin: 8px 0 4px 4px;
+    display: flex;
+    justify-content: space-between;
+}
+.m-sort-hint {
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+    color: #9ca3af;
+}
+
+/* ======================= СПИСОК АКТИВНЫХ ======================= */
+.m-active-list { display: flex; flex-direction: column; gap: 6px; }
+.m-active-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    transition: background .2s, box-shadow .2s;
+}
+.m-active-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: baseline;
+}
+.m-active-num {
+    font-size: 18px;
+    font-weight: 800;
+    color: #1f2937;
+    font-variant-numeric: tabular-nums;
+}
+.m-active-name {
+    font-size: 14px;
+    color: #374151;
+    flex: 1 1 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.m-active-meta { font-size: 11px; color: #6b7280; line-height: 1.4; }
+
+.m-active-row.m-active-hot {
+    border-left: 4px solid #16a34a;
+    background: #f0fdf4;
+    padding-left: 8px;
+    animation: m-hot-pulse 1.5s ease-in-out infinite;
+}
+.m-active-row.m-active-finish.m-active-hot {
+    border-left-color: #15803d;
+    background: #dcfce7;
+}
+@keyframes m-hot-pulse {
+    0%, 100% { box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    50%      { box-shadow: 0 2px 8px rgba(22,163,74,.3); }
+}
+
+.m-eta       { color: #6b7280; }
+.m-eta-soon  { color: #16a34a; font-weight: 600; }
+.m-eta-finish      { color: #94a3b8; }
+.m-eta-finish-soon { color: #16a34a; font-weight: 700; }
+
+/* ======================= КНОПКИ В КАРТОЧКЕ ======================= */
+.m-tap {
+    min-height: 44px;
+    min-width: 100px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-weight: 800;
+    border-radius: 8px;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+.m-tap-lap { background: #f59e0b; }
+.m-tap-lap:active { background: #d97706; }
+.m-tap-finish { background: #16a34a; }
+.m-tap-finish:active { background: #15803d; }
+
+/* ======================= ЖУРНАЛ ======================= */
+.m-log {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.m-log-row {
+    display: grid;
+    grid-template-columns: 60px 50px 1fr;
+    gap: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    border-bottom: 1px solid #f3f4f6;
+    align-items: center;
+}
+.m-log-row:last-child { border-bottom: none; }
+.m-ok-t  { color: #166534; }
+.m-err-t { color: #991b1b; }
+.m-log-time { opacity: .6; font-variant-numeric: tabular-nums; }
+.m-log-num { font-weight: 700; }
+
+/* ======================= ПУСТЫЕ СОСТОЯНИЯ ======================= */
+.m-empty {
+    text-align: center;
+    padding: 40px 16px;
+    color: #6b7280;
+    background: #fff;
+    border-radius: 12px;
+    margin-top: 12px;
+}
+.m-empty-small {
+    text-align: center;
+    padding: 16px;
+    color: #6b7280;
+    background: #fff;
+    border-radius: 12px;
+    font-size: 14px;
+}
+.m-link {
+    display: inline-block;
+    margin-top: 8px;
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: 600;
+}
+.m-link:hover { text-decoration: underline; }
+
+/* ======================= ОВЕРЛЕЙ ФИНИША ======================= */
+.finish-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.78);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 20px;
+    animation: finishFadeIn 0.18s ease-out;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+}
+@keyframes finishFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+.finish-overlay-hide {
+    animation: finishFadeOut 0.35s ease-out forwards;
+    pointer-events: none;
+}
+@keyframes finishFadeOut {
+    to { opacity: 0; transform: scale(0.94); }
+}
+
+.finish-overlay-content {
+    background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+    border-radius: 24px;
+    padding: 32px 40px;
+    text-align: center;
+    color: #fff;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55),
+                0 0 0 4px rgba(255, 255, 255, 0.08);
+    max-width: 92vw;
+    max-height: 92vh;
+    overflow: hidden;
+    animation: finishPop 0.5s cubic-bezier(.2, 1.4, .4, 1);
+}
+@keyframes finishPop {
+    0%   { transform: scale(0.5); opacity: 0; }
+    60%  { transform: scale(1.06); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.finish-overlay-icon {
+    font-size: 64px;
+    line-height: 1;
+    margin-bottom: 4px;
+    animation: finishWave 0.9s ease-in-out infinite;
+    transform-origin: center bottom;
+}
+@keyframes finishWave {
+    0%, 100% { transform: rotate(-6deg); }
+    50%      { transform: rotate(6deg); }
+}
+.finish-overlay-title {
+    font-size: 46px;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    margin-bottom: 14px;
+    text-shadow: 0 3px 14px rgba(0, 0, 0, 0.35);
+    line-height: 1;
+}
+.finish-overlay-number {
+    font-size: 72px;
+    font-weight: 900;
+    line-height: 1;
+    margin-bottom: 6px;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 3px 14px rgba(0, 0, 0, 0.35);
+}
+.finish-overlay-name {
+    font-size: 20px;
+    font-weight: 600;
+    opacity: 0.95;
+    margin-bottom: 6px;
+    word-break: break-word;
+}
+.finish-overlay-hint {
+    font-size: 13px;
+    opacity: 0.75;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+/* ======================= АДАПТИВ ======================= */
+@media (max-width: 480px) {
+    .finish-overlay-content { padding: 24px 20px; border-radius: 20px; }
+    .finish-overlay-icon { font-size: 48px; }
+    .finish-overlay-title { font-size: 34px; margin-bottom: 10px; }
+    .finish-overlay-number { font-size: 56px; }
+    .finish-overlay-name { font-size: 18px; }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const inp = document.getElementById('m-number');
+    if (inp) inp.focus();
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW error:', err));
+        });
+    }
+
+    // ===== Web Audio — для звука финиша =====
+    let audioCtx = null;
+    function ensureAudio() {
+        if (!audioCtx) {
+            try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
+        }
+        if (audioCtx.state === 'suspended') { audioCtx.resume().catch(() => {}); }
+        return audioCtx;
+    }
+    ['click', 'keydown', 'touchstart', 'pointerdown'].forEach(ev => {
+        document.addEventListener(ev, () => ensureAudio(), { once: true, capture: true });
+    });
+
+    function playFinishBeep() {
+        const ctx = ensureAudio();
+        if (!ctx || ctx.state !== 'running') return;
+        const now = ctx.currentTime;
+        [{ freq: 880, start: 0 }, { freq: 1108, start: 0.15 }, { freq: 1318, start: 0.3 }].forEach(n => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.value = n.freq;
+            osc.connect(gain); gain.connect(ctx.destination);
+            gain.gain.setValueAtTime(0.0001, now + n.start);
+            gain.gain.exponentialRampToValueAtTime(0.35, now + n.start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + n.start + (n.dur || 0.12));
+            osc.start(now + n.start); osc.stop(now + n.start + (n.dur || 0.12) + 0.03);
+        });
+    }
+
+    // ===== Оверлей финиша =====
+    function escapeHtml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function showFinishOverlay(data) {
+        document.querySelectorAll('.finish-overlay').forEach(o => o.remove());
+        const overlay = document.createElement('div');
+        overlay.className = 'finish-overlay';
+        overlay.innerHTML = `
+            <div class="finish-overlay-content">
+                <div class="finish-overlay-icon">🏁</div>
+                <div class="finish-overlay-title">ФИНИШ!</div>
+                ${data.number ? `<div class="finish-overlay-number">№${escapeHtml(data.number)}</div>` : ''}
+                ${data.name ? `<div class="finish-overlay-name">${escapeHtml(data.name)}</div>` : ''}
+                <div class="finish-overlay-hint">Нажмите, чтобы закрыть</div>
+            </div>`;
+        document.body.appendChild(overlay);
+        if (navigator.vibrate) { try { navigator.vibrate([300, 100, 300]); } catch (e) {} }
+        playFinishBeep();
+        let dismissed = false;
+        const dismiss = () => {
+            if (dismissed) return; dismissed = true;
+            overlay.classList.add('finish-overlay-hide');
+            setTimeout(() => { overlay.remove(); if (inp) inp.focus(); }, 360);
+        };
+        overlay.addEventListener('click', dismiss);
+        overlay.addEventListener('touchstart', dismiss, { passive: true });
+        setTimeout(dismiss, 4000);
+    }
+
+    /** Убирает всплывашку «ФИНИШ» сразу — как только судья начал что-то вводить. */
+    function dismissFinishOverlay() {
+        document.querySelectorAll('.finish-overlay').forEach(o => {
+            o.classList.add('finish-overlay-hide');
+            setTimeout(() => o.remove(), 200);
+        });
+    }
+
+    function checkFinishOverlay() {
+        const container = document.getElementById('manual-content');
+        if (!container) return;
+        const marker = container.querySelector('#last-action-marker');
+        if (!marker) return;
+        const actionTs = marker.dataset.actionTs || '';
+        const isFinish = marker.dataset.isFinish === '1';
+        const ok = marker.dataset.ok === '1';
+        if (!ok || !isFinish || !actionTs) return;
+        const actionTime = Date.parse(actionTs);
+        if (isNaN(actionTime) || (Date.now() - actionTime) > 15000) return;
+        if (sessionStorage.getItem('last_finish_ts') === actionTs) return;
+        sessionStorage.setItem('last_finish_ts', actionTs);
+        showFinishOverlay({ number: marker.dataset.number || '', name: marker.dataset.name || '' });
+    }
+
+    // ===== Логика AJAX-обновления =====
+    const container = document.getElementById('manual-content');
+    const indicator = document.getElementById('live-indicator');
+    const countLabel = document.getElementById('active-count-label');
+    const cid = {{ competition.id if competition else 'null' }};
+
+    let isFetching = false;
+    async function refreshActive() {
+        if (!container || !cid || isFetching) return;
+        isFetching = true;
+        try {
+            const resp = await fetch(`/manual/active?cid=${cid}`, { cache: 'no-store' });
+            if (resp.ok) {
+                container.innerHTML = await resp.text();
+                if (countLabel) countLabel.textContent = container.querySelectorAll('.m-active-row').length;
+                if (indicator) {
+                    indicator.textContent = '● обновлено';
+                    indicator.style.color = '#16a34a';
+                    setTimeout(() => { indicator.textContent = '● онлайн'; }, 1500);
+                }
+                checkFinishOverlay();
+                applyNumberFilter();
+            }
+        } catch (e) {
+            if (indicator) { indicator.textContent = '⚠ нет связи'; indicator.style.color = '#dc2626'; }
+        } finally { isFetching = false; }
+    }
+
+    // ===== Фильтр активных по введённому номеру (без подсказок) =====
+    function applyNumberFilter() {
+        if (!container || !inp) return;
+        const val = (inp.value ? String(inp.value) : '').trim();
+        const vlow = val.toLowerCase();
+
+        container.querySelectorAll('.m-active-row').forEach(row => {
+            const num = row.dataset.number || '';
+            const name = (row.dataset.name || '').toLowerCase();
+            const hit = !val
+                || num === val
+                || num.startsWith(val)
+                || (val.length > 1 && name.indexOf(vlow) !== -1);
+            row.classList.toggle('m-row-hidden', !hit);
+            row.classList.toggle('m-active-selected', !!val && num === val);
+        });
+    }
+
+    if (inp) {
+        inp.addEventListener('input', () => { dismissFinishOverlay(); applyNumberFilter(); });
+        inp.addEventListener('change', applyNumberFilter);
+        inp.addEventListener('keydown', dismissFinishOverlay);
+    }
+    applyNumberFilter();
+
+    // Фоновое обновление раз в 2 секунды
+    if (container && cid) {
+        setInterval(refreshActive, 2000);
+    }
+
+    // ===== 1. AJAX-отправка основной формы (ВВОД) =====
+    const mainForm = document.getElementById('m-form');
+    if (mainForm) {
+        mainForm.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Отменяем перезагрузку страницы
+            dismissFinishOverlay(); // всплывашка «ФИНИШ» не должна мешать вводу
+            if (!inp.value) return;
+            
+            const btn = mainForm.querySelector('button[type="submit"]');
+            if (btn) btn.disabled = true;
+            
+            try {
+                await fetch('/manual/action', {
+                    method: 'POST',
+                    body: new FormData(mainForm)
+                });
+                inp.value = ''; // Очищаем поле
+                inp.focus();    // Оставляем фокус, чтобы клавиатура не закрылась
+                await refreshActive(); // Подтягиваем обновленный список
+            } catch (err) {
+                console.error('Action error', err);
+            } finally {
+                if (btn) btn.disabled = false;
+                inp.focus(); 
+            }
+        });
+    }
+
+    // ===== 2. AJAX-отправка кнопки Undo (Отмена) =====
+    const undoForm = document.querySelector('.m-undo-form-inline');
+    if (undoForm) {
+        undoForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const ok = await window.uiConfirm('Отменить последнее действие?', { okText: 'Отменить действие' });
+            if (!ok) return;
+            
+            const btn = undoForm.querySelector('button[type="submit"]');
+            if (btn) btn.disabled = true;
+            
+            try {
+                await fetch('/manual/undo', {
+                    method: 'POST',
+                    body: new FormData(undoForm)
+                });
+                if (inp) inp.focus();
+                await refreshActive();
+            } catch (err) {
+                console.error('Undo error', err);
+            } finally {
+                if (btn) btn.disabled = false;
+                if (inp) inp.focus();
+            }
+        });
+    }
+
+    // ===== 3. AJAX-отправка для кнопок КРУГ/ФИНИШ в карточках =====
+    // Используем делегирование, так как карточки перерисовываются
+    if (container) {
+        container.addEventListener('submit', async (e) => {
+            const form = e.target;
+            if (form.matches('form[action*="/manual/action"]')) {
+                e.preventDefault();
+                const btn = form.querySelector('button[type="submit"]');
+                if (btn) btn.disabled = true;
+                
+                try {
+                    await fetch('/manual/action', {
+                        method: 'POST',
+                        body: new FormData(form)
+                    });
+                    if (inp) { inp.value = ''; inp.focus(); }
+                    await refreshActive();
+                } catch (err) {
+                    console.error('List action error', err);
+                } finally {
+                    if (btn) btn.disabled = false;
+                    if (inp) inp.focus();
+                }
+            }
+        });
+    }
+
+    // ===== Горячие клавиши (Escape и Ctrl+Z) =====
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (inp) { inp.value = ''; inp.focus(); }
+            return;
+        }
+        const isZ = (e.code === 'KeyZ') || (e.key && e.key.toLowerCase() === 'z');
+        if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && isZ) {
+            if (document.activeElement === inp && inp.value.length > 0) return;
+            e.preventDefault();
+            const cidVal = '{{ competition.id if competition else "" }}';
+            if (!cidVal) return;
+            const f = document.createElement('form');
+            f.method = 'post'; f.action = '/manual/undo';
+            const h = document.createElement('input');
+            h.type = 'hidden'; h.name = 'competition_id'; h.value = cidVal;
+            f.appendChild(h); document.body.appendChild(f); f.submit();
+        }
+    });
+
+    checkFinishOverlay();
+
+    // Быстрый ввод с клавиатуры: цифры сразу попадают в поле номера
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        const inp = document.getElementById('m-number');
+        if (!inp) return;
+        if (e.key === 'Escape') { inp.value = ''; inp.blur(); return; }
+        const tag = (e.target.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        if (/^[0-9]$/.test(e.key)) {
+            inp.focus();
+            inp.value += e.key;
+            e.preventDefault();
+        }
+    });
+});
+</script>
+{% endblock %}

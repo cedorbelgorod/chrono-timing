@@ -1,0 +1,62 @@
+{% if not heat %}
+    <div class="fs-empty">Нет активных или завершённых стартов</div>
+{% else %}
+    <div class="fs-heat-title">
+        Старт №{{ heat.heat_number }}{% if heat.name %} — {{ heat.name }}{% endif %}
+        <span class="fs-heat-stat">{{ heat.finished_count }} из {{ heat.total }} финишировали</span>
+    </div>
+
+    {% for c in categories %}
+        <div class="fs-cat">
+            <div class="fs-cat-name">
+                {{ c.name }}
+                <span class="fs-cat-count">{{ c.finished_count }} / {{ c.total }}</span>
+            </div>
+            <table class="fs-table">
+                <colgroup>
+                    <col class="col-num">
+                    <col class="col-name">
+                    <col class="col-laps">
+                    <col class="col-result">
+                    <col class="col-gap">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>№</th>
+                        <th>ФИО</th>
+                        <th>Круги</th>
+                        <th>Результат</th>
+                        <th>Отставание</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for r in c.races %}
+                    <tr class="fs-row-{{ r.status }}">
+                        <td class="fs-num">{{ r.number_display }}</td>
+                        <td class="fs-name">{{ r.full_name }}</td>
+                        <td class="fs-laps">{{ r.laps|length }} / {{ r.planned_laps or r.laps_total }}</td>
+                        <td class="fs-result">
+                            {% if r.status == 'ok' %}
+                                <span class="fs-ok">{{ r.total_display }}</span>
+                            {% elif r.status == 'running' %}
+                                <span class="fs-running">на дистанции</span>
+                            {% elif r.status == 'lapped' %}
+                                <span class="fs-lapped">+{{ r.laps_behind }} кр.</span>
+                            {% elif r.status == 'dnf' %}
+                                <span class="fs-dnf">DNF</span>
+                            {% elif r.status == 'dns' %}
+                                <span class="fs-dns">DNS</span>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="fs-gap fs-gap-{{ r.gap_kind }}">
+                            {{ r.gap_display or '' }}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endfor %}
+{% endif %}

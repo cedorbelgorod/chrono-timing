@@ -1,0 +1,22 @@
+{% if not auto_log %}
+    <div class="feed-empty">
+        Пока нет сканирований.
+        <small>События появятся здесь, как только считыватель увидит метку.</small>
+    </div>
+{% else %}
+    <ul class="feed">
+    {% for e in auto_log %}
+        <li class="feed-item {{ 'ok' if e.ok else 'err' }}">
+            <span class="feed-time mono">{{ e.time }}</span>
+            <span class="feed-body">
+                <span class="feed-head">
+                    {% if e.number %}<span class="feed-num">№{{ e.number }}</span>{% endif %}
+                    {% if e.participant %}<span class="feed-name">{{ e.participant }}</span>{% endif %}
+                    {% if not e.participant and e.tag %}<span class="feed-tag mono">{{ e.tag }}</span>{% endif %}
+                </span>
+                <span class="feed-msg">{{ e.message }}</span>
+            </span>
+        </li>
+    {% endfor %}
+    </ul>
+{% endif %}

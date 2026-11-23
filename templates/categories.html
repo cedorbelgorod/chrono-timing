@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+{% block title %}Категории — {{ competition.name }}{% endblock %}
+{% block content %}
+<h2>{{ competition.name }} <small>— категории</small></h2>
+
+<p class="muted" style="margin-top:-6px">
+    Пол и годы рождения — условия категории: участнику автоматически назначается первая подходящая
+    (по порядку создания). Пусто в поле — без ограничения.
+    <br>
+    <b>Сортировка</b> — порядок групп в старте с сортировкой «по группе, затем номер»;
+    по умолчанию равна ID категории, менять можно (ID при этом не меняется).
+</p>
+
+<form method="post" class="toolbar">
+    <input type="text" name="name" placeholder="Название категории" required style="min-width:220px"
+           value="{{ form.name }}"
+           class="{{ 'input-error' if error_field == 'name' else '' }}">
+    <input type="number" name="laps_total" placeholder="Кругов" value="{{ form.laps_total }}" min="1" required style="width:100px"
+           class="{{ 'input-error' if error_field == 'laps_total' else '' }}">
+    <span class="g-pick">
+        <label class="g"><input type="checkbox" name="gender" value="M" {% if 'M' in form.gender %}checked{% endif %}> М</label>
+        <label class="g"><input type="checkbox" name="gender" value="F" {% if 'F' in form.gender %}checked{% endif %}> Ж</label>
+    </span>
+    <input type="number" name="year_from" placeholder="Год с" value="{{ form.year_from }}" min="1900" max="2030" style="width:100px"
+           class="{{ 'input-error' if error_field == 'year_from' else '' }}">
+    <input type="number" name="year_to" placeholder="Год по" value="{{ form.year_to }}" min="1900" max="2030" style="width:100px"
+           class="{{ 'input-error' if error_field == 'year_to' else '' }}">
+    <button type="submit">Добавить</button>
+</form>
+{% if form_error %}
+    <div class="form-error">⚠ {{ form_error }}</div>
+{% endif %}
+
+<div class="cat-import">
+    <span class="cat-import-label">Массово:</span>
+    <form method="post" action="{{ url_for('categories_import', cid=competition.id) }}"
+          enctype="multipart/form-data" style="margin:0">
+        <label class="btn-imp">
+            📥 Импорт из Excel
+            <input type="file" name="file" accept=".xlsx" onchange="this.form.submit()">
+        </label>
+    </form>
+    <a class="btn-tpl" href="{{ url_for('categories_template', cid=competition.id) }}">⬇ Шаблон</a>
+    <span class="cat-import-hint">колонки: Название · Кругов · Пол · Год с · Год по</span>
+</div>
+
+{% if categories %}
+<form method="post" action="{{ url_for('categories_save_all', cid=competition.id) }}" id="cats-form">
+    <div class="cats-scroll">
+    <table>
+        <thead>
+            <tr>
+                <th style="width:44px">ID</th>
+                <th style="width:110px" title="Порядок групп при сортировке старта «по группе»">Сортировка</th>
+                <th class="th-name">Название</th>
+                <th style="width:86px">Кругов</th>
+                <th style="width:104px">Пол</th>
+                <th style="width:86px">Год с</th>
+                <th style="width:86px">Год по</th>
+                <th style="width:100px">Круг, км</th>
+                <th style="width:70px">HD</th>
+                <th style="width:70px">МС</th>
+                <th style="width:70px">ТС</th>
+                <th style="width:120px">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for cat in categories %}
+            {% set ov = overlaps.get(cat.id) %}
+            {% set s = submitted.get(cat.id) if submitted else none %}
+            {% set err = row_errors.get(cat.id) if row_errors else none %}
+            {% set g = (s.gender if s else cat.gender) or '' %}
+            <tr class="cat-row {{ 'row-overlap' if ov }} {{ 'row-error' if err }}" data-id="{{ cat.id }}">
+                <td data-label="ID">{{ cat.id }}</td>
+                <td data-label="Сортировка">
+                    <input type="number" name="cat_{{ cat.id }}_sort" class="row-input" min="0" step="1"
+                           value="{{ s.sort_order if s else (cat.sort_order if cat.sort_order is not none else cat.id) }}"
+                           title="Порядок групп при сортировке старта «по группе, затем номер»"
+                           style="width:100%">
+                </td>
+                <td data-label="Название" class="td-name">
+                    <input type="text" name="cat_{{ cat.id }}_name"
+                           value="{{ s.name if s else cat.name }}" required
+                           placeholder="Название категории"
+                           class="row-input name-input {{ 'input-error' if err and err[1] == 'name' else '' }}"
+                           style="width:100%">
+                    {% if err %}
+                        <div class="row-error-text">⚠ {{ err[0] }}</div>
+                    {% endif %}
+                    {% if ov %}
+                        <div class="cat-overlap">⚠ условия пересекаются: {{ ov|join(', ') }}</div>
+                    {% endif %}
+                </td>
+                <td data-label="Кругов">
+                    <input type="number" name="cat_{{ cat.id }}_laps"
+                           value="{{ s.laps if s else cat.laps_total }}" min="1" required
+                           class="row-input {{ 'input-error' if err and err[1] == 'laps' else '' }}"
+                           style="width:70px">
+                </td>
+                <td data-label="Пол">
+                    <span class="g-pick">
+                        <label class="g"><input type="checkbox" name="cat_{{ cat.id }}_gender" value="M"
+                            {% if 'M' in g %}checked{% endif %}> М</label>
+                        <label class="g"><input type="checkbox" name="cat_{{ cat.id }}_gender" value="F"
+                            {% if 'F' in g %}checked{% endif %}> Ж</label>
+                    </span>
+                </td>
+                <td data-label="Год с">
+                    <input type="number" name="cat_{{ cat.id }}_year_from"
+                           value="{{ s.year_from if s else (cat.year_from or '') }}" min="1900" max="2030"
+                           class="row-input {{ 'input-error' if err and err[1] == 'year_from' else '' }}"
+                           style="width:76px" placeholder="—">
+                </td>
+                <td data-label="Год по">
+                    <input type="number" name="cat_{{ cat.id }}_year_to"
+                           value="{{ s.year_to if s else (cat.year_to or '') }}" min="1900" max="2030"
+                           class="row-input {{ 'input-error' if err and err[1] == 'year_to' else '' }}"
+                           style="width:76px" placeholder="—">
+                </td>
+                <td data-label="Круг, км">
+                    <input type="text" name="cat_{{ cat.id }}_lap_length"
+                           value="{{ s.lap_length if s else (cat.lap_length or '') }}" placeholder="2,3"
+                           class="row-input" style="width:90px">
+                </td>
+                <td data-label="HD">
+                    <input type="text" name="cat_{{ cat.id }}_hd"
+                           value="{{ s.hd if s else (cat.hd or '') }}"
+                           class="row-input" style="width:70px">
+                </td>
+                <td data-label="МС">
+                    <input type="text" name="cat_{{ cat.id }}_ms"
+                           value="{{ s.ms if s else (cat.ms or '') }}"
+                           class="row-input" style="width:70px">
+                </td>
+                <td data-label="ТС">
+                    <input type="text" name="cat_{{ cat.id }}_ts"
+                           value="{{ s.ts if s else (cat.ts or '') }}"
+                           class="row-input" style="width:70px">
+                </td>
+                <td data-label="">
+                    <button type="submit" class="danger del-btn" formnovalidate
+                            formaction="{{ url_for('category_delete', catid=cat.id) }}"
+                            formmethod="post"
+                            data-confirm="Удалить категорию «{{ cat.name }}»?">
+                        Удалить
+                    </button>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    <div class="save-bar">
+        <button type="submit" class="btn-save-all" id="save-all-btn">
+            💾 Сохранить все изменения
+        </button>
+        <span id="changed-count" class="changed-count"></span>
+    </div>
+</form>
+{% else %}
+<div class="empty">Пока нет категорий. Без категории нельзя добавить участника.</div>
+{% endif %}
+
+<div class="toolbar" style="margin-top:16px">
+    <a href="{{ url_for('competitions_list') }}" class="link">← К соревнованию</a>
+    <a href="{{ url_for('participants_list', cid=competition.id) }}" class="link" style="margin-left:16px">Участники →</a>
+</div>
+
+<style>
+/* название категории — главная колонка: шире и крупнее остальных */
+.cats-scroll { overflow-x: auto; }
+#cats-form th.th-name,
+#cats-form td.td-name { min-width: 300px; width: 34%; }
+#cats-form td.td-name .name-input {
+    font-size: 16px; font-weight: 600; padding: 10px 12px; letter-spacing: .01em;
+}
+#cats-form td.td-name .name-input::placeholder { font-weight: 400; color: #9ca3af; }
+@media (max-width: 1100px) {
+    #cats-form th.th-name,
+    #cats-form td.td-name { min-width: 240px; }
+}
+.cat-import {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    margin: 10px 0 16px; padding: 10px 12px; background: #f9fafb;
+    border: 1px dashed #d1d5db; border-radius: 10px;
+}
+.cat-import-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #9ca3af; }
+.cat-import-hint { font-size: 12px; color: #9ca3af; }
+.btn-imp, .btn-tpl {
+    display: inline-block; padding: 8px 14px; font-size: 13px; font-weight: 600;
+    border-radius: 8px; cursor: pointer; text-decoration: none; font-family: inherit;
+}
+.btn-imp { background: #2563eb; color: #fff; position: relative; overflow: hidden; }
+.btn-imp:hover { background: #1d4ed8; }
+.btn-imp input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.btn-tpl { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+.btn-tpl:hover { background: #f3f4f6; }
+
+.cat-row.row-changed { background: #fffbeb; }
+.cat-row.row-changed td { border-bottom-color: #fcd34d; }
+.cat-row.row-changed td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
+
+.cat-row.row-overlap { background: #fef2f2; }
+.cat-row.row-changed.row-overlap { background: #fff7ed; }
+.cat-overlap { margin-top: 4px; font-size: 11px; color: #b91c1c; line-height: 1.35; }
+
+.cat-row.row-error { background: #fef2f2; }
+.cat-row.row-error td:first-child { box-shadow: inset 3px 0 0 #dc2626; }
+.row-error-text { margin-top: 4px; font-size: 12px; color: #b91c1c; font-weight: 600; }
+
+.input-error {
+    border-color: #dc2626 !important;
+    box-shadow: 0 0 0 3px rgba(220,38,38,.12);
+    background: #fff5f5;
+}
+.form-error {
+    margin: -6px 0 12px; padding: 9px 12px; border-radius: 8px;
+    background: #fee2e2; color: #991b1b; font-size: 14px; font-weight: 600;
+}
+
+.g-pick { display: inline-flex; gap: 8px; align-items: center; }
+.g { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; cursor: pointer; color: #374151; }
+.g input { width: 16px; height: 16px; accent-color: #2563eb; }
+
+.save-bar {
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    margin-top: 16px; padding: 12px 16px;
+    background: #fff; border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    border-left: 4px solid #16a34a;
+    position: sticky; bottom: 12px; z-index: 5;
+}
+.btn-save-all { background: #16a34a; font-size: 16px; padding: 10px 24px; font-weight: 700; }
+.btn-save-all:hover { background: #15803d; }
+.btn-save-all:disabled { background: #9ca3af; cursor: not-allowed; }
+.changed-count { color: #b45309; font-weight: 600; font-size: 14px; }
+
+/* карточки на узком экране */
+@media (max-width: 860px) {
+    #cats-form table thead { display: none; }
+    #cats-form table, #cats-form tbody, #cats-form tr, #cats-form td { display: block; width: 100%; }
+    #cats-form tr {
+        border: 1px solid #e5e7eb; border-radius: 8px;
+        margin-bottom: 10px; padding: 10px 12px; background: #fff;
+    }
+    #cats-form tr.row-changed { border-color: #fcd34d; }
+    #cats-form tr.row-overlap { border-color: #fca5a5; }
+    #cats-form tr.row-error { border-color: #dc2626; }
+    #cats-form td { border: none; padding: 5px 0; display: flex; align-items: center; gap: 10px; }
+    #cats-form td::before {
+        content: attr(data-label);
+        flex: 0 0 92px; color: #6b7280; font-size: 11px;
+        text-transform: uppercase; letter-spacing: .03em;
+    }
+    #cats-form td > input { flex: 1 1 auto; width: auto !important; min-width: 0; }
+    #cats-form td > button { width: 100%; }
+}
+</style>
+
+<script>
+(function () {
+    const form = document.getElementById('cats-form');
+    if (!form) return;
+
+    const rows = [...form.querySelectorAll('tr.cat-row')];
+    const initialState = new WeakMap();
+    let unsavedCount = 0;
+
+    function val(el) { return el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value; }
+
+    function updateCount() {
+        const cnt = document.getElementById('changed-count');
+        const btn = document.getElementById('save-all-btn');
+        if (!cnt) return;
+        if (unsavedCount === 0) {
+            cnt.textContent = 'Все изменения сохранены';
+            cnt.style.color = '#6b7280';
+            if (btn) btn.disabled = true;
+        } else {
+            cnt.textContent = `Изменено строк: ${unsavedCount} (не сохранено)`;
+            cnt.style.color = '#b45309';
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    function checkRow(row) {
+        const snap = initialState.get(row);
+        let changed = false;
+        row.querySelectorAll('input').forEach(el => {
+            const key = el.name + '#' + (el.type === 'checkbox' ? el.value : '');
+            if (snap[key] !== val(el)) changed = true;
+        });
+        row.classList.toggle('row-changed', changed);
+        return changed;
+    }
+
+    function refreshAll() {
+        unsavedCount = 0;
+        rows.forEach(r => { if (checkRow(r)) unsavedCount++; });
+        updateCount();
+    }
+
+    rows.forEach(row => {
+        const snap = {};
+        row.querySelectorAll('input').forEach(el => {
+            snap[el.name + '#' + (el.type === 'checkbox' ? el.value : '')] = val(el);
+        });
+        initialState.set(row, snap);
+
+        const check = () => {
+            const was = row.classList.contains('row-changed');
+            const now = checkRow(row);
+            if (was !== now) {
+                unsavedCount += (now ? 1 : -1);
+                if (unsavedCount < 0) unsavedCount = 0;
+                updateCount();
+            }
+        };
+
+        row.querySelectorAll('input').forEach(el => {
+            el.addEventListener('input', check);
+            el.addEventListener('change', check);
+        });
+    });
+
+    refreshAll();
+
+    const saveBtn = document.getElementById('save-all-btn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', (e) => {
+            if (!form.checkValidity()) {
+                e.preventDefault();
+                form.reportValidity();
+            }
+        });
+    }
+
+    // удаление — через общее окно подтверждения, со своим адресом формы
+    form.querySelectorAll('.del-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const base = btn.dataset.confirm || 'Удалить?';
+            let msg = base;
+            if (unsavedCount > 0) {
+                msg = `У вас есть несохранённые изменения (${unsavedCount} строк). `
+                    + `Они будут потеряны.\n\n` + base;
+            }
+            const ok = await window.uiConfirm(msg, { okText: 'Удалить', danger: true });
+            if (!ok) return;
+            if (typeof form.requestSubmit === 'function') form.requestSubmit(btn);
+            else { form.action = btn.formAction || form.action; form.submit(); }
+        });
+    });
+
+    form.addEventListener('submit', () => { window.__formSubmitting = true; });
+
+    window.addEventListener('beforeunload', (e) => {
+        if (window.__formSubmitting) return;
+        if (unsavedCount > 0) { e.preventDefault(); e.returnValue = ''; }
+    });
+})();
+</script>
+{% endblock %}

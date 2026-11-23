@@ -1,0 +1,31 @@
+# окружение
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# данные соревнований и логи
+*.db
+*.db-wal
+*.db-shm
+competitions.json
+comps/
+backups/
+log/
+data/
+
+# секреты и сертификаты
+cert/
+manage.json
+.env
+docker-compose.hrono.yml
+
+# сборки и архивы
+android/build/
+*.zip
+*.tar.gz
+*.bak
+
+# DOCX собирается из Markdown: python tools/md2docx.py
+docs/*.docx

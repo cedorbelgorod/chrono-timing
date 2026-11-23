@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}Саморегистрация — {{ competition.name }}{% endblock %}
+{% block content %}
+<h2>Саморегистрация участников</h2>
+<p class="muted" style="margin-top:-8px">
+    Публичная форма для участников: они сами заполняют данные, вы видите их в списке участников.
+</p>
+
+{% if warn_gender %}
+    <div class="warn-box">
+        ⚠ В категориях есть ограничение по полу, но поле «Пол» не включено в форме —
+        таким участникам категория не подберётся. Включите «Пол» в таблице полей ниже.
+    </div>
+{% endif %}
+{% if warn_year %}
+    <div class="warn-box">
+        ⚠ В категориях заданы годы рождения, а поле «Год рождения» в форме выключено — подбор будет неточным.
+    </div>
+{% endif %}
+
+{% if cfg.enabled and public_url %}
+<div class="reg-link-card">
+    <div class="reg-link-title">Ссылка для участников</div>
+    <div class="reg-link-row">
+        <input type="text" id="reg-url" value="{{ public_url }}" readonly onclick="this.select()">
+        <button type="button" class="btn-copy" id="btn-copy">Копировать</button>
+    </div>
+    <div class="reg-link-hint">
+        Отправьте ссылку участникам (мессенджер, соцсети, наклейка с QR). Регистрация открыта
+        {% if cfg.deadline %}до <b>{{ cfg.deadline }}</b>{% else %}бессрочно{% endif %},
+        зарегистрировано через форму: <b>{{ total }}</b>.
+    </div>
+    {% if qr %}
+        <div class="reg-qr">{{ qr|safe }}</div>
+        <div class="reg-qr-hint">QR-код — наведите камеру телефона</div>
+    {% endif %}
+</div>
+{% elif cfg.enabled and not public_url %}
+<div class="flash flash-error">Ссылка недоступна: не удалось определить соревнование.</div>
+{% endif %}
+
+{% if list_url %}
+<div class="reg-link-card">
+    <div class="reg-link-title">Ссылка на список участников</div>
+    <div class="reg-link-row">
+        <input type="text" id="list-url" value="{{ list_url }}" readonly onclick="this.select()">
+        <button type="button" class="btn-copy" id="btn-copy-list">Копировать</button>
+    </div>
+    <div class="reg-link-hint">
+        Публичный список: ФИО, год, город, клуб, категория — <b>без телефонов</b>.
+        На странице есть экспорт в Excel.
+        <a href="{{ url_for('reg_list', slug=current_comp_slug) }}" target="_blank"
+           style="color:#93c5fd">Открыть →</a>
+    </div>
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('registration_save') }}" class="reg-form">
+    <div class="card">
+        <label class="reg-switch">
+            <input type="checkbox" name="enabled" value="1" {% if cfg.enabled %}checked{% endif %}>
+            <span>Разрешить публичную регистрацию</span>
+        </label>
+        <div class="hint">Пока галочка снята, страница регистрации сообщает участникам, что регистрация закрыта.</div>
+    </div>
+
+    <div class="card">
+        <h3>Информация о соревновании</h3>
+        <div class="hint" style="margin-bottom:8px">
+            Этот текст участник увидит первым: дата, место, программа, взносы, что взять с собой.
+        </div>
+        <textarea name="info" rows="9" placeholder="Например:&#10;Велокросс, 2 этап&#10;22 ноября 2026, 10:00&#10;Белгород, урочище Сосновка&#10;Дистанция: 3 круга по 2 км">{{ cfg.info }}</textarea>
+        <div class="field-row">
+            <label for="deadline">Дата окончания регистрации</label>
+            <input type="date" id="deadline" name="deadline" value="{{ cfg.deadline }}">
+            <span class="hint">Пусто — регистрация без ограничения по дате.</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Поля формы</h3>
+        <div class="hint" style="margin-bottom:10px">
+            Отметьте, что участник должен заполнить, и что из этого обязательно. ФИО нужно всегда.
+        </div>
+        <table class="reg-fields">
+            <thead>
+                <tr><th>Поле</th><th>Показывать</th><th>Обязательное</th></tr>
+            </thead>
+            <tbody>
+            {% for key, label in fields %}
+                <tr>
+                    <td>{{ label }}{% if key == 'fio' %} <small class="muted">(всегда)</small>{% endif %}</td>
+                    <td>
+                        <input type="checkbox" name="on_{{ key }}" value="1"
+                               {% if cfg.fields[key].on %}checked{% endif %}
+                               {% if key == 'fio' %}disabled checked{% endif %}>
+                    </td>
+                    <td>
+                        <input type="checkbox" name="req_{{ key }}" value="1"
+                               {% if cfg.fields[key].req %}checked{% endif %}
+                               {% if key == 'fio' %}disabled checked{% endif %}>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h3>Согласие на обработку персональных данных</h3>
+        <div class="hint" style="margin-bottom:8px">
+            Этот текст участник подтверждает галочкой перед отправкой формы.
+        </div>
+        <textarea name="consent" rows="5">{{ cfg.consent }}</textarea>
+    </div>
+
+    <div class="save-row">
+        <button type="submit" class="btn-save">Сохранить настройки</button>
+    </div>
+</form>
+
+{% if entries %}
+<div class="card">
+    <div class="entries-head">
+        <h3 style="margin:0">Последние заявки — {{ total }}</h3>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <a class="link" href="{{ url_for('registrations_page') }}">📋 Весь журнал заявок →</a>
+            {% if uncategorized %}
+            <form method="post" action="{{ url_for('registration_autocat') }}" style="margin:0">
+                <button type="submit" class="btn-autocat">🎯 Подобрать категории ({{ uncategorized }})</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    <div class="tw">
+    <table class="reg-entries">
+        <thead>
+            <tr><th>Дата</th><th>ФИО</th><th>Год</th><th>Город</th><th>Клуб</th><th>Категория</th><th>Телефон</th><th>Статус</th></tr>
+        </thead>
+        <tbody>
+        {% for e in entries %}
+            <tr>
+                <td><small class="muted">{{ (e.created_at or '')[:16].replace('T', ' ') }}</small></td>
+                <td>{{ e.full_name }}</td>
+                <td>{{ e.birth_year or '' }}</td>
+                <td>{{ e.city or '' }}</td>
+                <td>{{ e.team or '' }}</td>
+                <td>{{ e.category_name or '—' }}</td>
+                <td class="mono">{{ e.phone or '' }}</td>
+                <td>
+                    {% if e.alive_id %}<span class="st-ok">{{ ('№' + e.participant_number|string) if e.participant_number else 'в списке' }}</span>
+                    {% else %}<span class="st-del">удалён</span>{% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.st-ok { color: #15803d; font-weight: 700; font-size: 13px; }
+.st-del { color: #b91c1c; font-weight: 700; font-size: 13px; }
+.reg-link-card {
+    background: linear-gradient(135deg, #1f2937, #374151); color: #f9fafb;
+    border-radius: 12px; padding: 16px 18px; margin-bottom: 16px;
+}
+.reg-link-title { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #9ca3af; margin-bottom: 8px; }
+.reg-link-row { display: flex; gap: 8px; }
+.reg-link-row input {
+    flex: 1; min-width: 0; padding: 10px 12px; border-radius: 8px; border: none;
+    font-family: ui-monospace, "Consolas", monospace; font-size: 13px; background: #111827; color: #d1fae5;
+}
+.btn-copy {
+    padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer;
+    background: #16a34a; color: #fff; font-weight: 600; font-family: inherit;
+}
+.reg-link-hint { color: #9ca3af; font-size: 12px; margin-top: 10px; line-height: 1.5; }
+.reg-qr { background: #fff; border-radius: 10px; padding: 10px; width: 168px; margin: 14px auto 6px; }
+.reg-qr svg { width: 148px; height: 148px; display: block; margin: 0 auto; }
+.reg-qr-hint { text-align: center; color: #9ca3af; font-size: 12px; }
+
+.reg-form .card,
+.card { background: #fff; border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.reg-form h3, .card h3 { margin: 0 0 10px; font-size: 14px; color: #374151; }
+.reg-form textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px;
+    font-family: inherit; font-size: 14px; line-height: 1.5; resize: vertical; box-sizing: border-box;
+}
+.reg-form textarea:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.reg-switch { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; cursor: pointer; }
+.reg-switch input { width: 18px; height: 18px; accent-color: #2563eb; }
+.field-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.field-row label { font-size: 13px; color: #374151; font-weight: 600; }
+.field-row input[type=date] { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-family: inherit; }
+.reg-fields { width: 100%; border-collapse: collapse; font-size: 14px; }
+.reg-fields th { text-align: left; font-size: 11px; text-transform: uppercase; color: #6b7280; padding: 6px 8px; }
+.reg-fields td { padding: 8px; border-top: 1px solid #eef2f6; }
+.reg-fields input[type=checkbox] { width: 18px; height: 18px; accent-color: #2563eb; }
+.reg-entries { width: 100%; border-collapse: collapse; font-size: 13px; }
+.reg-entries th { text-align: left; font-size: 11px; text-transform: uppercase; color: #6b7280; padding: 6px 8px; }
+.reg-entries td { padding: 7px 8px; border-top: 1px solid #eef2f6; }
+.save-row { display: flex; justify-content: flex-end; margin-bottom: 20px; }
+.btn-save {
+    padding: 12px 26px; border: none; border-radius: 10px; cursor: pointer;
+    background: #2563eb; color: #fff; font-size: 15px; font-weight: 600; font-family: inherit;
+}
+.btn-save:hover { background: #1d4ed8; }
+.hint { color: #6b7280; font-size: 12px; line-height: 1.5; }
+.muted { color: #6b7280; }
+.tw { overflow-x: auto; }
+.warn-box {
+    background: #fef3c7; color: #92400e; border-radius: 10px; padding: 11px 14px;
+    font-size: 13px; line-height: 1.5; margin-bottom: 14px; border-left: 4px solid #f59e0b;
+}
+.entries-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.btn-autocat {
+    padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer;
+    background: #2563eb; color: #fff; font-size: 13px; font-weight: 600; font-family: inherit;
+}
+.btn-autocat:hover { background: #1d4ed8; }
+</style>
+
+<script>
+(function () {
+    function bindCopy(btnId, inputId) {
+        var btn = document.getElementById(btnId);
+        var url = document.getElementById(inputId);
+        if (!btn || !url) return;
+        btn.addEventListener('click', function () {
+            url.select();
+            var done = false;
+            try { done = document.execCommand('copy'); } catch (e) {}
+            if (!done && navigator.clipboard) {
+                navigator.clipboard.writeText(url.value);
+                done = true;
+            }
+            btn.textContent = done ? 'Скопировано' : 'Выделено';
+            setTimeout(function () { btn.textContent = 'Копировать'; }, 1500);
+        });
+    }
+    bindCopy('btn-copy', 'reg-url');
+    bindCopy('btn-copy-list', 'list-url');
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Результаты — Хронометраж{% endblock %}
+{% block content %}
+<h2>
+    Результаты стартов
+    <span id="live-indicator" style="font-size:13px;color:#16a34a;font-weight:normal;margin-left:10px;display:none;">
+        ● автообновление
+    </span>
+</h2>
+
+<form method="get" class="toolbar" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+    {% if competition %}
+        <select name="target" onchange="this.form.submit()"
+                style="padding:8px;font-size:14px;border:1px solid #d1d5db;border-radius:6px;min-width:280px">
+            <option value="">— старт или категория —</option>
+            {% if heats %}
+                <optgroup label="Старты">
+                    {% for h in heats %}
+                        <option value="heat:{{ h.id }}"
+                                {% if selected_heat_id == h.id and not selected_cat_id %}selected{% endif %}>
+                            Старт №{{ h.heat_number }}{% if h.name %} — {{ h.name }}{% endif %}
+                            ({% if h.status == 'running' %}идёт{% else %}завершён{% endif %})
+                        </option>
+                    {% endfor %}
+                </optgroup>
+            {% endif %}
+            {% if categories %}
+                <optgroup label="Категории">
+                    {% for c in categories %}
+                        <option value="cat:{{ c.id }}"
+                                {% if selected_cat_id == c.id %}selected{% endif %}>
+                            {{ c.name }}
+                        </option>
+                    {% endfor %}
+                </optgroup>
+            {% endif %}
+        </select>
+
+        <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+                      padding:6px 12px; border:1px solid #d1d5db; border-radius:6px; background:#fff; font-size:14px;">
+            <input type="checkbox" id="auto-chk" {% if include_auto %}checked{% endif %}
+                   onchange="document.getElementById('auto-val').value = this.checked ? '1' : '0'; this.form.submit();">
+            <input type="hidden" name="include_auto" id="auto-val" value="{{ '1' if include_auto else '0' }}">
+            Учитывать автохронометраж
+        </label>
+
+        {% if target %}
+            <a href="{{ url_for('results_export', cid=competition.id, target=target, include_auto='1' if include_auto else '0') }}"
+               style="display:inline-flex; align-items:center; gap:6px; padding:8px 16px; background:#16a34a; color:#fff; text-decoration:none; border-radius:6px; font-weight:600; font-size:14px;">
+                📥 Экспорт в Excel
+            </a>
+        {% endif %}
+    {% endif %}
+</form>
+
+{% if not competition %}
+    <div class="empty">Выберите соревнование.</div>
+{% elif not target %}
+    <div class="empty">Выберите старт или категорию для детализации.</div>
+{% else %}
+
+    {% if qr_svg %}
+        <div class="qr-card">
+            <div class="qr-code">{{ qr_svg|safe }}</div>
+            <div class="qr-text">
+                <b>Результаты на телефоне</b>
+                <span>Наведите камеру телефона на код — откроется эта же страница с результатами.</span>
+                <span class="qr-url mono">{{ public_url }}</span>
+            </div>
+        </div>
+    {% endif %}
+
+    {% if info.mode == 'heat' %}
+        <h3>
+            Старт №{{ info.heat.heat_number }}
+            {% if info.heat.name %} — {{ info.heat.name }}{% endif %}
+            <small style="color:#6b7280;font-weight:400">
+                ({% if info.heat.status == 'running' %}идёт{% else %}завершён{% endif %})
+            </small>
+        </h3>
+    {% elif info.mode == 'category' and info.category %}
+        <h3>
+            Категория: {{ info.category.name }}
+            <small style="color:#6b7280;font-weight:400">
+                (Старт №{{ info.heat.heat_number }})
+            </small>
+        </h3>
+    {% endif %}
+
+    <div id="results-container">
+        {% include '_results_details.html' %}
+    </div>
+
+{% endif %}
+
+<style>
+.result-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    margin-bottom: 20px;
+    overflow: hidden;
+    border-left: 4px solid #2563eb;
+}
+.result-cat-header {
+    padding: 10px 16px;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+.result-cat-header b { font-size: 15px; }
+.result-cat-header small { color: #6b7280; }
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+.results-table th, .results-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #e5e7eb;
+}
+.results-table th {
+    background: #f9fafb;
+    color: #6b7280;
+    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 600;
+}
+.results-table tr:last-child td { border-bottom: none; }
+.row-ok     { background: #f0fdf4; }
+.row-dnf    { background: #fef2f2; }
+.row-lapped { background: #fffbeb; }
+.row-dns    { background: #f3f4f6; color: #6b7280; }
+
+/* QR на публичную страницу */
+.qr-card {
+    display: flex; gap: 16px; align-items: center;
+    background: #fff; border-radius: 10px; padding: 14px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 16px;
+    border-left: 4px solid #2563eb;
+}
+.qr-code svg { display: block; width: 116px; height: 116px; }
+.qr-text { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: #374151; min-width: 0; }
+.qr-text b { font-size: 15px; }
+.qr-text span { color: #6b7280; font-size: 13px; }
+.qr-url { color: #2563eb; word-break: break-all; }
+@media (max-width: 700px) {
+    .qr-card { flex-direction: column; text-align: center; }
+}
+</style>
+
+{% if target %}
+<script>
+(function () {
+    const POLL_INTERVAL = 10000; // 10 секунд
+    const container = document.getElementById('results-container');
+    const indicator = document.getElementById('live-indicator');
+    const CID = {{ competition.id if competition else 'null' }};
+    const TARGET = {{ target|tojson }};
+    const INCLUDE_AUTO = {{ 'true' if include_auto else 'false' }};
+    let isFetching = false;
+    let lastHtml = container ? container.innerHTML.trim() : '';
+
+    if (indicator) indicator.style.display = 'inline';
+
+    async function refreshResults() {
+        if (isFetching || !CID || !TARGET) return;
+        isFetching = true;
+
+        try {
+            const resp = await fetch(
+                `/results/details?cid=${CID}&target=${encodeURIComponent(TARGET)}&include_auto=${INCLUDE_AUTO ? '1' : '0'}`,
+                { cache: 'no-store' });
+            if (resp.ok) {
+                const html = (await resp.text()).trim();
+                if (html === lastHtml) return;   // ничего не изменилось — не перерисовываем
+                lastHtml = html;
+                container.innerHTML = html;
+
+                if (indicator) {
+                    indicator.textContent = '● обновлено только что';
+                    indicator.style.color = '#16a34a';
+                    setTimeout(() => {
+                        indicator.textContent = '● автообновление';
+                        indicator.style.color = '#16a34a';
+                    }, 2000);
+                }
+            }
+        } catch (e) {
+            if (indicator) {
+                indicator.textContent = '⚠ ошибка обновления';
+                indicator.style.color = '#dc2626';
+            }
+        } finally {
+            isFetching = false;
+        }
+    }
+
+    setInterval(refreshResults, POLL_INTERVAL);
+})();
+</script>
+{% endif %}
+{% endblock %}

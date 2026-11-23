@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Сейчас идёт — Хронометраж{% endblock %}
+{% block content %}
+<h2>Что сейчас идёт <small>— {{ competition.name }}</small></h2>
+
+{% if not competition %}
+    <div class="empty">Выберите соревнование.</div>
+{% else %}
+    <div class="dash-bar">
+        <a class="to-manual" href="{{ url_for('manual_page') }}">📱 Ручной хронометраж →</a>
+        <span id="live-indicator" class="live">● обновляется</span>
+    </div>
+
+    <div id="dashboard-body">
+        {% include '_dashboard_heats.html' %}
+    </div>
+{% endif %}
+
+<style>
+.heat-card {
+    background: #fff; border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    border-left: 4px solid #f59e0b;
+}
+.heat-top {
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.heat-title { font-size: 18px; font-weight: 700; }
+.heat-finish-form { margin-left: auto; margin: 0; }
+.heat-finish-form button { background: #f59e0b; }
+.heat-finish-form button:hover { background: #d97706; }
+
+.dash-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 10px; margin: -6px 0 8px;
+}
+.live { color: #16a34a; font-size: 12px; }
+.to-manual { font-size: 13px; font-weight: 600; color: #2563eb; text-decoration: none; }
+.to-manual:hover { text-decoration: underline; }
+
+.dash-stats { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.cat-head {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 16px 0 8px; padding-top: 10px; border-top: 1px solid #eef2f7;
+}
+.heat-top + .cat-head { border-top: none; padding-top: 0; margin-top: 2px; }
+.cat-name { font-weight: 700; font-size: 14px; color: #374151; }
+.cat-head .stat { font-size: 12px; padding: 2px 9px; }
+.stat {
+    font-size: 13px; color: #374151; background: #f3f4f6;
+    border-radius: 999px; padding: 3px 11px; white-space: nowrap;
+}
+.stat b { color: #111827; }
+.stat.running { background: #fef3c7; color: #92400e; }
+.stat.running b { color: #92400e; }
+.stat.done { background: #dcfce7; color: #166534; }
+.stat.done b { color: #166534; }
+.stat.dnf { background: #fee2e2; color: #991b1b; }
+.stat.dnf b { color: #991b1b; }
+.stat.lapped { background: #fef3c7; color: #92400e; }
+.stat.lapped b { color: #92400e; }
+
+.row-ok      { background: #f0fdf4; }
+.row-running { background: #fffbeb; }
+.row-dnf     { background: #fef2f2; }
+.row-lapped  { background: #fffbeb; }
+.num { font-weight: 700; }
+.res-ok { color: #16a34a; font-weight: 700; }
+.gap { color: #b45309; }
+.gap-leader { color: #16a34a; font-weight: 600; }
+.gap-laps { color: #b45309; font-weight: 600; }
+.gap-time { color: #b45309; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.tag-dnf    { background: #fee2e2; color: #991b1b; }
+.tag-lapped { background: #fef3c7; color: #92400e; }
+</style>
+
+<script>
+function fmtElapsed(ms) {
+    if (ms < 0) ms = 0;
+    const totalSeconds = Math.floor(ms / 1000);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    const p = (n, w) => String(n).padStart(w, '0');
+    return `${p(h, 2)}:${p(m, 2)}:${p(s, 2)}`;
+}
+
+function tick() {
+    const now = Date.now();
+    document.querySelectorAll('[data-start-ms]').forEach(el => {
+        el.textContent = fmtElapsed(now - parseInt(el.dataset.startMs, 10));
+    });
+}
+setInterval(tick, 200);
+tick();
+
+(function () {
+    const box = document.getElementById('dashboard-body');
+    if (!box) return;
+    const CID = {{ competition.id if competition else 'null' }};
+    if (!CID) return;
+    const indicator = document.getElementById('live-indicator');
+    let lastHtml = box.innerHTML.trim();
+
+    async function refresh() {
+        try {
+            const r = await fetch('/dashboard/data?cid=' + CID, { cache: 'no-store' });
+            if (!r.ok) return;
+            const html = await r.text();
+            if (html.trim() === lastHtml) return;   // ничего не изменилось — не трогаем таймеры
+            lastHtml = html.trim();
+            box.innerHTML = html;
+            tick();
+            if (window.wrapTables) window.wrapTables(box);
+            if (indicator) {
+                indicator.textContent = '● обновлено ' + new Date().toTimeString().slice(0, 8);
+            }
+        } catch (e) { /* сеть недоступна — ждём следующего тика */ }
+    }
+
+    setInterval(refresh, 3000);
+})();
+</script>
+{% endblock %}

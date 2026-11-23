@@ -1,0 +1,42 @@
+# Пример запуска за обратным прокси с TLS (nginx/Caddy терминирует HTTPS).
+# Скопируйте в docker-compose.yml и задайте свои значения.
+services:
+  chrono:
+    build: .
+    image: chrono:latest
+    container_name: chrono-site
+    restart: unless-stopped
+    environment:
+      CHRONO_DB: /data/chrono.db
+      CHRONO_LOG_DIR: /data/log
+      CHRONO_CERT_DIR: /data/cert
+      CHRONO_HTTP_PORT: "8000"
+      CHRONO_HTTPS: "0"
+      CHRONO_PROXY: "1"
+      CHRONO_PUBLIC_URL: ${CHRONO_PUBLIC_URL:-https://example.org}
+      # обязательно задайте свой ключ: python -c "import secrets;print(secrets.token_hex(32))"
+      CHRONO_SECRET_KEY: ${CHRONO_SECRET_KEY:?задайте CHRONO_SECRET_KEY}
+      CHRONO_USER: ${CHRONO_USER:-admin}
+      CHRONO_PASS: ${CHRONO_PASS:?задайте пароль администратора}
+      TZ: Europe/Moscow
+    expose:
+      - "8000"
+    volumes:
+      - ${CHRONO_DATA_DIR:-./data}:/data
+    networks:
+      - edge
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/', timeout=5).status == 200 else 1)"
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 25s
+
+networks:
+  edge:
+    external: true
+    name: edge
