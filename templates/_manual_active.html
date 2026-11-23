@@ -38,6 +38,7 @@
                         <span style="font-weight:600;color:#4b5563;">Ст. №{{ r.heat_number }}</span>
                         · {{ r.category_name }}
                         {% if competition and competition.format == 'itt' %}
+                            · Круги: {{ laps_done }} / {{ r.planned_laps or r.laps_total }}
                             · <span class="m-eta" style="font-weight:700">⏱ в пути: {{ r.elapsed_display }}</span>
                             · старт {{ (r.start_time or '')[11:19] }}
                         {% else %}

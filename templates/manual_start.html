@@ -27,6 +27,7 @@
         .now-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; font-weight: 700; }
         .now-number { font-size: 64px; line-height: 1.05; font-weight: 900; color: #111827; font-variant-numeric: tabular-nums; }
         .now-name { font-size: 18px; font-weight: 700; color: #374151; margin-top: 2px; }
+        .now-laps { font-size: 15px; color: #6b7280; margin-top: 2px; }
         .now-cat { font-size: 13px; color: #6b7280; margin-top: 2px; }
         .countdown {
             margin-top: 10px; font-size: 44px; font-weight: 900; font-variant-numeric: tabular-nums;
@@ -125,6 +126,7 @@
             <div class="now-number" id="now-number">{{ state.next.number if state.next else '—' }}</div>
             <div class="now-name" id="now-name">{{ state.next.name if state.next else 'Все стартовали' }}</div>
             <div class="now-cat" id="now-cat">{{ state.next.category if state.next else '' }}</div>
+            <div class="now-laps" id="now-laps">{% if state.next %}Круги: {{ state.next.laps }}{% endif %}</div>
             <div class="countdown idle" id="countdown">…</div>
             <button type="button" class="start-btn" id="start-btn" {{ 'disabled' if not state.next }}>СТАРТ</button>
             <button type="button" class="start-btn begin-btn" id="begin-btn" hidden>▶ Начать старт</button>
@@ -174,6 +176,7 @@
         beginBtn: document.getElementById('begin-btn'),
         previewNote: document.getElementById('preview-note'),
         orderMode: document.getElementById('order-mode'),
+        laps: document.getElementById('now-laps'),
         toast: document.getElementById('toast')
     };
 
@@ -233,6 +236,7 @@
         el.num.textContent = next ? next.number : '—';
         el.name.textContent = next ? next.name : 'Все стартовали';
         el.cat.textContent = next ? (next.category || '') : '';
+        if (el.laps) el.laps.textContent = next ? ('Круги: ' + (next.laps || 1)) : '';
         el.start.disabled = !running || !next;
         el.skip.disabled = !running || !next;
         if (el.beginBtn) el.beginBtn.hidden = running;

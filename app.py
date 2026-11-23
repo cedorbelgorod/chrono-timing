@@ -2243,7 +2243,7 @@ def _manual_start_queue(conn, hid):
         order_by = 'COALESCE(hp.sort_order, 1000000), p.number'
     return conn.execute(
         'SELECT hp.participant_id, hp.sort_order, p.number, p.full_name, '
-        '       p.category_id, c.name AS category_name '
+        '       p.category_id, c.name AS category_name, COALESCE(c.laps_total, 1) AS laps_total '
         'FROM heat_participants hp '
         'JOIN participants p ON p.id = hp.participant_id '
         'LEFT JOIN categories c ON c.id = p.category_id '
@@ -2311,7 +2311,8 @@ def _manual_start_state(conn, cid):
     state['finished'] = len(finished)
     state['dns'] = len(dns)
     state['queue'] = [{'pid': r['participant_id'], 'number': r['number'], 'name': r['full_name'],
-                       'category': r['category_name'] or ''} for r in waiting[:8]]
+                       'category': r['category_name'] or '',
+                       'laps': r['laps_total'] or 1} for r in waiting[:8]]
     state['next'] = state['queue'][0] if state['queue'] else None
 
     last_rows = conn.execute(
@@ -2361,7 +2362,8 @@ def _heat_start_rows(conn, heat):
     rows = conn.execute(
         'SELECT hp.participant_id, hp.status AS hp_status, hp.sort_order, '
         '       p.number, p.full_name, p.birth_year, p.city, p.team, '
-        "       COALESCE(c.name, '') AS category_name, c.sort_order AS cat_sort, "
+        "       COALESCE(c.name, '') AS category_name, COALESCE(c.laps_total, 1) AS category_laps, "
+        '       c.sort_order AS cat_sort, '
         '       r.id AS race_id, r.status AS race_status, r.start_time, r.finish_time '
         'FROM heat_participants hp '
         'JOIN participants p ON p.id = hp.participant_id '
@@ -2415,6 +2417,7 @@ def _heat_start_rows(conn, heat):
             'full_name': r['full_name'],
             'birth_year': r['birth_year'],
             'category': r['category_name'] or '',
+            'laps': r['category_laps'] or 1,
             'city': r['city'] or '',
             'team': r['team'] or '',
             'status': status,
@@ -2562,10 +2565,11 @@ def _render_startlist_pdf(comp, data):
                            st(8.5, None, TA_CENTER)))
     story.append(Spacer(1, 4 * mm))
 
-    widths_mm = [11, 13, 47, 11, 30, 20, 21, 19, 14]
+    widths_mm = [11, 13, 36, 11, 26, 12, 18, 20, 19, 20]
     scale = 186.0 / sum(widths_mm)
     col_w = [w * scale * mm for w in widths_mm]
-    head = ['№<br/>п/п', 'Номер', 'ФИО', 'Год', 'Группа', 'Город', 'Команда', 'Время<br/>старта', 'Прим.']
+    head = ['№<br/>п/п', 'Номер', 'ФИО', 'Год', 'Группа', 'Круги',
+            'Город', 'Команда', 'Время<br/>старта', 'Прим.']
     head_style = st(8, bold, TA_CENTER, 9.5)
     cell = st(8, None, TA_LEFT, 9.5)
     cell_c = st(8, None, TA_CENTER, 9.5)
@@ -2584,6 +2588,7 @@ def _render_startlist_pdf(comp, data):
             Paragraph(esc(r['full_name']), cell),
             Paragraph(str(r['birth_year'] or ''), cell_c),
             Paragraph(esc(r['category']), cell),
+            Paragraph(str(r.get('laps') or 1), cell_c),
             Paragraph(esc(r['city']), cell),
             Paragraph(esc(r['team']), cell),
             Paragraph(esc(r['actual_display'] or r['planned_display'] or '—'), cell_c),
@@ -2665,7 +2670,39 @@ def _build_results_detail(conn, hid, cat_filter_id=None, include_auto=True):
             rows_data.append({'race': r, 'laps': lap_cells, 'total_display': total_display, 'gap_display': gap,
                               'start_display': (r['start_time'] or '')[11:19],
                               'finish_display': ((r.get('finish_time') or '')[11:19] if r['status'] == 'ok' else ''),
+                              'laps_done': len(r['laps']),
+                              'laps_total': r.get('planned_laps') or r['laps_total'] or 1,
                               'place': sum(1 for x in rows_data if x['race']['status'] == 'ok') + (1 if r['status'] == 'ok' else 0)})
+
+        # «Место (сейчас)»: внутри категории, по возрастанию времени —
+        # финишировавшие по итоговому, едущие по «в пути»
+        now_dt = datetime.now()
+        for x in rows_data:
+            race = x['race']
+            secs = None
+            if race['status'] == 'ok':
+                st = race.get('sort_time')
+                if st is not None and st != float('inf'):
+                    secs = st
+                elif race.get('finish_time') and race.get('start_time'):
+                    try:
+                        secs = (datetime.fromisoformat(race['finish_time'])
+                                - datetime.fromisoformat(race['start_time'])).total_seconds()
+                    except (TypeError, ValueError):
+                        secs = None
+            elif race['status'] == 'running' and race.get('start_time'):
+                try:
+                    secs = (now_dt - datetime.fromisoformat(race['start_time'])).total_seconds()
+                except (TypeError, ValueError):
+                    secs = None
+            x['live_seconds'] = secs
+        ranked = sorted([x for x in rows_data if x['live_seconds'] is not None],
+                        key=lambda x: (x['live_seconds'], x['race']['number'] or 0))
+        for i, x in enumerate(ranked, start=1):
+            x['place_now'] = i
+        for x in rows_data:
+            x.setdefault('place_now', None)
+
         blocks.append({'category': cat, 'laps_total': max_laps, 'rows': rows_data, 'format': heat_fmt})
     return sorted(blocks, key=lambda x: (x['category']['name'] or '').lower())
 
@@ -5220,7 +5257,7 @@ def _start_heat(conn, h):
             # разделка: заезд создаётся в момент старта участника, здесь — только DNS
             if is_itt and race_status == 'running':
                 continue
-            laps = 1 if is_itt else p['laps_total']
+            laps = p['laps_total'] or 1
             conn.execute('INSERT INTO races (participant_id, competition_id, heat_id, laps_total, planned_laps, start_time, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
                          (p['participant_id'], cid, hid, laps, laps, now_iso, race_status))
         if active_count == 0:
@@ -5463,7 +5500,7 @@ def startlist_xlsx(hid):
         meta.append(f'участников {data["total"]}')
         ws.append([' · '.join(meta)])
         ws.append([])
-        headers = ['№ п/п', 'Номер', 'ФИО', 'Год', 'Группа', 'Город', 'Команда', 'Время старта', 'Прим.']
+        headers = ['№ п/п', 'Номер', 'ФИО', 'Год', 'Группа', 'Круги', 'Город', 'Команда', 'Время старта', 'Прим.']
         ws.append(headers)
         head_row = ws.max_row
         for c in range(1, len(headers) + 1):
@@ -5482,12 +5519,13 @@ def startlist_xlsx(hid):
                 r['full_name'],
                 r['birth_year'] or '',
                 r['category'],
+                r.get('laps') or 1,
                 r['city'],
                 r['team'],
                 r['actual_display'] or r['planned_display'] or '',
                 note,
             ])
-        widths = [7, 8, 32, 7, 20, 16, 18, 13, 14]
+        widths = [7, 8, 30, 7, 20, 8, 16, 18, 13, 14]
         for i, w in enumerate(widths, start=1):
             ws.column_dimensions[get_column_letter(i)].width = w
         buf = io.BytesIO()
@@ -5692,7 +5730,7 @@ def results_export():
             ws = wb.create_sheet(title=safe_title)
             is_itt = block.get('format') == 'itt'
             if is_itt:
-                headers = ["Место", "№", "ФИО", "Год рожд.", "Пол", "Старт", "Финиш", "Время", "Отставание"]
+                headers = ["Место", "№", "ФИО", "Год рожд.", "Пол", "Круги", "Старт", "Финиш", "Время", "Отставание"]
             else:
                 headers = ["№", "ФИО", "Год рожд.", "Пол"] + [f"Круг {i}" for i in range(1, block['laps_total'] + 1)] + ["Итог", "Отставание"]
             ws.append(headers)
@@ -5704,6 +5742,7 @@ def results_export():
                     row_vals = [row_data.get('place') if r['status'] == 'ok' else '',
                                 r['number'], r['full_name'], r['birth_year'] or '',
                                 'М' if r['gender'] == 'M' else ('Ж' if r['gender'] == 'F' else ''),
+                                f"{row_data.get('laps_done', 0)} / {row_data.get('laps_total', 1)}",
                                 row_data.get('start_display') or '', row_data.get('finish_display') or '',
                                 row_data['total_display'] or '', row_data['gap_display'] or '']
                     ws.append(row_vals)
@@ -6052,8 +6091,8 @@ def manual_start_action():
             with conn:
                 conn.execute(
                     'INSERT INTO races (participant_id, competition_id, heat_id, laps_total, planned_laps, start_time, status) '
-                    "VALUES (?, ?, ?, 1, 1, ?, 'dns')",
-                    (nxt['participant_id'], cid, hid, now_iso))
+                    "VALUES (?, ?, ?, ?, ?, ?, 'dns')",
+                    (nxt['participant_id'], cid, hid, nxt['laps_total'] or 1, nxt['laps_total'] or 1, now_iso))
                 conn.execute("UPDATE heat_participants SET status = 'dns' WHERE heat_id = ? AND participant_id = ?",
                              (hid, nxt['participant_id']))
                 _log_timing(conn, 'manual', 'skip', True, competition_id=cid, heat_id=hid,
@@ -6068,8 +6107,8 @@ def manual_start_action():
         with conn:
             conn.execute(
                 'INSERT INTO races (participant_id, competition_id, heat_id, laps_total, planned_laps, start_time, status) '
-                "VALUES (?, ?, ?, 1, 1, ?, 'running')",
-                (nxt['participant_id'], cid, hid, now_iso))
+                "VALUES (?, ?, ?, ?, ?, ?, 'running')",
+                (nxt['participant_id'], cid, hid, nxt['laps_total'] or 1, nxt['laps_total'] or 1, now_iso))
             _log_timing(conn, 'manual', 'start', True, competition_id=cid, heat_id=hid,
                         participant_id=nxt['participant_id'], number=nxt['number'],
                         full_name=nxt['full_name'], user_login=judge, detail='Старт (разделка)')
@@ -6349,6 +6388,7 @@ def _build_protocol(conn, cid):
         for r in prepared:
             r['start_display'] = (r['start_time'] or '')[11:19]
             r['finish_display'] = (r.get('finish_time') or '')[11:19] if r['status'] == 'ok' else ''
+            r['laps_display'] = str(r.get('planned_laps') or r.get('laps_total') or 1)
             if r['status'] == 'ok':
                 place += 1
                 r['place'] = place
@@ -6585,7 +6625,8 @@ def _render_protocol_pdf(comp, data):
     # «Отставание» ≈ 18,8 мм, «1:05:21,21» ≈ 16,8 мм — слова не должны рваться
     col_w = [14, 9, 52, 15, 19, 22, 19, 23, 13]  # мм: масса
     if is_itt:
-        col_w = [13, 9, 30, 15, 18, 18, 15, 15, 19, 21, 13]  # + Старт, Финиш
+        # Место, №, ФИО, Год, Город, Команда, Круги, Старт, Финиш, Время, Отставание, V.ср
+        col_w = [12, 8, 26, 12, 18, 17, 12, 15, 15, 19, 21, 11]
     # масштабируем под доступную ширину
     total_mm = sum(col_w)
     col_w = [w * W / total_mm for w in col_w]
@@ -6593,7 +6634,7 @@ def _render_protocol_pdf(comp, data):
     def race_table(rows):
         names = ['Место', '№', 'ФИО', 'Год<br/>рожд.', 'Город', 'Команда']
         if is_itt:
-            names += ['Старт', 'Финиш']
+            names += ['Круги', 'Старт', 'Финиш']
         names += ['Общее<br/>время', 'Отставание', 'V.ср<br/>км/ч']
         header = [Paragraph(h, head_c) for h in names]
         body = []
@@ -6609,6 +6650,7 @@ def _render_protocol_pdf(comp, data):
             ]
             if is_itt:
                 cells += [
+                    Paragraph(str(race.get('laps_display') or ''), cell_c),
                     Paragraph(str(race.get('start_display') or ''), cell_c),
                     Paragraph(str(race.get('finish_display') or ''), cell_c),
                 ]

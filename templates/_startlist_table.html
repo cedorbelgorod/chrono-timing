@@ -1,7 +1,8 @@
 <table class="slt">
     <colgroup>
         <col class="c-pos"><col class="c-num"><col class="c-name"><col class="c-year">
-        <col class="c-cat"><col class="c-city"><col class="c-team"><col class="c-time"><col class="c-note">
+        <col class="c-cat"><col class="c-laps"><col class="c-city"><col class="c-team">
+        <col class="c-time"><col class="c-note">
     </colgroup>
     <thead>
         <tr>
@@ -10,6 +11,7 @@
             <th>ФИО</th>
             <th>Год</th>
             <th>Группа</th>
+            <th>Круги</th>
             <th>Город</th>
             <th>Команда</th>
             <th>Время старта</th>
@@ -24,6 +26,7 @@
             <td>{{ r.full_name }}</td>
             <td>{{ r.birth_year or '' }}</td>
             <td>{{ r.category or '' }}</td>
+            <td class="mono">{{ r.laps or 1 }}</td>
             <td>{{ r.city or '' }}</td>
             <td>{{ r.team or '' }}</td>
             <td class="mono">{{ r.actual_display or r.planned_display or '—' }}</td>
