@@ -1051,7 +1051,7 @@ _swrfid_logger = _make_file_logger('swrfid', os.path.join(LOG_DIR, 'swrfid.log')
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 logging.getLogger('werkzeug').propagate = False
 
-_NOISY_PATHS = {'/manual/active', '/auto/details', '/auto/detail_rows', '/auto/log', '/results/details', '/finish-screen/data'}
+_NOISY_PATHS = {'/manual/active', '/auto/detail_rows', '/auto/log', '/results/details', '/finish-screen/data'}
 
 @app.after_request
 def _log_request(response):
@@ -1108,11 +1108,6 @@ PROTOCOL_DEFAULTS = {
     'proto_chief_secretary': '',
     'proto_track_name': '',
     'proto_track_reg': '',
-    'proto_hd': '',
-    'proto_ms': '',
-    'proto_ts': '',
-    'proto_lap_length': '',
-    'proto_laps': '',
     'proto_route_length': '',
     'proto_weather_start': '',
     'proto_weather_end': '',
@@ -1267,18 +1262,21 @@ def init_db(path=None):
                 role TEXT NOT NULL DEFAULT 'judge',
                 created_at TEXT NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS competitions (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS competitions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+                format TEXT NOT NULL DEFAULT 'mass'
+            );
             CREATE TABLE IF NOT EXISTS categories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, competition_id INTEGER NOT NULL, name TEXT NOT NULL,
                 laps_total INTEGER NOT NULL DEFAULT 1, gender TEXT, year_from INTEGER, year_to INTEGER,
-                sort_order INTEGER,
+                sort_order INTEGER, lap_length TEXT, route_length TEXT, hd TEXT, ms TEXT, ts TEXT,
                 FOREIGN KEY (competition_id) REFERENCES competitions(id) ON DELETE CASCADE,
                 UNIQUE (competition_id, name)
             );
             CREATE TABLE IF NOT EXISTS participants (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, competition_id INTEGER NOT NULL, number INTEGER,
-                full_name TEXT NOT NULL, birth_year INTEGER, category_id INTEGER, gender TEXT, rfid_tag TEXT,
-                city TEXT, team TEXT, phone TEXT, consent_at TEXT, reg_source TEXT, legacy_number INTEGER,
+                full_name TEXT NOT NULL, birth_year INTEGER, category_id INTEGER, gender TEXT,
+                city TEXT, team TEXT, phone TEXT, consent_at TEXT, reg_source TEXT,
                 FOREIGN KEY (competition_id) REFERENCES competitions(id) ON DELETE CASCADE,
                 FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT, UNIQUE (competition_id, number)
             );
@@ -1336,6 +1334,7 @@ def init_db(path=None):
             );
             CREATE TABLE IF NOT EXISTS heat_participants (
                 heat_id INTEGER NOT NULL, participant_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'active',
+                sort_order INTEGER,
                 PRIMARY KEY (heat_id, participant_id), FOREIGN KEY (heat_id) REFERENCES heats(id) ON DELETE CASCADE,
                 FOREIGN KEY (participant_id) REFERENCES participants(id) ON DELETE CASCADE
             );
@@ -1360,131 +1359,6 @@ def init_db(path=None):
         ''')
         _create_timing_log(conn)
 
-        def _cols(table): return [r['name'] for r in conn.execute(f'PRAGMA table_info({table})').fetchall()]
-
-        pcols = _cols('participants')
-        if 'category_id' not in pcols: conn.execute('ALTER TABLE participants ADD COLUMN category_id INTEGER')
-        if 'gender' not in pcols: conn.execute('ALTER TABLE participants ADD COLUMN gender TEXT')
-        if 'rfid_tag' not in pcols: conn.execute('ALTER TABLE participants ADD COLUMN rfid_tag TEXT')
-        if 'city' not in pcols: conn.execute('ALTER TABLE participants ADD COLUMN city TEXT')
-        if 'team' not in pcols: conn.execute('ALTER TABLE participants ADD COLUMN team TEXT')
-        if 'phone' not in pcols: conn.execute('ALTER TABLE participants ADD COLUMN phone TEXT')
-        if 'consent_at' not in pcols: conn.execute('ALTER TABLE participants ADD COLUMN consent_at TEXT')
-        if 'reg_source' not in pcols: conn.execute('ALTER TABLE participants ADD COLUMN reg_source TEXT')
-
-        # --- ID и номер разделены: номер выдаётся на старте и может отсутствовать ---
-        pinfo = conn.execute('PRAGMA table_info(participants)').fetchall()
-        number_notnull = any(r['name'] == 'number' and r['notnull'] for r in pinfo)
-        has_legacy = any(r['name'] == 'legacy_number' for r in pinfo)
-        if number_notnull or not has_legacy:
-            print('→ миграция участников: номер отделён от ID, старые номера сохранены в legacy_number', flush=True)
-            conn.commit()
-            conn.execute('PRAGMA foreign_keys = OFF')
-            try:
-                conn.executescript('''
-                    CREATE TABLE participants_new (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        competition_id INTEGER NOT NULL,
-                        number INTEGER,
-                        full_name TEXT NOT NULL,
-                        birth_year INTEGER,
-                        category_id INTEGER,
-                        gender TEXT,
-                        rfid_tag TEXT,
-                        city TEXT,
-                        team TEXT,
-                        phone TEXT,
-                        consent_at TEXT,
-                        reg_source TEXT,
-                        legacy_number INTEGER,
-                        FOREIGN KEY (competition_id) REFERENCES competitions(id) ON DELETE CASCADE,
-                        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT,
-                        UNIQUE (competition_id, number)
-                    );
-                    INSERT INTO participants_new
-                        (id, competition_id, number, full_name, birth_year, category_id, gender, rfid_tag,
-                         city, team, phone, consent_at, reg_source, legacy_number)
-                    SELECT id, competition_id, NULL, full_name, birth_year, category_id, gender, rfid_tag,
-                           city, team, phone, consent_at, reg_source, number
-                    FROM participants;
-                    DROP TABLE participants;
-                    ALTER TABLE participants_new RENAME TO participants;
-                ''')
-            finally:
-                conn.execute('PRAGMA foreign_keys = ON')
-            conn.commit()
-
-        # уже существующие саморегистрации переносим в журнал (однократно)
-        try:
-            if conn.execute('SELECT COUNT(*) FROM registrations').fetchone()[0] == 0:
-                conn.execute('''
-                    INSERT INTO registrations (competition_id, participant_id, full_name, birth_year,
-                        gender, city, team, phone, category_id, category_name, consent_at, created_at)
-                    SELECT p.competition_id, p.id, p.full_name, p.birth_year, p.gender, p.city, p.team,
-                           p.phone, p.category_id, c.name, p.consent_at,
-                           COALESCE(p.consent_at, datetime('now'))
-                    FROM participants p LEFT JOIN categories c ON c.id = p.category_id
-                    WHERE p.reg_source = 'public'
-                ''')
-                conn.commit()
-        except sqlite3.Error:
-            pass
-
-        ccols = _cols('categories')
-        if 'lap_length' not in ccols: conn.execute('ALTER TABLE categories ADD COLUMN lap_length TEXT')
-        if 'route_length' not in ccols: conn.execute('ALTER TABLE categories ADD COLUMN route_length TEXT')
-        if 'hd' not in ccols: conn.execute('ALTER TABLE categories ADD COLUMN hd TEXT')
-        if 'ms' not in ccols: conn.execute('ALTER TABLE categories ADD COLUMN ms TEXT')
-        if 'ts' not in ccols: conn.execute('ALTER TABLE categories ADD COLUMN ts TEXT')
-        if 'gender' not in ccols: conn.execute('ALTER TABLE categories ADD COLUMN gender TEXT')
-        if 'year_from' not in ccols: conn.execute('ALTER TABLE categories ADD COLUMN year_from INTEGER')
-        if 'year_to' not in ccols: conn.execute('ALTER TABLE categories ADD COLUMN year_to INTEGER')
-        if 'sort_order' not in ccols:
-            conn.execute('ALTER TABLE categories ADD COLUMN sort_order INTEGER')
-        # порядок сортировки по умолчанию = ID категории (менять можно в таблице категорий)
-        conn.execute('UPDATE categories SET sort_order = id WHERE sort_order IS NULL')
-
-        hcols = _cols('heats')
-        if hcols and 'name' not in hcols: conn.execute('ALTER TABLE heats ADD COLUMN name TEXT')
-        if hcols and 'finish_on_leader' not in hcols: conn.execute('ALTER TABLE heats ADD COLUMN finish_on_leader INTEGER NOT NULL DEFAULT 0')
-        if hcols and 'min_lap_time' not in hcols: conn.execute('ALTER TABLE heats ADD COLUMN min_lap_time REAL NOT NULL DEFAULT 5')
-        if hcols and 'auto_enabled' not in hcols: conn.execute('ALTER TABLE heats ADD COLUMN auto_enabled INTEGER NOT NULL DEFAULT 0')
-        if hcols and 'format' not in hcols:
-            conn.execute("ALTER TABLE heats ADD COLUMN format TEXT NOT NULL DEFAULT 'mass'")
-        if hcols and 'start_order' not in hcols:
-            conn.execute("ALTER TABLE heats ADD COLUMN start_order TEXT NOT NULL DEFAULT 'number'")
-
-        compcols = _cols('competitions')
-        if compcols and 'format' not in compcols:
-            conn.execute("ALTER TABLE competitions ADD COLUMN format TEXT NOT NULL DEFAULT 'mass'")
-
-        hpcols = _cols('heat_participants')
-        if hpcols and 'status' not in hpcols: conn.execute("ALTER TABLE heat_participants ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
-        if hpcols and 'sort_order' not in hpcols:
-            conn.execute('ALTER TABLE heat_participants ADD COLUMN sort_order INTEGER')
-
-        rcols = _cols('races')
-        if 'heat_id' not in rcols: conn.execute('ALTER TABLE races ADD COLUMN heat_id INTEGER')
-        if 'status' not in rcols: conn.execute("ALTER TABLE races ADD COLUMN status TEXT NOT NULL DEFAULT 'running'")
-        if 'laps_behind' not in rcols: conn.execute('ALTER TABLE races ADD COLUMN laps_behind INTEGER NOT NULL DEFAULT 0')
-        if 'planned_laps' not in rcols:
-            conn.execute('ALTER TABLE races ADD COLUMN planned_laps INTEGER')
-            # план дистанции = круги категории участника; для безкатегорийных — как было
-            conn.execute(
-                'UPDATE races SET planned_laps = COALESCE('
-                '(SELECT c.laps_total FROM participants p JOIN categories c ON c.id = p.category_id '
-                ' WHERE p.id = races.participant_id), laps_total)'
-            )
-
-        lcols = _cols('laps')
-        if 'user_id' not in lcols: conn.execute('ALTER TABLE laps ADD COLUMN user_id INTEGER')
-        if 'user_login' not in lcols: conn.execute('ALTER TABLE laps ADD COLUMN user_login TEXT')
-
-        ucols = _cols('users')
-        if ucols and 'role' not in ucols:
-            conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'judge'")
-            conn.execute("UPDATE users SET role = 'admin' WHERE is_admin = 1")
-
         for k, v in ITT_DEFAULTS.items():
             conn.execute('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', (k, v))
         for k, v in RFID_DEFAULTS.items():
@@ -1508,22 +1382,11 @@ def init_db(path=None):
             CREATE INDEX IF NOT EXISTS idx_races_heat               ON races(heat_id);
             CREATE INDEX IF NOT EXISTS idx_laps_race                ON laps(race_id);
             CREATE INDEX IF NOT EXISTS idx_auto_laps_race           ON auto_laps(race_id);
-            CREATE INDEX IF NOT EXISTS idx_participants_rfid        ON participants(rfid_tag);
             CREATE INDEX IF NOT EXISTS idx_laps_race_lap            ON laps(race_id, lap_number);
             CREATE INDEX IF NOT EXISTS idx_participants_comp_number ON participants(competition_id, number);
             CREATE INDEX IF NOT EXISTS idx_races_participant_status ON races(participant_id, status);
             CREATE INDEX IF NOT EXISTS idx_races_heat_status        ON races(heat_id, status);
         ''')
-
-        try:
-            conn.execute('''
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_comp_rfid
-                ON participants(competition_id, rfid_tag)
-                WHERE rfid_tag IS NOT NULL AND TRIM(rfid_tag) != ''
-            ''')
-        except sqlite3.IntegrityError:
-            print('⚠ ВНИМАНИЕ: в базе уже есть участники с одинаковыми RFID-метками.', flush=True)
-            print('  Уникальный индекс создать не удалось. Исправьте дубликаты вручную.', flush=True)
 
         conn.commit()
         _reload_settings_cache_from_db(conn, path or DB_PATH)
@@ -1587,15 +1450,6 @@ def _fmt_hms(secs):
 MAX_TAGS_PER_NUMBER = 2
 
 
-def _bib_tags_for(conn, cid, number):
-    """Метки, наклеенные на номер (0, 1 или 2), по порядку: основная, резервная."""
-    if number is None:
-        return []
-    return [r['tag'] for r in conn.execute(
-        'SELECT tag FROM bib_tags WHERE competition_id = ? AND number = ? ORDER BY slot',
-        (cid, number)).fetchall()]
-
-
 def _tags_by_number(conn, cid):
     """{номер: [метка1, метка2]} — для списка участников."""
     out = {}
@@ -1642,21 +1496,6 @@ def _participant_by_tag(conn, tag):
         '  ON p.competition_id = bt.competition_id AND p.number = bt.number '
         'WHERE bt.tag = ?', (tag,)).fetchone()
 
-
-def _find_tag_owner(conn, cid, rfid_tag, exclude_pid=None):
-    """Кто занял метку (метка принадлежит номеру)."""
-    if not rfid_tag:
-        return None
-    row = conn.execute(
-        'SELECT number, tag FROM bib_tags WHERE competition_id = ? AND tag = ?', (cid, rfid_tag)).fetchone()
-    if not row:
-        return None
-    owner = conn.execute(
-        'SELECT id, number, full_name FROM participants WHERE competition_id = ? AND number = ?',
-        (cid, row['number'])).fetchone()
-    if owner and exclude_pid is not None and owner['id'] == exclude_pid:
-        return None
-    return owner
 
 def _load_auto_laps_by_race(conn, race_ids):
     if not race_ids: return {}
@@ -1975,11 +1814,6 @@ def _parse_year(raw):
         return (1900 if num > current_yy else 2000) + num
     if 1000 <= num <= 2100: return num
     return None
-
-def _year_short(year):
-    """Последние две цифры года для компактного показа (1990 → 90)."""
-    if year is None or year == '': return ''
-    return str(year)[-2:]
 
 def _qr_svg(data, box=6, border=2):
     """QR-код как inline-SVG. Возвращает None, если библиотеки нет."""
@@ -2302,14 +2136,11 @@ def _inject_competition():
         return {'current_cid': None, 'competition_name': None, 'has_running_heat': False,
                 'current_comp_slug': session.get('comp'), 'read_only': False}
 
-def _categories_available(conn, cid):
-    return conn.execute('SELECT c.id, c.name, c.laps_total FROM categories c WHERE c.competition_id = ? AND c.id NOT IN (SELECT hc.category_id FROM heat_categories hc JOIN heats h ON h.id = hc.heat_id WHERE h.competition_id = ?) ORDER BY c.name', (cid, cid)).fetchall()
-
 def _category_participants(conn, cat_id):
     """Участники категории. cat_id = 0 — участники без группы (category_id IS NULL)."""
     if cat_id:
-        return conn.execute('SELECT id, number, full_name, birth_year, gender, rfid_tag FROM participants WHERE category_id = ? ORDER BY number', (cat_id,)).fetchall()
-    return conn.execute('SELECT id, number, full_name, birth_year, gender, rfid_tag FROM participants WHERE category_id IS NULL ORDER BY number').fetchall()
+        return conn.execute('SELECT id, number, full_name, birth_year, gender FROM participants WHERE category_id = ? ORDER BY number', (cat_id,)).fetchall()
+    return conn.execute('SELECT id, number, full_name, birth_year, gender FROM participants WHERE category_id IS NULL ORDER BY number').fetchall()
 
 def _race_lap_counts(conn, race_ids):
     result = {rid: 0 for rid in race_ids}
@@ -2887,9 +2718,6 @@ def _people_db():
         CREATE INDEX IF NOT EXISTS idx_people_key ON people(name_key);
         CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     ''')
-    cols = [r['name'] for r in conn.execute('PRAGMA table_info(people)').fetchall()]
-    if 'gender' not in cols:
-        conn.execute('ALTER TABLE people ADD COLUMN gender TEXT')
     return conn
 
 
@@ -4043,27 +3871,6 @@ def categories_import_confirm(cid):
         conn.close()
 
 
-@app.route('/categories/<int:catid>/edit', methods=['POST'])
-def category_edit(catid):
-    conn = get_db()
-    try:
-        cat = conn.execute('SELECT * FROM categories WHERE id = ?', (catid,)).fetchone()
-        if not cat: return 'Не найдено', 404
-        cid = cat['competition_id']; name = request.form.get('name', '').strip(); laps = request.form.get('laps_total', type=int) or 1
-        gender = _join_genders(request.form.getlist('gender'))
-        year_from = request.form.get('year_from', type=int)
-        year_to = request.form.get('year_to', type=int)
-        if not name or laps < 1: flash('Проверьте данные', 'error'); return redirect(url_for('categories_list', cid=cid))
-        if year_from and year_to and year_from > year_to:
-            flash('Год «с» не может быть больше года «по»', 'error')
-            return redirect(url_for('categories_list', cid=cid))
-        try:
-            with conn: conn.execute('UPDATE categories SET name = ?, laps_total = ?, gender = ?, year_from = ?, year_to = ? '
-                                    'WHERE id = ?', (name, laps, gender, year_from, year_to, catid))
-            flash('Обновлено', 'success')
-        except sqlite3.IntegrityError: flash(f'«{name}» уже есть', 'error')
-        return redirect(url_for('categories_list', cid=cid))
-    finally: conn.close()
 
 @app.route('/competitions/<int:cid>/categories/save_all', methods=['POST'])
 def categories_save_all(cid):
@@ -4574,25 +4381,6 @@ def participant_add(cid):
         return redirect(url_for('participants_list', cid=cid))
     finally: conn.close()
 
-@app.route('/participants/<int:pid>/edit', methods=['POST'])
-def participant_edit(pid):
-    conn = get_db()
-    try:
-        p = conn.execute('SELECT * FROM participants WHERE id = ?', (pid,)).fetchone()
-        if not p: return 'Не найден', 404
-        cid = p['competition_id']
-        number, full_name, birth_year, category_id, gender = [request.form.get(x, '').strip() for x in ['number', 'full_name', 'birth_year', 'category_id', 'gender']]
-        if not number or not full_name: flash('Номер и ФИО обязательны', 'error'); return redirect(url_for('participants_list', cid=cid))
-        if gender not in ('M', 'F'): flash('Выберите пол', 'error'); return redirect(url_for('participants_list', cid=cid))
-
-        try:
-            with conn: conn.execute('UPDATE participants SET number = ?, full_name = ?, birth_year = ?, category_id = ?, gender = ? WHERE id = ?', (int(number), full_name, _parse_year(birth_year), int(category_id) if category_id else None, gender, pid))
-            flash('Обновлено', 'success')
-        except sqlite3.IntegrityError:
-            flash(f'Номер {number} занят', 'error')
-        except ValueError: flash('Номер и год должны быть числами', 'error')
-        return redirect(url_for('participants_list', cid=cid))
-    finally: conn.close()
 
 @app.route('/competitions/<int:cid>/participants/save_all', methods=['POST'])
 def participants_save_all(cid):
@@ -5160,41 +4948,7 @@ def heat_edit_start(hid):
         return redirect(url_for('races_page', cid=h['competition_id']))
     finally: conn.close()
 
-@app.route('/races/<int:rid>/lap', methods=['POST'])
-def race_lap(rid):
-    conn = get_db()
-    try:
-        r = conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
-        if not r or r['status'] != 'running': flash('Заезд уже завершён', 'error'); return redirect(url_for('races_page', cid=r['competition_id'] if r else None))
-        h = conn.execute('SELECT min_lap_time FROM heats WHERE id = ?', (r['heat_id'],)).fetchone()
-        min_lap = h['min_lap_time'] if h and h['min_lap_time'] is not None else 0
-        merged = _build_merged_laps(conn, r['id'], min_lap)
-        laps_done = len(merged)
-        if laps_done >= r['laps_total']: flash('Все круги пройдены', 'error'); return redirect(url_for('races_page', cid=r['competition_id']))
-        last_time = datetime.fromisoformat(merged[-1]['time']) if merged else datetime.fromisoformat(r['start_time'])
-        now = datetime.now(); elapsed = (now - last_time).total_seconds()
-        if elapsed < min_lap: flash(f'Слишком быстро (< {min_lap} с). Фиксация отменена.', 'error'); return redirect(url_for('races_page', cid=r['competition_id']))
-        is_last_lap = (laps_done + 1) == r['laps_total']
-        judge = session.get('user')
-        judge_id = session.get('user_id')
-        with conn:
-            conn.execute('INSERT INTO laps (race_id, lap_number, lap_time, user_id, user_login) VALUES (?, ?, ?, ?, ?)',
-                         (rid, laps_done + 1, now.isoformat(), judge_id, judge))
-            if is_last_lap: _process_race_finish(conn, r, now.isoformat(), force=False)
-        flash(f'{"ФИНИШ" if is_last_lap else "Круг"} {laps_done + 1}/{r["laps_total"]} зафиксирован', 'success')
-        return redirect(url_for('races_page', cid=r['competition_id']))
-    finally: conn.close()
 
-@app.route('/races/<int:rid>/finish', methods=['POST'])
-def race_finish(rid):
-    conn = get_db()
-    try:
-        r = conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
-        if r and r['status'] == 'running':
-            with conn: _process_race_finish(conn, r, datetime.now().isoformat(), force=True)
-            flash('Финиш зафиксирован', 'success')
-        return redirect(url_for('races_page', cid=r['competition_id'] if r else None))
-    finally: conn.close()
 
 @app.route('/laps/<int:lid>/edit', methods=['POST'])
 def lap_edit(lid):
@@ -5440,13 +5194,6 @@ def auto_log():
     with _auto_log_lock:
         return render_template('_auto_log.html', auto_log=list(_auto_log))
 
-@app.route('/auto/details')
-def auto_details():
-    hid = request.args.get('hid', type=int)
-    if not hid: return '', 400
-    conn = get_db()
-    try: return render_template('_auto_details.html', rows=_get_auto_rows(conn, hid))
-    finally: conn.close()
 
 @app.route('/auto/detail_rows')
 def auto_detail_rows():
