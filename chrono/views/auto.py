@@ -14,7 +14,9 @@ from chrono.db import (LOG_DIR, _get_competition, get_db)
 from chrono.settings import (RFID_DEFAULTS, get_cached_setting)
 from chrono.utils import (format_secs_short)
 from chrono.results_helpers import (_auto_redirect, _get_auto_rows, _read_log_tail, _save_setting)
-from chrono.rfid import (_auto_log, _auto_log_lock, _swrfid_status, _swrfid_status_lock)
+from chrono.rfid import (
+    SWRFID_AVAILABLE, _auto_log, _auto_log_lock, _swrfid_status, _swrfid_status_lock,
+)
 
 
 def auto_page():

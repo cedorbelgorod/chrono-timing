@@ -294,6 +294,7 @@ TAGS_HEADER_ALIASES = {
 }
 
 
+from chrono.auth import _is_read_only
 from chrono.db import (_get_competition, get_db)
 
 def inject_competition_hook():
