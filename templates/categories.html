@@ -52,6 +52,11 @@
     </div>
     <div class="cats-scroll">
     <table id="cats-table" class="cats-table is-compact">
+        <colgroup>
+            <col class="c-id"><col class="c-sort"><col class="c-name"><col class="c-laps">
+            <col class="c-gender"><col class="c-yf"><col class="c-yt"><col class="c-lap">
+            <col class="c-hd"><col class="c-ms"><col class="c-ts"><col class="c-act">
+        </colgroup>
         <thead>
             <tr>
                 <th data-col="id" style="width:44px">ID</th>
@@ -77,12 +82,13 @@
             <tr class="cat-row {{ 'row-overlap' if ov }} {{ 'row-error' if err }}" data-id="{{ cat.id }}">
                 <td data-col="id" data-label="ID">{{ cat.id }}</td>
                 <td data-col="sort" data-label="Сортировка" class="td-sort">
-                    <span class="drag-handle" draggable="true" role="button" tabindex="-1"
-                          title="Перетащите строку, чтобы изменить порядок">⋮⋮</span>
-                    <input type="number" name="cat_{{ cat.id }}_sort" class="row-input" min="0" step="1"
-                           value="{{ s.sort_order if s else (cat.sort_order if cat.sort_order is not none else cat.id) }}"
-                           title="Порядок групп при сортировке старта «по группе, затем номер»"
-                           style="width:100%">
+                    <span class="sort-wrap">
+                        <span class="drag-handle" draggable="true" role="button" tabindex="-1"
+                              title="Перетащите строку, чтобы изменить порядок">⋮⋮</span>
+                        <input type="number" name="cat_{{ cat.id }}_sort" class="row-input sort-input" min="0" step="1"
+                               value="{{ s.sort_order if s else (cat.sort_order if cat.sort_order is not none else cat.id) }}"
+                               title="Порядок групп при сортировке старта «по группе, затем номер»">
+                    </span>
                 </td>
                 <td data-col="name" data-label="Название" class="td-name">
                     <input type="text" name="cat_{{ cat.id }}_name"
@@ -184,8 +190,27 @@
 .btn-cols:hover { background: #f3f4f6; }
 .btn-cols.on { background: #eef2ff; border-color: #6366f1; color: #3730a3; }
 .cats-tools-hint { font-size: 12px; color: #9ca3af; }
-.td-sort { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-.td-sort .row-input { flex: 1 1 auto; width: auto !important; min-width: 40px; }
+#cats-table { table-layout: fixed; width: 100%; }
+#cats-table .c-id { width: 52px; }
+#cats-table .c-sort { width: 92px; }
+#cats-table .c-name { width: auto; }
+#cats-table .c-laps { width: 84px; }
+#cats-table .c-gender { width: 104px; }
+#cats-table .c-yf, #cats-table .c-yt { width: 84px; }
+#cats-table .c-lap { width: 96px; }
+#cats-table .c-hd, #cats-table .c-ms, #cats-table .c-ts { width: 68px; }
+#cats-table .c-act { width: 120px; }
+#cats-table.is-compact .c-id,
+#cats-table.is-compact .c-gender,
+#cats-table.is-compact .c-yf,
+#cats-table.is-compact .c-yt,
+#cats-table.is-compact .c-lap,
+#cats-table.is-compact .c-hd,
+#cats-table.is-compact .c-ms,
+#cats-table.is-compact .c-ts { width: 0; }
+.td-sort { white-space: nowrap; width: 92px; max-width: 92px; }
+.sort-wrap { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+.sort-wrap .sort-input { width: 54px !important; min-width: 0; padding: 8px 6px; text-align: center; }
 .drag-handle {
     display: inline-block; margin-right: 6px; padding: 2px 3px;
     color: #9ca3af; font-size: 15px; line-height: 1; letter-spacing: -1px;
