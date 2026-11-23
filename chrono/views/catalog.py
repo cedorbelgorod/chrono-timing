@@ -29,14 +29,19 @@ from chrono.results_helpers import (_base_url)
 
 
 def competitions_list():
-    """Настройки единственного соревнования."""
+    """Дашборд подготовки соревнования: настройки, чеклист готовности, ссылки."""
     conn = get_db()
     try:
         comp = _get_competition(conn)
         cid = comp['id']
+        participants = conn.execute(
+            'SELECT COUNT(*) FROM participants WHERE competition_id = ?', (cid,)).fetchone()[0]
         stats = {
             'categories': conn.execute('SELECT COUNT(*) FROM categories WHERE competition_id = ?', (cid,)).fetchone()[0],
-            'participants': conn.execute('SELECT COUNT(*) FROM participants WHERE competition_id = ?', (cid,)).fetchone()[0],
+            'participants': participants,
+            'numbers': conn.execute(
+                'SELECT COUNT(*) FROM participants WHERE competition_id = ? AND number IS NOT NULL',
+                (cid,)).fetchone()[0],
             'tagged': conn.execute(
                 "SELECT COUNT(*) FROM participants p WHERE p.competition_id = ? AND p.number IS NOT NULL "
                 "AND EXISTS (SELECT 1 FROM bib_tags bt WHERE bt.competition_id = p.competition_id "
@@ -46,9 +51,10 @@ def competitions_list():
         settings = {k: get_cached_setting(k, '') for k in PROTOCOL_DEFAULTS}
         settings['itt_start_interval'] = get_cached_setting('itt_start_interval', '30')
         settings['itt_countdown_sound'] = get_cached_setting('itt_countdown_sound', '1')
+        protocol_filled = bool((settings.get('proto_title') or '').strip())
         return render_template('competitions.html', competition=comp, stats=stats,
                                settings=settings, race_format=_comp_format(comp),
-                               formats=RACE_FORMATS)
+                               formats=RACE_FORMATS, protocol_filled=protocol_filled)
     finally: conn.close()
 
 

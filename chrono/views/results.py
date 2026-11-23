@@ -191,7 +191,10 @@ def protocol_page():
     conn = get_db()
     try:
         comp = _get_competition(conn)
-        return render_template('protocol.html', competition=comp, **_build_protocol(conn, comp['id']))
+        data = _build_protocol(conn, comp['id'])
+        protocol_filled = bool((data['settings'].get('proto_title') or '').strip())
+        return render_template('protocol.html', competition=comp,
+                               protocol_filled=protocol_filled, **data)
     finally: conn.close()
 
 
@@ -201,7 +204,7 @@ def protocol_settings_save():
         with conn:
             _save_proto_settings(conn)
         flash('Данные для протокола сохранены', 'success')
-        return redirect(url_for('competitions_list'))
+        return redirect(url_for('protocol_page'))
     finally: conn.close()
 
 
