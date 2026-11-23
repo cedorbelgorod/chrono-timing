@@ -3949,6 +3949,38 @@ def categories_save_all(cid):
         return redirect(url_for('categories_list', cid=cid))
     finally: conn.close()
 
+@app.route('/competitions/<int:cid>/categories/reorder', methods=['POST'])
+def categories_reorder(cid):
+    """Автосохранение порядка категорий после перетаскивания строк (AJAX)."""
+    conn = get_db()
+    try:
+        comp = conn.execute('SELECT id FROM competitions WHERE id = ?', (cid,)).fetchone()
+        if not comp:
+            return jsonify({'ok': False, 'message': 'Соревнование не найдено'}), 404
+        raw = request.form.get('order')
+        if raw is None:
+            payload = request.get_json(silent=True) or {}
+            raw = payload.get('order')
+        if isinstance(raw, (list, tuple)):
+            ids = [int(x) for x in raw if str(x).strip().isdigit()]
+        else:
+            ids = [int(x) for x in re.split(r'[,\s]+', str(raw or '')) if x.strip().isdigit()]
+        if not ids:
+            return jsonify({'ok': False, 'message': 'Пустой порядок'}), 400
+        placeholders = ','.join('?' * len(ids))
+        found = {r['id'] for r in conn.execute(
+            f'SELECT id FROM categories WHERE competition_id = ? AND id IN ({placeholders})',
+            [cid] + ids).fetchall()}
+        if len(found) != len(set(ids)):
+            return jsonify({'ok': False, 'message': 'Категория не найдена в этом соревновании'}), 400
+        with conn:
+            for pos, cat_id in enumerate(ids, start=1):
+                conn.execute('UPDATE categories SET sort_order = ? WHERE id = ? AND competition_id = ?',
+                             (pos, cat_id, cid))
+        return jsonify({'ok': True, 'saved': len(ids)})
+    finally:
+        conn.close()
+
 @app.route('/categories/<int:catid>/delete', methods=['POST'])
 def category_delete(catid):
     conn = get_db()

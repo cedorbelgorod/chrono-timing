@@ -49,9 +49,11 @@
     <div class="cats-tools">
         <button type="button" id="cols-toggle" class="btn-cols" aria-pressed="false">⚙ Все колонки</button>
         <span class="cats-tools-hint">по умолчанию: сортировка · название · кругов; порядок меняется перетаскиванием за ⋮⋮</span>
+        <span id="sort-status" class="cats-status"></span>
     </div>
     <div class="cats-scroll">
-    <table id="cats-table" class="cats-table is-compact">
+    <table id="cats-table" class="cats-table is-compact"
+           data-reorder-url="{{ url_for('categories_reorder', cid=competition.id) }}">
         <colgroup>
             <col class="c-sort"><col class="c-name"><col class="c-laps"><col class="c-act">
         </colgroup>
@@ -187,6 +189,9 @@
 .btn-cols:hover { background: #f3f4f6; }
 .btn-cols.on { background: #eef2ff; border-color: #6366f1; color: #3730a3; }
 .cats-tools-hint { font-size: 12px; color: #9ca3af; }
+.cats-status { font-size: 12px; font-weight: 600; }
+.cats-status.ok { color: #15803d; }
+.cats-status.err { color: #b91c1c; }
 #cats-table { table-layout: fixed; width: 100%; }
 #cats-table th { padding: 7px 10px; font-size: 12px; }
 #cats-table td { padding: 4px 10px; vertical-align: middle; }
@@ -389,6 +394,18 @@
 
     refreshAll();
 
+    // после автосохранения порядка обновляем снимок только по полям сортировки
+    window.__catsMarkSortSaved = function () {
+        rows.forEach(row => {
+            const snap = initialState.get(row);
+            if (!snap) return;
+            row.querySelectorAll('input[name$="_sort"]').forEach(el => {
+                snap[el.name + '#'] = val(el);
+            });
+        });
+        refreshAll();
+    };
+
     const saveBtn = document.getElementById('save-all-btn');
     if (saveBtn) {
         saveBtn.addEventListener('click', (e) => {
@@ -510,7 +527,10 @@
         handle.addEventListener('dragend', function () {
             if (dragRow) dragRow.classList.remove('dragging');
             dragRow = null;
-            if (orderNow() !== orderBefore) renumber();
+            if (orderNow() !== orderBefore) {
+                renumber();
+                saveOrder();
+            }
         });
     });
 
@@ -526,6 +546,39 @@
     });
 
     tbody.addEventListener('drop', function (e) { e.preventDefault(); });
+
+    // автосохранение порядка: сразу отправляем новые позиции на сервер
+    var status = document.getElementById('sort-status');
+    var statusTimer = null;
+
+    function setStatus(text, kind) {
+        if (!status) return;
+        status.textContent = text;
+        status.className = 'cats-status ' + (kind || '');
+        if (statusTimer) clearTimeout(statusTimer);
+        if (kind === 'ok') {
+            statusTimer = setTimeout(function () { status.textContent = ''; status.className = 'cats-status'; }, 2500);
+        }
+    }
+
+    function saveOrder() {
+        var url = table.getAttribute('data-reorder-url');
+        if (!url) return;
+        var ids = [...tbody.querySelectorAll('tr.cat-row')].map(function (r) { return r.dataset.id; });
+        var body = new FormData();
+        body.append('order', ids.join(','));
+        setStatus('Сохраняем порядок…', '');
+        fetch(url, { method: 'POST', body: body, headers: { 'X-Requested-With': 'fetch' }, cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) throw new Error(data.message || 'Ошибка сохранения');
+                if (window.__catsMarkSortSaved) window.__catsMarkSortSaved();
+                setStatus('Порядок сохранён', 'ok');
+            })
+            .catch(function (err) {
+                setStatus('Не удалось сохранить: ' + (err.message || 'нет связи'), 'err');
+            });
+    }
 })();
 </script>
 {% endblock %}
