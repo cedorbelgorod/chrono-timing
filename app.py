@@ -151,6 +151,29 @@ def _rel_db_path(path):
     return os.path.relpath(path, DATA_DIR).replace('\\', '/')
 
 
+def _public_competition(slug):
+    """Соревнование для публичной страницы: None, если скрыто/архив/нет базы."""
+    entry = _registry_find(slug)
+    if not entry or entry.get('hidden') or entry.get('archived'):
+        return None
+    path = _comp_db_path(entry)
+    if not os.path.exists(path):
+        return None
+    return entry
+
+
+def _heat_participant_counts(conn, cid):
+    """{heat_id: {'total': n, 'active': m}} — для списков стартов."""
+    out = {}
+    for r in conn.execute(
+            'SELECT hp.heat_id, COUNT(*) AS total, '
+            "SUM(CASE WHEN hp.status != 'dns' THEN 1 ELSE 0 END) AS active "
+            'FROM heat_participants hp JOIN heats h ON h.id = hp.heat_id '
+            'WHERE h.competition_id = ? GROUP BY hp.heat_id', (cid,)).fetchall():
+        out[r['heat_id']] = {'total': r['total'], 'active': r['active'] or 0}
+    return out
+
+
 def _registry_norm(reg):
     """Проставляет флаги, появившиеся позже (архив, скрытое, только чтение)."""
     for c in reg.get('competitions', []):
@@ -227,6 +250,7 @@ PUBLIC_ENDPOINTS = {
     'service_worker', 'static',
     'finish_screen', 'finish_screen_data',
     'login', 'logout', 'app_download', 'app_page', 'startlist_public',
+    'public_hub', 'public_results', 'public_live', 'public_live_data', 'public_startlist',
     'index', 'select_competition', 'manual_select',
     'manage_page', 'manage_login', 'manage_logout', 'manage_create',
     'manage_delete', 'manage_readonly', 'manage_people_refresh',
@@ -3933,6 +3957,37 @@ def competition_edit(cid):
         flash('Название сохранено', 'success'); return redirect(url_for('competitions_list'))
     finally: conn.close()
 
+@app.route('/competitions/<int:cid>/links')
+def competition_links(cid):
+    """Все публичные адреса соревнования и короткие ссылки стартов."""
+    conn = get_db()
+    try:
+        comp = _get_competition(conn)
+        if not comp or comp['id'] != cid:
+            return 'Соревнование не найдено', 404
+        entry = _registry_find(session.get('comp')) or {}
+        counts = _heat_participant_counts(conn, cid)
+        heats = []
+        for h in conn.execute('SELECT * FROM heats WHERE competition_id = ? ORDER BY heat_number', (cid,)).fetchall():
+            c = counts.get(h['id'], {'total': 0, 'active': 0})
+            token = h['startlist_token'] if 'startlist_token' in h.keys() else None
+            heats.append({
+                'id': h['id'],
+                'number': h['heat_number'],
+                'name': h['name'] or '',
+                'status': h['status'],
+                'total': c['active'],
+                'token': token,
+                'short_url': (_base_url() + url_for('startlist_public', token=token)) if token else '',
+            })
+        return render_template('competition_links.html', competition=comp,
+                               slug=entry.get('slug') or '', archived=bool(entry.get('archived')),
+                               heats=heats, registration=get_cached_setting('reg_enabled', '0') == '1',
+                               base_url=_base_url())
+    finally:
+        conn.close()
+
+
 @app.route('/competitions/<int:cid>/categories', methods=['GET', 'POST'])
 def categories_list(cid):
     conn = get_db()
@@ -5453,7 +5508,8 @@ def startlist_link(hid):
         if not h:
             return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
         token = h['startlist_token'] if 'startlist_token' in h.keys() else None
-        if not token:
+        rotate = request.form.get('rotate') == '1'
+        if not token or rotate:
             token = _new_startlist_token(conn)
             with conn:
                 conn.execute('UPDATE heats SET startlist_token = ? WHERE id = ?', (token, hid))
@@ -5566,25 +5622,35 @@ def race_edit_finish(rid):
         return redirect(url_for('races_page', cid=cid))
     finally: conn.close()
 
+def _results_response(conn, cid, target, include_auto, public_view=False):
+    """Страница результатов для указанной базы (используется и публично)."""
+    # без выбора показываем последний старт — публичная страница должна быть сразу осмысленной
+    if not target:
+        last = conn.execute(
+            "SELECT id FROM heats WHERE competition_id = ? "
+            "ORDER BY (finished_at IS NULL), finished_at DESC, id DESC LIMIT 1", (cid,)).fetchone()
+        if last: target = f'heat:{last["id"]}'
+    competition, heats, categories, details, info, selected_heat_id, selected_cat_id = _prepare_results_data(conn, cid, target, include_auto)
+
+    public_url = _public_url()
+    return render_template('results.html', competition=competition, heats=heats, categories=categories,
+                           details=details, info=info, target=target, include_auto=include_auto,
+                           selected_heat_id=selected_heat_id, selected_cat_id=selected_cat_id,
+                           qr_svg=_qr_svg(public_url), public_url=public_url,
+                           public_view=public_view)
+
+
 @app.route('/results')
 def results_page():
     conn = get_db()
     try:
         comp = _get_competition(conn)
-        cid = comp['id']
-        target = request.args.get('target', '').strip()
-        include_auto = request.args.get('include_auto', '1') == '1'
-        # без выбора показываем последний старт — публичная страница должна быть сразу осмысленной
-        if not target:
-            last = conn.execute(
-                "SELECT id FROM heats WHERE competition_id = ? "
-                "ORDER BY (finished_at IS NULL), finished_at DESC, id DESC LIMIT 1", (cid,)).fetchone()
-            if last: target = f'heat:{last["id"]}'
-        competition, heats, categories, details, info, selected_heat_id, selected_cat_id = _prepare_results_data(conn, cid, target, include_auto)
+        return _results_response(conn, comp['id'],
+                                 request.args.get('target', '').strip(),
+                                 request.args.get('include_auto', '1') == '1')
+    finally:
+        conn.close()
 
-        public_url = _public_url()
-        return render_template('results.html', competition=competition, heats=heats, categories=categories, details=details, info=info, target=target, include_auto=include_auto, selected_heat_id=selected_heat_id, selected_cat_id=selected_cat_id, qr_svg=_qr_svg(public_url), public_url=public_url)
-    finally: conn.close()
 
 @app.route('/results/details')
 def results_details():
@@ -6836,42 +6902,167 @@ def dashboard_data():
         return render_template('_dashboard_heats.html', heats=_build_dashboard_heats(conn, cid))
     finally: conn.close()
 
+def _finish_screen_response(conn, data_url=None):
+    """Экран финиша для базы подключения (публично и внутри)."""
+    competition = _get_competition(conn)
+    public_url = _public_url()
+    return render_template('finish_screen.html', competition=competition, cid=competition['id'],
+                           qr_svg=_qr_svg(public_url), public_url=public_url,
+                           data_url=data_url or url_for('finish_screen_data'))
+
+
+def _finish_screen_data_response(conn, cid):
+    """Табло: текущий старт (или последний завершённый) с разбивкой по категориям."""
+    h = conn.execute("SELECT * FROM heats WHERE competition_id = ? AND status = 'running' "
+                     "ORDER BY heat_number DESC LIMIT 1", (cid,)).fetchone()
+    if not h:
+        h = conn.execute("SELECT * FROM heats WHERE competition_id = ? AND status = 'finished' "
+                         "ORDER BY finished_at DESC LIMIT 1", (cid,)).fetchone()
+    if not h:
+        return render_template('_finish_screen_data.html', heat=None, categories=[])
+
+    view = _build_heat_view(conn, h)
+    order = {'ok': 0, 'running': 1, 'lapped': 2, 'dnf': 3}
+    for g in view['categories']:
+        g['races'].sort(key=lambda r: (order.get(r['status'], 5),
+                                       r.get('sort_time', float('inf')), r['number']))
+    return render_template('_finish_screen_data.html', heat=view, categories=view['categories'])
+
+
 @app.route('/finish-screen')
 def finish_screen():
     conn = get_db()
     try:
-        competition = _get_competition(conn)
-        cid = competition['id']
-        public_url = _public_url()
-        return render_template('finish_screen.html', competition=competition, cid=cid,
-                               qr_svg=_qr_svg(public_url), public_url=public_url)
+        return _finish_screen_response(conn)
     finally: conn.close()
+
 
 @app.route('/finish-screen/data')
 def finish_screen_data():
-    """Табло: текущий старт (или последний завершённый) с разбивкой по категориям.
-
-    Использует ту же подготовку данных, что и страница «Сейчас идёт».
-    """
     conn = get_db()
     try:
         cid = request.args.get('cid', type=int)
-        if not cid: cid = _get_competition(conn)['id']
-        h = conn.execute("SELECT * FROM heats WHERE competition_id = ? AND status = 'running' "
-                         "ORDER BY heat_number DESC LIMIT 1", (cid,)).fetchone()
-        if not h:
-            h = conn.execute("SELECT * FROM heats WHERE competition_id = ? AND status = 'finished' "
-                             "ORDER BY finished_at DESC LIMIT 1", (cid,)).fetchone()
-        if not h:
-            return render_template('_finish_screen_data.html', heat=None, categories=[])
-
-        view = _build_heat_view(conn, h)
-        order = {'ok': 0, 'running': 1, 'lapped': 2, 'dnf': 3}
-        for g in view['categories']:
-            g['races'].sort(key=lambda r: (order.get(r['status'], 5),
-                                           r.get('sort_time', float('inf')), r['number']))
-        return render_template('_finish_screen_data.html', heat=view, categories=view['categories'])
+        if not cid:
+            cid = _get_competition(conn)['id']
+        return _finish_screen_data_response(conn, cid)
     finally: conn.close()
+
+
+# ======================== ПУБЛИЧНЫЙ ХАБ ========================
+
+def _hub_data(conn, entry):
+    """Данные публичного хаба соревнования."""
+    comp = conn.execute('SELECT * FROM competitions LIMIT 1').fetchone()
+    if not comp:
+        return None
+    cid = comp['id']
+    counts = _heat_participant_counts(conn, cid)
+    heats = []
+    for h in conn.execute('SELECT * FROM heats WHERE competition_id = ? ORDER BY heat_number', (cid,)).fetchall():
+        c = counts.get(h['id'], {'total': 0, 'active': 0})
+        heats.append({
+            'id': h['id'],
+            'number': h['heat_number'],
+            'name': h['name'] or '',
+            'status': h['status'],
+            'total': c['active'],
+            'has_protocol': True,
+        })
+    first = conn.execute(
+        'SELECT MIN(started_at) FROM heats WHERE competition_id = ? AND started_at IS NOT NULL',
+        (cid,)).fetchone()[0]
+    date_display = ''
+    if first:
+        try:
+            date_display = datetime.fromisoformat(first).strftime('%d.%m.%Y')
+        except (TypeError, ValueError):
+            date_display = ''
+    return {
+        'slug': entry.get('slug'),
+        'name': comp['name'],
+        'date_display': date_display,
+        'heats': heats,
+        'registration': get_cached_setting('reg_enabled', '0') == '1',
+    }
+
+
+@app.route('/p/<slug>')
+def public_hub(slug):
+    entry = _public_competition(slug)
+    if not entry:
+        return render_template('public_hub.html', data=None, slug=slug), 404
+    path = _comp_db_path(entry)
+    conn = _connect(path)
+    try:
+        _reload_settings_cache_from_db(conn, path)
+        data = _hub_data(conn, entry)
+        if not data:
+            return render_template('public_hub.html', data=None, slug=slug), 404
+        return render_template('public_hub.html', data=data, slug=slug)
+    finally:
+        conn.close()
+
+
+@app.route('/p/<slug>/results')
+def public_results(slug):
+    entry = _public_competition(slug)
+    if not entry:
+        return 'Соревнование не найдено', 404
+    conn = _connect(_comp_db_path(entry))
+    try:
+        comp = conn.execute('SELECT * FROM competitions LIMIT 1').fetchone()
+        if not comp:
+            return 'Соревнование не найдено', 404
+        return _results_response(conn, comp['id'],
+                                 request.args.get('target', '').strip(),
+                                 request.args.get('include_auto', '1') == '1',
+                                 public_view=True)
+    finally:
+        conn.close()
+
+
+@app.route('/p/<slug>/live')
+def public_live(slug):
+    entry = _public_competition(slug)
+    if not entry:
+        return 'Соревнование не найдено', 404
+    conn = _connect(_comp_db_path(entry))
+    try:
+        return _finish_screen_response(conn, url_for('public_live_data', slug=slug))
+    finally:
+        conn.close()
+
+
+@app.route('/p/<slug>/live/data')
+def public_live_data(slug):
+    entry = _public_competition(slug)
+    if not entry:
+        return '', 404
+    conn = _connect(_comp_db_path(entry))
+    try:
+        comp = conn.execute('SELECT * FROM competitions LIMIT 1').fetchone()
+        if not comp:
+            return '', 404
+        return _finish_screen_data_response(conn, comp['id'])
+    finally:
+        conn.close()
+
+
+@app.route('/p/<slug>/sl/<int:hid>')
+def public_startlist(slug, hid):
+    entry = _public_competition(slug)
+    if not entry:
+        return 'Соревнование не найдено', 404
+    conn = _connect(_comp_db_path(entry))
+    try:
+        h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
+        comp = conn.execute('SELECT * FROM competitions LIMIT 1').fetchone()
+        if not h or not comp or h['competition_id'] != comp['id']:
+            return 'Старт не найден', 404
+        data = _heat_startlist_data(conn, h, comp)
+        return render_template('startlist_public.html', data=data)
+    finally:
+        conn.close()
 
 @app.route('/sw.js')
 def service_worker():

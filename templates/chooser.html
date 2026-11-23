@@ -14,7 +14,10 @@
         .wrap { max-width: 720px; margin: 0 auto; }
         h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; color: #1f2937; }
         .sub { color: #6b7280; font-size: 14px; margin-bottom: 22px; }
-        .comp-card {
+        .comp-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.btn-public { background: #fff; color: #1f2937; border: 1px solid #d1d5db; font-weight: 600; }
+.btn-public:hover { background: #f3f4f6; }
+.comp-card {
             background: #fff; border-radius: 12px; padding: 16px 18px;
             box-shadow: 0 2px 10px rgba(0,0,0,.06); margin-bottom: 12px;
             display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
@@ -68,16 +71,22 @@
                     </div>
                     <div class="comp-meta">/c/{{ c.slug }}{% if c.created %} · создано {{ c.created[:10] }}{% endif %}</div>
                 </div>
-                <a class="btn"
-                   {% if embed == 'manual' %}
-                       href="{{ url_for('manual_select', slug=c.slug) }}"
-                   {% elif embed %}
-                       href="{{ url_for('select_competition', slug=c.slug, embed='1', next='/manual?embed=1') }}"
-                   {% else %}
-                       href="{{ url_for('select_competition', slug=c.slug) }}"
-                   {% endif %}>
-                    {{ 'Открыть' if c.authorized else 'Войти' }}
-                </a>
+                <div class="comp-actions">
+                    <a class="btn"
+                       {% if embed == 'manual' %}
+                           href="{{ url_for('manual_select', slug=c.slug) }}"
+                       {% elif embed %}
+                           href="{{ url_for('select_competition', slug=c.slug, embed='1', next='/manual?embed=1') }}"
+                       {% else %}
+                           href="{{ url_for('select_competition', slug=c.slug) }}"
+                       {% endif %}>
+                        {{ 'Открыть' if c.authorized else 'Войти' }}
+                    </a>
+                    <a class="btn btn-public" href="{{ url_for('public_hub', slug=c.slug) }}"
+                       title="Публичная страница: протоколы, результаты, регистрация">
+                        🌐 Публичная страница
+                    </a>
+                </div>
             </div>
         {% endfor %}
     {% else %}

@@ -105,7 +105,7 @@
         if (!CID || isFetching) return;
         isFetching = true;
         try {
-            const resp = await fetch(`/finish-screen/data?cid=${CID}`, { cache: 'no-store' });
+            const resp = await fetch(`{{ data_url or '/finish-screen/data' }}?cid=${CID}`, { cache: 'no-store' });
             if (resp.ok) {
                 const html = (await resp.text()).trim();
                 if (html === lastHtml) return;   // данные не изменились — не трогаем разметку

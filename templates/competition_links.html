@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}Публичные ссылки — {{ competition.name }}{% endblock %}
+{% block content %}
+<h2>{{ competition.name }} <small>— публичные ссылки</small></h2>
+
+<p class="muted" style="margin-top:-6px;max-width:760px">
+    Эти адреса открываются без входа — их можно отправлять участникам, зрителям и коллегам.
+    Короткая ссылка на старт ведёт сразу на его протокол; если её перегенерировать,
+    старая перестанет работать.
+</p>
+
+{% if not slug %}
+    <div class="links-warn">Не удалось определить адрес соревнования (нет записи в реестре).</div>
+{% elif archived %}
+    <div class="links-warn">Соревнование в архиве: публичный хаб недоступен, остальные ссылки работают.</div>
+{% endif %}
+
+<div class="links-grid">
+    {% if slug and not archived %}
+    <div class="link-card">
+        <div class="link-title">Публичная страница (хаб)</div>
+        <div class="link-desc">Регистрация, результаты, табло и все протоколы стартов — одна ссылка для участников.</div>
+        <div class="link-row">
+            <input class="link-input" readonly value="{{ base_url }}{{ url_for('public_hub', slug=slug) }}">
+            <button type="button" class="link-btn" data-copy>Копировать</button>
+            <a class="link-btn ghost" href="{{ url_for('public_hub', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if slug %}
+    <div class="link-card">
+        <div class="link-title">Саморегистрация</div>
+        <div class="link-desc">
+            {% if registration %}Форма для участников.{% else %}Форма выключена — включите её в «Саморегистрации», и ссылка заработает.{% endif %}
+        </div>
+        <div class="link-row">
+            <input class="link-input" readonly value="{{ base_url }}{{ url_for('reg_intro', slug=slug) }}">
+            <button type="button" class="link-btn" data-copy>Копировать</button>
+            <a class="link-btn ghost" href="{{ url_for('reg_intro', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
+        </div>
+    </div>
+
+    <div class="link-card">
+        <div class="link-title">Список зарегистрированных</div>
+        <div class="link-desc">Кто уже подал заявку — публично, без входа.</div>
+        <div class="link-row">
+            <input class="link-input" readonly value="{{ base_url }}{{ url_for('reg_list', slug=slug) }}">
+            <button type="button" class="link-btn" data-copy>Копировать</button>
+            <a class="link-btn ghost" href="{{ url_for('reg_list', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
+        </div>
+    </div>
+
+    <div class="link-card">
+        <div class="link-title">Результаты</div>
+        <div class="link-desc">Итоги по стартам и категориям.</div>
+        <div class="link-row">
+            <input class="link-input" readonly value="{{ base_url }}{{ url_for('public_results', slug=slug) }}">
+            <button type="button" class="link-btn" data-copy>Копировать</button>
+            <a class="link-btn ghost" href="{{ url_for('public_results', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
+        </div>
+    </div>
+
+    <div class="link-card">
+        <div class="link-title">Табло</div>
+        <div class="link-desc">Экран финиша для проектора или телефона.</div>
+        <div class="link-row">
+            <input class="link-input" readonly value="{{ base_url }}{{ url_for('public_live', slug=slug) }}">
+            <button type="button" class="link-btn" data-copy>Копировать</button>
+            <a class="link-btn ghost" href="{{ url_for('public_live', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="link-card">
+        <div class="link-title">Приложение</div>
+        <div class="link-desc">Страница с Android-приложением.</div>
+        <div class="link-row">
+            <input class="link-input" readonly value="{{ base_url }}{{ url_for('app_page') }}">
+            <button type="button" class="link-btn" data-copy>Копировать</button>
+            <a class="link-btn ghost" href="{{ url_for('app_page') }}" target="_blank" rel="noopener">Открыть</a>
+        </div>
+    </div>
+</div>
+
+<h3 class="links-h3">Стартовые протоколы</h3>
+{% if heats and slug %}
+<div class="links-table-wrap">
+<table class="links-table">
+    <thead>
+        <tr>
+            <th style="width:180px">Старт</th>
+            <th style="width:110px">Статус</th>
+            <th style="width:110px">Участников</th>
+            <th>Публичный протокол</th>
+            <th style="width:330px">Короткая ссылка</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for h in heats %}
+        <tr>
+            <td><b>№{{ h.number }}</b>{% if h.name %} · {{ h.name }}{% endif %}</td>
+            <td>
+                {% if h.status == 'running' %}<span class="tag tag-active">идёт</span>
+                {% elif h.status == 'finished' %}<span class="tag tag-ok">завершён</span>
+                {% else %}<span class="tag">готов</span>{% endif %}
+            </td>
+            <td>{{ h.total }}</td>
+            <td>
+                <div class="link-row">
+                    <input class="link-input" readonly value="{{ base_url }}{{ url_for('public_startlist', slug=slug, hid=h.id) }}">
+                    <button type="button" class="link-btn" data-copy>Копировать</button>
+                    <a class="link-btn ghost" href="{{ url_for('public_startlist', slug=slug, hid=h.id) }}" target="_blank" rel="noopener">Открыть</a>
+                </div>
+            </td>
+            <td>
+                <div class="link-row" data-short="{{ h.id }}">
+                    {% if h.short_url %}
+                        <input class="link-input short-url" readonly value="{{ h.short_url }}">
+                        <button type="button" class="link-btn" data-copy>Копировать</button>
+                        <button type="button" class="link-btn ghost" data-rotate title="Старая ссылка перестанет работать">↻</button>
+                    {% else %}
+                        <button type="button" class="link-btn" data-create>Создать ссылку</button>
+                    {% endif %}
+                </div>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+    <div class="empty">Стартов пока нет — ссылки появятся, когда вы создадите старт.</div>
+{% endif %}
+
+<style>
+.links-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; margin: 14px 0 22px; }
+.link-card { background: #fff; border-radius: 10px; padding: 12px 14px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+.link-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+.link-desc { font-size: 12px; color: #6b7280; margin-bottom: 8px; line-height: 1.4; }
+.link-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.link-input {
+    flex: 1 1 auto; min-width: 0; padding: 6px 8px; font-size: 12px;
+    border: 1px solid #e5e7eb; border-radius: 7px; background: #f9fafb; color: #374151;
+    font-family: ui-monospace, Consolas, monospace;
+}
+.link-btn {
+    padding: 6px 10px; font-size: 12px; font-weight: 600; font-family: inherit;
+    border: 1px solid #2563eb; background: #2563eb; color: #fff;
+    border-radius: 7px; cursor: pointer; white-space: nowrap;
+}
+.link-btn:hover { background: #1d4ed8; }
+.link-btn.ghost { background: #fff; color: #2563eb; }
+.link-btn.ghost:hover { background: #eff6ff; }
+.links-warn {
+    margin: 0 0 12px; padding: 9px 12px; border-radius: 8px;
+    background: #fef3c7; color: #92400e; font-size: 13px;
+}
+.links-h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #9ca3af; margin: 20px 0 10px; }
+.links-table-wrap { overflow-x: auto; }
+.links-table { width: 100%; border-collapse: collapse; background: #fff; }
+.links-table th {
+    padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+    color: #9ca3af; text-align: left; border-bottom: 1px solid #e5e7eb;
+}
+.links-table td { padding: 8px 10px; border-bottom: 1px solid #eef0f3; font-size: 13px; vertical-align: middle; }
+.links-table tbody tr:nth-child(even) { background: #fafbfc; }
+.tag-ok { background: #dcfce7; color: #166534; }
+@media (max-width: 720px) {
+    .links-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+<script>
+(function () {
+    function fallbackCopy(input) {
+        try {
+            input.removeAttribute('readonly');
+            input.select();
+            document.execCommand('copy');
+            input.setAttribute('readonly', 'readonly');
+        } catch (e) {}
+    }
+
+    function copy(input) {
+        if (!input) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(input.value).catch(function () { fallbackCopy(input); });
+        } else {
+            fallbackCopy(input);
+        }
+    }
+
+    document.querySelectorAll('.link-row').forEach(function (row) {
+        var copyBtn = row.querySelector('[data-copy]');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', function () {
+                copy(row.querySelector('.link-input'));
+                var old = copyBtn.textContent;
+                copyBtn.textContent = 'Скопировано';
+                setTimeout(function () { copyBtn.textContent = old; }, 1500);
+            });
+        }
+    });
+
+    function rebuildShort(row, url) {
+        row.innerHTML = '';
+        var input = document.createElement('input');
+        input.className = 'link-input short-url';
+        input.readOnly = true;
+        input.value = url;
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'link-btn';
+        copyBtn.setAttribute('data-copy', '');
+        copyBtn.textContent = 'Копировать';
+        copyBtn.addEventListener('click', function () {
+            copy(input);
+            copyBtn.textContent = 'Скопировано';
+            setTimeout(function () { copyBtn.textContent = 'Копировать'; }, 1500);
+        });
+        var rotateBtn = document.createElement('button');
+        rotateBtn.type = 'button';
+        rotateBtn.className = 'link-btn ghost';
+        rotateBtn.title = 'Старая ссылка перестанет работать';
+        rotateBtn.textContent = '↻';
+        rotateBtn.addEventListener('click', function () { request(row, true); });
+        row.appendChild(input);
+        row.appendChild(copyBtn);
+        row.appendChild(rotateBtn);
+    }
+
+    function request(row, rotate) {
+        var hid = row.getAttribute('data-short');
+        var fd = new FormData();
+        if (rotate) fd.append('rotate', '1');
+        fetch('/heats/' + hid + '/startlist_link', { method: 'POST', body: fd, cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) throw new Error(d.message || 'Ошибка');
+                rebuildShort(row, d.url);
+            })
+            .catch(function (e) { alert('Не удалось создать ссылку: ' + (e.message || '')); });
+    }
+
+    document.querySelectorAll('[data-short]').forEach(function (row) {
+        var createBtn = row.querySelector('[data-create]');
+        if (createBtn) {
+            createBtn.addEventListener('click', function () { request(row, false); });
+        }
+        var rotateBtn = row.querySelector('[data-rotate]');
+        if (rotateBtn) {
+            rotateBtn.addEventListener('click', function () {
+                if (!confirm('Перегенерировать ссылку? Старая перестанет работать.')) return;
+                request(row, true);
+            });
+        }
+    });
+})();
+</script>
+{% endblock %}
