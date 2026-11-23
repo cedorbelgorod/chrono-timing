@@ -118,7 +118,24 @@ python -c "import secrets; print(secrets.token_hex(32))"
 ## Структура проекта
 
 ```
-app.py                  # всё приложение: модели, маршруты, хронометраж, PDF-протокол
+app.py                  # точка входа: Flask, конфигурация, хуки, регистрация маршрутов
+chrono/                 # пакет приложения
+  db.py                 # базы соревнований, реестр competitions.json, схема
+  settings.py           # настройки, форматы, кэш по базам
+  timing.py             # заезды, круги, финиши, результаты, стартовый протокол
+  pdf.py                # PDF: шрифты, стартовый и итоговый протоколы
+  utils.py              # форматирование времени, QR, slug, токены
+  auth.py               # сессии, роли, доступ, «только чтение»
+  catalog.py            # участники, категории, номера, метки, импорт
+  registration_helpers.py  # саморегистрация (форма, шаги, правила)
+  results_helpers.py    # результаты, протокол, погода, публичные данные
+  people.py             # кэш участников bike.cedor.ru
+  manual_helpers.py     # журнал хронометража, данные страницы «Хронометраж»
+  rfid.py               # RFID-считыватель и автоотметки
+  logging_setup.py      # логгеры и обработчики запросов/ошибок
+  server.py             # запуск HTTP/HTTPS-сервера (`python app.py`)
+  views/                # маршруты по разделам: auth, manage, users, registration,
+                        # catalog, races, results, auto, manual, public
 templates/              # Jinja2-шаблоны (интерфейс)
 static/                 # иконки, PWA-манифест, APK для Android
 android/                # исходники Android-обёртки (WebView)

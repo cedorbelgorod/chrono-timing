@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """Смоук: страницы и PDF открываются без ошибок."""
-from tests.support import ChronoTestCase
+import unittest
+from unittest import mock
+
+from tests.support import ChronoTestCase, chrono
 
 ADMIN_PAGES = ('/', '/competitions', '/races', '/results', '/protocol', '/manual',
                '/dashboard', '/summary', '/logs', '/users', '/finish-screen')
@@ -28,3 +31,24 @@ class SmokeTest(ChronoTestCase):
 
     def test_unknown_public_competition_is_404(self):
         self.assertEqual(self.public_client().get('/p/no-such-competition').status_code, 404)
+
+
+class ServerStartTest(ChronoTestCase):
+    """Запуск `python app.py`: chrono.server.run должен инициализироваться без NameError."""
+
+    def test_run_initialises_without_errors(self):
+        from chrono import server
+
+        class DummyServer:
+            def serve_forever(self):
+                pass
+
+            def shutdown(self):
+                pass
+
+        with mock.patch('werkzeug.serving.make_server', return_value=DummyServer()), \
+                mock.patch.object(server.time, 'sleep', side_effect=KeyboardInterrupt), \
+                mock.patch.object(server, '_people_auto_refresh'), \
+                mock.patch.object(server, 'start_swrfid_listener'):
+            server.run(chrono.app)  # не должно бросить NameError/TypeError
+
