@@ -53,9 +53,7 @@
     <div class="cats-scroll">
     <table id="cats-table" class="cats-table is-compact">
         <colgroup>
-            <col class="c-id"><col class="c-sort"><col class="c-name"><col class="c-laps">
-            <col class="c-gender"><col class="c-yf"><col class="c-yt"><col class="c-lap">
-            <col class="c-hd"><col class="c-ms"><col class="c-ts"><col class="c-act">
+            <col class="c-sort"><col class="c-name"><col class="c-laps"><col class="c-act">
         </colgroup>
         <thead>
             <tr>
@@ -96,7 +94,6 @@
                            placeholder="Название категории"
                            class="row-input name-input {{ 'input-error' if err and err[1] == 'name' else '' }}"
                            style="width:100%">
-                    <div class="cat-summary" aria-live="polite"></div>
                     {% if err %}
                         <div class="row-error-text">⚠ {{ err[0] }}</div>
                     {% endif %}
@@ -191,6 +188,10 @@
 .btn-cols.on { background: #eef2ff; border-color: #6366f1; color: #3730a3; }
 .cats-tools-hint { font-size: 12px; color: #9ca3af; }
 #cats-table { table-layout: fixed; width: 100%; }
+#cats-table th { padding: 7px 10px; font-size: 12px; }
+#cats-table td { padding: 4px 10px; vertical-align: middle; }
+#cats-table .row-input { padding: 6px 8px; }
+#cats-table td.td-name .name-input { font-size: 15px; padding: 7px 10px; }
 #cats-table .c-id { width: 52px; }
 #cats-table .c-sort { width: 92px; }
 #cats-table .c-name { width: auto; }
@@ -229,8 +230,6 @@
 #cats-table.is-compact [data-col="ms"],
 #cats-table.is-compact [data-col="ts"] { display: none; }
 #cats-table.is-compact td.td-name { width: auto; min-width: 260px; }
-.cat-summary { display: none; margin-top: 5px; font-size: 12px; color: #6b7280; line-height: 1.35; }
-#cats-table.is-compact .cat-summary { display: block; }
 
 /* название категории — главная колонка: шире и крупнее остальных */
 .cats-scroll { overflow-x: auto; }
@@ -428,52 +427,34 @@
 
 <script>
 // Компактная таблица: по умолчанию только сортировка, название и круги.
-// Кнопка «Все колонки» показывает остальные поля (выбор запоминается в браузере).
+// Colgroup перестраивается, чтобы видимые ячейки совпадали с колонками таблицы.
 (function () {
     var table = document.getElementById('cats-table');
     var btn = document.getElementById('cols-toggle');
     if (!table || !btn) return;
 
+    var colgroup = table.querySelector('colgroup');
+    var ORDER = ['c-id', 'c-sort', 'c-name', 'c-laps', 'c-gender', 'c-yf', 'c-yt', 'c-lap', 'c-hd', 'c-ms', 'c-ts', 'c-act'];
+    var HIDDEN = ['c-id', 'c-gender', 'c-yf', 'c-yt', 'c-lap', 'c-hd', 'c-ms', 'c-ts'];
     var KEY = 'cats_full_cols';
 
-    function field(row, suffix) {
-        var el = row.querySelector('input[name$="' + suffix + '"]');
-        return el ? (el.value || '').trim() : '';
-    }
-
-    function summary(row) {
-        var genders = [];
-        row.querySelectorAll('input[name$="_gender"]:checked').forEach(function (i) {
-            genders.push(i.value === 'M' ? 'М' : 'Ж');
+    function rebuildCols(full) {
+        if (!colgroup) return;
+        while (colgroup.firstChild) colgroup.removeChild(colgroup.firstChild);
+        ORDER.forEach(function (cls) {
+            if (!full && HIDDEN.indexOf(cls) !== -1) return;
+            var col = document.createElement('col');
+            col.className = cls;
+            colgroup.appendChild(col);
         });
-        var parts = [genders.length ? genders.join('+') : 'пол любой'];
-
-        var from = field(row, '_year_from'), to = field(row, '_year_to');
-        parts.push((from || to) ? ('годы ' + (from || '…') + '–' + (to || '…')) : 'годы любые');
-
-        var dist = field(row, '_lap_length');
-        if (dist) parts.push(dist + ' км');
-        var hd = field(row, '_hd'); if (hd) parts.push('HD ' + hd);
-        var ms = field(row, '_ms'); if (ms) parts.push('МС ' + ms);
-        var ts = field(row, '_ts'); if (ts) parts.push('ТС ' + ts);
-        return parts.join(' · ');
-    }
-
-    function refresh(row) {
-        var box = row.querySelector('.cat-summary');
-        if (box) box.textContent = summary(row);
-    }
-
-    function refreshAll() {
-        table.querySelectorAll('tr.cat-row').forEach(refresh);
     }
 
     function apply(full) {
         table.classList.toggle('is-compact', !full);
+        rebuildCols(full);
         btn.textContent = full ? '⇤ Скрыть лишние колонки' : '⚙ Все колонки';
         btn.classList.toggle('on', full);
         btn.setAttribute('aria-pressed', full ? 'true' : 'false');
-        refreshAll();
     }
 
     var saved = false;
@@ -485,17 +466,6 @@
         try { localStorage.setItem(KEY, full ? '1' : '0'); } catch (e) {}
         apply(full);
     });
-
-    table.addEventListener('input', function (e) {
-        var row = e.target.closest('tr.cat-row');
-        if (row) refresh(row);
-    });
-    table.addEventListener('change', function (e) {
-        var row = e.target.closest('tr.cat-row');
-        if (row) refresh(row);
-    });
-
-    refreshAll();
 })();
 </script>
 
