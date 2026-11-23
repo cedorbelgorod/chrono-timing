@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """manual_helpers: помощники (перенесены из app.py)."""
 from datetime import datetime
-import sqlite3, time
+import sqlite3
 from flask import session
-from chrono.db import (_create_timing_log, init_db)
+from chrono.db import _create_timing_log
 from chrono.timing import (_load_laps_by_race, _predict_race, prepare_race)
 from chrono.utils import (_fmt_hms)
 

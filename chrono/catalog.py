@@ -2,7 +2,7 @@
 """catalog: помощники (перенесены из app.py)."""
 from datetime import datetime
 import re
-from flask import redirect, url_for
+from flask import redirect, url_for, session
 
 MAX_TAGS_PER_NUMBER = 2
 
@@ -294,7 +294,6 @@ TAGS_HEADER_ALIASES = {
 }
 
 
-from flask import session
 from chrono.db import (_get_competition, get_db)
 
 def inject_competition_hook():

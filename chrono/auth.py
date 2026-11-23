@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """auth: помощники (перенесены из app.py)."""
 import hmac, json, os
-from flask import flash, session
+from flask import flash, session, redirect, render_template, request, url_for
 from werkzeug.security import check_password_hash
-from chrono.db import (DATA_DIR, _connect, _registry_find, get_db)
+from chrono.db import DATA_DIR, _connect, _registry_find, get_db, _ensure_registry
 
 MANAGE_USER = os.environ.get('CHRONO_MANAGE_USER', 'cedor')
 
@@ -130,8 +130,6 @@ def _require_admin():
     return True
 
 
-from flask import redirect, render_template, request, url_for
-from chrono.db import (_ensure_registry)
 
 def require_auth_hook():
     if request.endpoint in PUBLIC_ENDPOINTS:

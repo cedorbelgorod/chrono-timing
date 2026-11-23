@@ -1,25 +1,9 @@
 # -*- coding: utf-8 -*-
 """auth: маршруты (регистрируются в app.py)."""
 
-import io
-import json
-import os
-import re
-import shutil
-import sqlite3
-import secrets
-from datetime import datetime, timedelta
-
-from flask import (flash, jsonify, redirect, render_template, request, send_file,
-                   send_from_directory, session, url_for, Response, current_app,
-                   has_request_context, abort, make_response)
-from werkzeug.exceptions import HTTPException
-from werkzeug.security import generate_password_hash, check_password_hash
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
 
 from flask import flash, redirect, render_template, request, session, url_for
+
 from chrono.db import (_ensure_registry, _registry_find)
 from chrono.auth import (_apply_auth, _current_comp, _safe_next, _verify_user)
 from chrono.logging_setup import (_app_logger)

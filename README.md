@@ -144,6 +144,7 @@ docs/РУКОВОДСТВО.md      # руководство пользоват�
 docs/ЗАДАЧА-*.md         # постановки задач и решения
 tools/md2docx.py        # сборка DOCX-руководства из Markdown
 tools/run_tests.sh      # прогон тестов в контейнере Python 3.12
+tools/clean_imports.py  # чистка неиспользуемых импортов в chrono/ (ruff-подобная)
 Dockerfile, docker-compose*.yml
 requirements.txt        # локальный запуск (пины + pytest)
 requirements-docker.txt # образ без USB-зависимостей (RFID-считыватель на хосте)

@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from pathlib import Path
 import sqlite3
 from datetime import datetime
 
@@ -14,7 +15,8 @@ from chrono.utils import _slugify, _unique_slug
 log = logging.getLogger('chrono')
 
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # корень проекта (chrono/..)
+# корень проекта: chrono/db.py → chrono/ → корень
+BASE_DIR = str(Path(__file__).resolve().parents[1])
 
 DB_PATH = os.environ.get('CHRONO_DB') or os.path.join(BASE_DIR, 'chrono.db')
 

@@ -2,24 +2,13 @@
 """catalog: маршруты (регистрируются в app.py)."""
 
 import io
-import json
-import os
 import re
-import shutil
 import sqlite3
-import secrets
-from datetime import datetime, timedelta
-
-from flask import (flash, jsonify, redirect, render_template, request, send_file,
-                   send_from_directory, session, url_for, Response, current_app,
-                   has_request_context, abort, make_response)
-from werkzeug.exceptions import HTTPException
-from werkzeug.security import generate_password_hash, check_password_hash
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
 
 from flask import flash, jsonify, redirect, render_template, request, send_file, session, url_for
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font
+
 from chrono.db import (_get_competition, _registry_find, get_db)
 from chrono.settings import (PROTOCOL_DEFAULTS, RACE_FORMATS, _comp_format, _reload_settings_cache_from_db, get_cached_setting)
 from chrono.timing import (_heat_participant_counts)

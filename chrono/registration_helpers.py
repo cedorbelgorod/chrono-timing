@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """registration_helpers: помощники (перенесены из app.py)."""
 from datetime import datetime
-import json, os, re, threading, time
+import json, re, threading, time
 from flask import render_template, request, session
 from chrono.catalog import (_auto_category, _category_matches)
 from chrono.db import (_comp_db_path, _connect, _get_competition, _registry_find)
