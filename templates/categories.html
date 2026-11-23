@@ -1,65 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Категории — {{ competition.name }}
-<script>
-// Перетаскивание строк: порядок строк = колонка «Сортировка» (пересчитывается 1..N).
-(function () {
-    var table = document.getElementById('cats-table');
-    var form = document.getElementById('cats-form');
-    if (!table || !form) return;
-    var tbody = table.querySelector('tbody');
-    var dragRow = null;
-    var orderBefore = '';
-
-    function orderNow() {
-        return [...tbody.querySelectorAll('tr.cat-row')].map(function (r) { return r.dataset.id; }).join(',');
-    }
-
-    function renumber() {
-        var idx = 0;
-        tbody.querySelectorAll('tr.cat-row').forEach(function (row) {
-            idx += 1;
-            var inp = row.querySelector('input[name$="_sort"]');
-            if (inp && inp.value !== String(idx)) {
-                inp.value = idx;
-                inp.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        });
-    }
-
-    tbody.querySelectorAll('.drag-handle').forEach(function (handle) {
-        var row = handle.closest('tr');
-        if (!row) return;
-
-        handle.addEventListener('dragstart', function (e) {
-            dragRow = row;
-            orderBefore = orderNow();
-            row.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-            try { e.dataTransfer.setData('text/plain', row.dataset.id || ''); } catch (err) {}
-        });
-
-        handle.addEventListener('dragend', function () {
-            if (dragRow) dragRow.classList.remove('dragging');
-            dragRow = null;
-            if (orderNow() !== orderBefore) renumber();
-        });
-    });
-
-    tbody.addEventListener('dragover', function (e) {
-        if (!dragRow) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        var target = e.target.closest('tr.cat-row');
-        if (!target || target === dragRow) return;
-        var rect = target.getBoundingClientRect();
-        var after = (e.clientY - rect.top) > rect.height / 2;
-        tbody.insertBefore(dragRow, after ? target.nextSibling : target);
-    });
-
-    tbody.addEventListener('drop', function (e) { e.preventDefault(); });
-})();
-</script>
-{% endblock %}
+{% block title %}Категории — {{ competition.name }}{% endblock %}
 {% block content %}
 <h2>{{ competition.name }} <small>— категории</small></h2>
 
@@ -115,7 +55,7 @@
         <thead>
             <tr>
                 <th data-col="id" style="width:44px">ID</th>
-                <th data-col="sort" style="width:110px" title="Порядок групп при сортировке старта «по группе»">Сортировка</th>
+                <th data-col="sort" style="width:84px" title="Порядок групп при сортировке старта «по группе»">Сортировка</th>
                 <th data-col="name" class="th-name">Название</th>
                 <th data-col="laps" style="width:86px">Кругов</th>
                 <th data-col="gender" style="width:104px">Пол</th>
@@ -244,8 +184,8 @@
 .btn-cols:hover { background: #f3f4f6; }
 .btn-cols.on { background: #eef2ff; border-color: #6366f1; color: #3730a3; }
 .cats-tools-hint { font-size: 12px; color: #9ca3af; }
-.td-sort { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.td-sort .row-input { flex: 1 1 auto; width: auto !important; min-width: 58px; }
+.td-sort { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.td-sort .row-input { flex: 1 1 auto; width: auto !important; min-width: 40px; }
 .drag-handle {
     display: inline-block; margin-right: 6px; padding: 2px 3px;
     color: #9ca3af; font-size: 15px; line-height: 1; letter-spacing: -1px;
@@ -458,6 +398,139 @@
         if (window.__formSubmitting) return;
         if (unsavedCount > 0) { e.preventDefault(); e.returnValue = ''; }
     });
+})();
+</script>
+
+<script>
+// Компактная таблица: по умолчанию только сортировка, название и круги.
+// Кнопка «Все колонки» показывает остальные поля (выбор запоминается в браузере).
+(function () {
+    var table = document.getElementById('cats-table');
+    var btn = document.getElementById('cols-toggle');
+    if (!table || !btn) return;
+
+    var KEY = 'cats_full_cols';
+
+    function field(row, suffix) {
+        var el = row.querySelector('input[name$="' + suffix + '"]');
+        return el ? (el.value || '').trim() : '';
+    }
+
+    function summary(row) {
+        var genders = [];
+        row.querySelectorAll('input[name$="_gender"]:checked').forEach(function (i) {
+            genders.push(i.value === 'M' ? 'М' : 'Ж');
+        });
+        var parts = [genders.length ? genders.join('+') : 'пол любой'];
+
+        var from = field(row, '_year_from'), to = field(row, '_year_to');
+        parts.push((from || to) ? ('годы ' + (from || '…') + '–' + (to || '…')) : 'годы любые');
+
+        var dist = field(row, '_lap_length');
+        if (dist) parts.push(dist + ' км');
+        var hd = field(row, '_hd'); if (hd) parts.push('HD ' + hd);
+        var ms = field(row, '_ms'); if (ms) parts.push('МС ' + ms);
+        var ts = field(row, '_ts'); if (ts) parts.push('ТС ' + ts);
+        return parts.join(' · ');
+    }
+
+    function refresh(row) {
+        var box = row.querySelector('.cat-summary');
+        if (box) box.textContent = summary(row);
+    }
+
+    function refreshAll() {
+        table.querySelectorAll('tr.cat-row').forEach(refresh);
+    }
+
+    function apply(full) {
+        table.classList.toggle('is-compact', !full);
+        btn.textContent = full ? '⇤ Скрыть лишние колонки' : '⚙ Все колонки';
+        btn.classList.toggle('on', full);
+        btn.setAttribute('aria-pressed', full ? 'true' : 'false');
+        refreshAll();
+    }
+
+    var saved = false;
+    try { saved = localStorage.getItem(KEY) === '1'; } catch (e) {}
+    apply(saved);
+
+    btn.addEventListener('click', function () {
+        var full = table.classList.contains('is-compact');
+        try { localStorage.setItem(KEY, full ? '1' : '0'); } catch (e) {}
+        apply(full);
+    });
+
+    table.addEventListener('input', function (e) {
+        var row = e.target.closest('tr.cat-row');
+        if (row) refresh(row);
+    });
+    table.addEventListener('change', function (e) {
+        var row = e.target.closest('tr.cat-row');
+        if (row) refresh(row);
+    });
+
+    refreshAll();
+})();
+</script>
+
+<script>
+// Перетаскивание строк: порядок строк = колонка «Сортировка» (пересчитывается 1..N).
+(function () {
+    var table = document.getElementById('cats-table');
+    if (!table) return;
+    var tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    var dragRow = null;
+    var orderBefore = '';
+
+    function orderNow() {
+        return [...tbody.querySelectorAll('tr.cat-row')].map(function (r) { return r.dataset.id; }).join(',');
+    }
+
+    function renumber() {
+        var idx = 0;
+        tbody.querySelectorAll('tr.cat-row').forEach(function (row) {
+            idx += 1;
+            var inp = row.querySelector('input[name$="_sort"]');
+            if (inp && inp.value !== String(idx)) {
+                inp.value = idx;
+                inp.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        });
+    }
+
+    tbody.querySelectorAll('.drag-handle').forEach(function (handle) {
+        var row = handle.closest('tr');
+        if (!row) return;
+
+        handle.addEventListener('dragstart', function (e) {
+            dragRow = row;
+            orderBefore = orderNow();
+            row.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            try { e.dataTransfer.setData('text/plain', row.dataset.id || ''); } catch (err) {}
+        });
+
+        handle.addEventListener('dragend', function () {
+            if (dragRow) dragRow.classList.remove('dragging');
+            dragRow = null;
+            if (orderNow() !== orderBefore) renumber();
+        });
+    });
+
+    tbody.addEventListener('dragover', function (e) {
+        if (!dragRow) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        var target = e.target.closest('tr.cat-row');
+        if (!target || target === dragRow) return;
+        var rect = target.getBoundingClientRect();
+        var after = (e.clientY - rect.top) > rect.height / 2;
+        tbody.insertBefore(dragRow, after ? target.nextSibling : target);
+    });
+
+    tbody.addEventListener('drop', function (e) { e.preventDefault(); });
 })();
 </script>
 {% endblock %}
