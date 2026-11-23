@@ -29,3 +29,6 @@ android/build/
 
 # DOCX собирается из Markdown: python tools/md2docx.py
 docs/*.docx
+
+# данные тестов
+.tests-data/

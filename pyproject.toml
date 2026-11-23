@@ -1,0 +1,5 @@
+[project]
+name = "chrono-timing"
+version = "0.0.0"
+description = "Хронометраж велокросса"
+requires-python = ">=3.12"

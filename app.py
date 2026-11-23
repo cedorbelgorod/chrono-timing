@@ -2691,10 +2691,12 @@ def _build_results_detail(conn, hid, cat_filter_id=None, include_auto=True):
                     except (TypeError, ValueError):
                         secs = None
             elif race['status'] == 'running' and race.get('start_time'):
-                try:
-                    secs = (now_dt - datetime.fromisoformat(race['start_time'])).total_seconds()
-                except (TypeError, ValueError):
-                    secs = None
+                # оценка по факту последнего пройденного круга: темп × план
+                laps = race.get('laps') or []
+                if laps:
+                    done = len(laps)
+                    total = race.get('planned_laps') or race['laps_total'] or done
+                    secs = laps[-1]['elapsed_seconds'] * total / done
             x['live_seconds'] = secs
         ranked = sorted([x for x in rows_data if x['live_seconds'] is not None],
                         key=lambda x: (x['live_seconds'], x['race']['number'] or 0))

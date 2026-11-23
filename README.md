@@ -81,6 +81,40 @@ competitions.json          # реестр: slug, название, путь к �
 сделайте копию каталога с данными (`/data`), а если структура изменилась несовместимо —
 перенесите данные вручную или создайте соревнование заново.
 
+## Разработка и тесты
+
+Проект рассчитан на **Python 3.12** (в Docker — `python:3.12-slim`).
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Тесты работают в изолированной базе (`.tests-data/`, в `.gitignore`) и не трогают
+рабочие `chrono.db`, `comps/` и `log/`:
+
+```bash
+python -m pytest tests -q                    # или без pytest:
+python -m unittest discover -s tests -t .
+```
+
+Прогон в контейнере Python 3.12 — ровно как в проде (нужен образ `chrono:latest`):
+
+```bash
+bash tools/run_tests.sh
+```
+
+**Ключ подписи сессий.** Без `CHRONO_SECRET_KEY` приложение генерирует временный ключ
+при каждом старте — все сессии сбрасываются. Задайте постоянный:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Переменные окружения — в `.env` (см. `.env.example`), в Docker — в `docker-compose*.yml`
+(пример: `docker-compose.hrono.example.yml`).
+
 ## Структура проекта
 
 ```
@@ -88,11 +122,13 @@ app.py                  # всё приложение: модели, маршр�
 templates/              # Jinja2-шаблоны (интерфейс)
 static/                 # иконки, PWA-манифест, APK для Android
 android/                # исходники Android-обёртки (WebView)
+tests/                  # автотесты (pytest / unittest)
 docs/РУКОВОДСТВО.md      # руководство пользователя
-docs/ЗАДАЧА-разделка.md  # постановка и решение по раздельному старту
+docs/ЗАДАЧА-*.md         # постановки задач и решения
 tools/md2docx.py        # сборка DOCX-руководства из Markdown
+tools/run_tests.sh      # прогон тестов в контейнере Python 3.12
 Dockerfile, docker-compose*.yml
-requirements.txt        # локальный запуск
+requirements.txt        # локальный запуск (пины + pytest)
 requirements-docker.txt # образ без USB-зависимостей (RFID-считыватель на хосте)
 ```
 
