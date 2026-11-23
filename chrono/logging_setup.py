@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""logging_setup: помощники (перенесены из app.py)."""
+"""Логгеры в файлы, журнал запросов и обработчик необработанных ошибок."""
 import logging, os
 from logging.handlers import RotatingFileHandler
 from chrono.db import (LOG_DIR)

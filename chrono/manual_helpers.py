@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""manual_helpers: помощники (перенесены из app.py)."""
+"""Ручной хронометраж: журнал действий и данные страницы «Хронометраж»."""
 from datetime import datetime
 import sqlite3
 from flask import session

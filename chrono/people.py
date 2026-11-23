@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""people: помощники (перенесены из app.py)."""
+"""Кэш участников bike.cedor.ru — подсказки при вводе ФИО."""
 from datetime import datetime, timedelta
 import io, os, re, threading
 from chrono.db import (PEOPLE_DB, _connect)

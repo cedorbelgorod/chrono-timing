@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""races: маршруты (регистрируются в app.py)."""
+"""Маршруты стартов, заездов, кругов и стартового протокола."""
 
 import io
 import re
@@ -12,8 +12,13 @@ from openpyxl.utils import get_column_letter
 
 from chrono.db import (_get_competition, get_db)
 from chrono.pdf import (_render_startlist_pdf)
-from chrono.settings import (_comp_format, _heat_format, _itt_interval, get_cached_setting, set_cached_setting)
-from chrono.timing import (_build_races_heats, _find_heat_by_token, _force_finish_heat, _heat_startlist_data, _race_lap_counts, _start_heat)
+from chrono.settings import (
+    _comp_format, _heat_format, _itt_interval, get_cached_setting, set_cached_setting,
+)
+from chrono.timing import (
+    _build_races_heats, _find_heat_by_token, _force_finish_heat, _heat_startlist_data,
+    _race_lap_counts, _start_heat,
+)
 from chrono.utils import (_fmt_start_at, _new_startlist_token, format_secs)
 from chrono.catalog import (_category_participants, _parse_duration, _tags_by_number)
 from chrono.results_helpers import (_base_url)

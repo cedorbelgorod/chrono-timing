@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""registration: маршруты (регистрируются в app.py)."""
+"""Маршруты саморегистрации участников."""
 
 import io
 import json
@@ -15,7 +15,11 @@ from chrono.utils import (_qr_svg)
 from chrono.auth import (_is_read_only)
 from chrono.catalog import (_auto_category, _cat_genders)
 from chrono.logging_setup import (_app_logger)
-from chrono.registration_helpers import (DEFAULT_CONSENT, REG_FIELDS, REG_WIZARD_ORDER, _public_participants, _public_reg_context, _reg_allowed_categories, _reg_clear_draft, _reg_closed, _reg_config, _reg_create_participant, _reg_draft, _reg_rate_ok, _reg_save_draft, _reg_status, _reg_step_validate, _reg_steps)
+from chrono.registration_helpers import (
+    DEFAULT_CONSENT, REG_FIELDS, REG_WIZARD_ORDER, _public_participants, _public_reg_context,
+    _reg_allowed_categories, _reg_clear_draft, _reg_closed, _reg_config, _reg_create_participant,
+    _reg_draft, _reg_rate_ok, _reg_save_draft, _reg_status, _reg_step_validate, _reg_steps,
+)
 
 
 def registration_page():

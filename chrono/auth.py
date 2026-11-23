@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""auth: помощники (перенесены из app.py)."""
+"""Сессии, роли и доступ: вход, проверка прав, режим «только чтение», учётка управления."""
 import hmac, json, os
 from flask import flash, session, redirect, render_template, request, url_for
 from werkzeug.security import check_password_hash

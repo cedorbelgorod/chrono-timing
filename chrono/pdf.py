@@ -133,7 +133,9 @@ def _render_protocol_pdf(comp, data):
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, KeepTogether
+    from reportlab.platypus import (
+        SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, KeepTogether,
+    )
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
 

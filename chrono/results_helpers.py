@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
-"""results_helpers: помощники (перенесены из app.py)."""
+"""Результаты и протоколы: данные страниц, погода, публичные разделы."""
 from datetime import datetime
 import json, os
 from flask import redirect, render_template, request, url_for
 from chrono.catalog import (_scalar, _to_float)
 from chrono.db import (_comp_db_path, _get_competition, _registry_find)
-from chrono.settings import (PROTOCOL_DEFAULTS, _comp_format, get_cached_setting, set_cached_setting)
-from chrono.timing import (_build_heat_view, _build_results_detail, _count_races, _heat_participant_counts, _load_auto_laps_by_race, _load_laps_by_race, prepare_race)
+from chrono.settings import PROTOCOL_DEFAULTS, _comp_format, get_cached_setting, set_cached_setting
+from chrono.timing import (
+    _build_heat_view, _build_results_detail, _count_races, _heat_participant_counts,
+    _load_auto_laps_by_race, _load_laps_by_race, prepare_race,
+)
 from chrono.utils import (_qr_svg, _speed_kmh, format_secs_short)
 
 def _public_competition(slug):

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""public: маршруты (регистрируются в app.py)."""
+"""Публичные страницы: хаб соревнования, табло, протоколы, приложение."""
 
 import os
 
@@ -8,7 +8,10 @@ from flask import redirect, render_template, request, send_from_directory, url_f
 from chrono.db import (_comp_db_path, _connect, _get_competition, get_db)
 from chrono.settings import (_reload_settings_cache_from_db)
 from chrono.timing import (_heat_startlist_data)
-from chrono.results_helpers import (_build_dashboard_heats, _finish_screen_data_response, _finish_screen_response, _hub_data, _public_competition, _results_response)
+from chrono.results_helpers import (
+    _build_dashboard_heats, _finish_screen_data_response, _finish_screen_response, _hub_data,
+    _public_competition, _results_response,
+)
 
 
 def app_page():

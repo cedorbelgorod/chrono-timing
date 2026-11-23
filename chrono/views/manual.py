@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""manual: маршруты (регистрируются в app.py)."""
+"""Маршруты ручного хронометража и табло старта."""
 
 from datetime import datetime
 
@@ -7,7 +7,10 @@ from flask import flash, jsonify, redirect, render_template, request, session, u
 
 from chrono.db import (_get_competition, get_db)
 from chrono.settings import (_comp_format)
-from chrono.timing import (_build_merged_laps, _manual_start_queue, _manual_start_state, _process_race_finish, _running_itt_heat, _start_heat, maybe_finish_heat)
+from chrono.timing import (
+    _build_merged_laps, _manual_start_queue, _manual_start_state, _process_race_finish,
+    _running_itt_heat, _start_heat, maybe_finish_heat,
+)
 from chrono.manual_helpers import (_get_manual_data, _log_timing, _push_manual_log)
 
 

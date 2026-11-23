@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""catalog: маршруты (регистрируются в app.py)."""
+"""Маршруты участников, категорий, номеров и меток."""
 
 import io
 import re
@@ -10,10 +10,19 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 
 from chrono.db import (_get_competition, _registry_find, get_db)
-from chrono.settings import (PROTOCOL_DEFAULTS, RACE_FORMATS, _comp_format, _reload_settings_cache_from_db, get_cached_setting)
+from chrono.settings import (
+    PROTOCOL_DEFAULTS, RACE_FORMATS, _comp_format, _reload_settings_cache_from_db,
+    get_cached_setting,
+)
 from chrono.timing import (_heat_participant_counts)
 from chrono.utils import (_normalize_gender, _parse_year)
-from chrono.catalog import (CATEGORY_HEADER_ALIASES, HEADER_ALIASES, MAX_TAGS_PER_NUMBER, PARTICIPANT_SORTS, TAGS_HEADER_ALIASES, _auto_category, _category_overlaps, _cell_text, _find_header_col, _invalidate_competition_meta, _issue_number, _join_genders, _next_number, _norm_header, _norm_name, _parse_gender_cell, _participants_redirect, _plabel, _save_bib_tags, _scalar, _tags_by_number)
+from chrono.catalog import (
+    CATEGORY_HEADER_ALIASES, HEADER_ALIASES, MAX_TAGS_PER_NUMBER, PARTICIPANT_SORTS,
+    TAGS_HEADER_ALIASES, _auto_category, _category_overlaps, _cell_text, _find_header_col,
+    _invalidate_competition_meta, _issue_number, _join_genders, _next_number, _norm_header,
+    _norm_name, _parse_gender_cell, _participants_redirect, _plabel, _save_bib_tags, _scalar,
+    _tags_by_number,
+)
 from chrono.logging_setup import (_app_logger)
 from chrono.registration_helpers import (_next_reg_number)
 from chrono.results_helpers import (_base_url)

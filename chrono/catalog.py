@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""catalog: помощники (перенесены из app.py)."""
+"""Участники, категории, номера и метки: подбор категории, выдача номеров, разбор Excel."""
 from datetime import datetime
 import re
 from flask import redirect, url_for, session

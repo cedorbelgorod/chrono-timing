@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""results: маршруты (регистрируются в app.py)."""
+"""Маршруты результатов, протокола, итогов и журнала."""
 
 import io
 import re
@@ -15,7 +15,10 @@ from chrono.pdf import (_render_protocol_pdf)
 from chrono.settings import (set_cached_setting)
 from chrono.timing import (_build_results_detail)
 from chrono.catalog import (_to_float)
-from chrono.results_helpers import (_build_protocol, _fetch_weather, _geocode_city, _prepare_results_data, _results_response, _save_proto_settings)
+from chrono.results_helpers import (
+    _build_protocol, _fetch_weather, _geocode_city, _prepare_results_data, _results_response,
+    _save_proto_settings,
+)
 
 
 def results_page():

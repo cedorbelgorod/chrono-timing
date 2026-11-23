@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""manage: маршруты (регистрируются в app.py)."""
+"""Маршруты страницы управления: реестр, архив, импорт/экспорт, пароли."""
 
 import json
 import os
@@ -11,9 +11,14 @@ from datetime import datetime
 from flask import flash, redirect, render_template, request, send_file, session, url_for
 from werkzeug.security import generate_password_hash
 
-from chrono.db import (COMPS_DIR, DATA_DIR, _comp_db_path, _connect, _create_competition_db, _ensure_registry, _registry_find, _registry_load, _registry_save, _rel_db_path, init_db)
+from chrono.db import (
+    COMPS_DIR, DATA_DIR, _comp_db_path, _connect, _create_competition_db, _ensure_registry,
+    _registry_find, _registry_load, _registry_save, _rel_db_path, init_db,
+)
 from chrono.utils import (_slugify, _unique_slug)
-from chrono.auth import (MANAGE_FILE, MANAGE_PASS, _clear_competition, _manage_creds, _manage_ok, _manage_password_ok)
+from chrono.auth import (
+    MANAGE_FILE, MANAGE_PASS, _clear_competition, _manage_creds, _manage_ok, _manage_password_ok,
+)
 from chrono.logging_setup import (_app_logger)
 from chrono.people import (PEOPLE_URL, _people_refresh, _people_stats)
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Запуск сервера (HTTP/HTTPS) — вынесено из app.py."""
+"""Запуск HTTP/HTTPS-сервера (вызывается из app.py)."""
 import os
 import threading
 import time

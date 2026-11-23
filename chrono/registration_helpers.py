@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""registration_helpers: помощники (перенесены из app.py)."""
+"""Саморегистрация: настройки формы, шаги визарда, правила и создание участника."""
 from datetime import datetime
 import json, re, threading, time
 from flask import render_template, request, session

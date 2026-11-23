@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""rfid: помощники (перенесены из app.py)."""
+"""RFID: чтение меток, автоотметки кругов, статус считывателя."""
 from datetime import datetime
 import re, threading, time
 try:
