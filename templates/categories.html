@@ -47,8 +47,7 @@
 {% if categories %}
 <form method="post" action="{{ url_for('categories_save_all', cid=competition.id) }}" id="cats-form">
     <div class="cats-tools">
-        <button type="button" id="cols-toggle" class="btn-cols" aria-pressed="false">⚙ Все колонки</button>
-        <span class="cats-tools-hint">по умолчанию: сортировка · название · кругов; порядок меняется перетаскиванием за ⋮⋮</span>
+        <span class="cats-tools-hint">перетащите строку за ⋮⋮, чтобы изменить порядок — он сохраняется сразу</span>
         <span id="sort-status" class="cats-status"></span>
     </div>
     <div class="cats-scroll">
@@ -59,18 +58,10 @@
         </colgroup>
         <thead>
             <tr>
-                <th data-col="id" style="width:44px">ID</th>
-                <th data-col="sort" style="width:84px" title="Порядок групп при сортировке старта «по группе»">Сортировка</th>
-                <th data-col="name" class="th-name">Название</th>
-                <th data-col="laps" style="width:86px">Кругов</th>
-                <th data-col="gender" style="width:104px">Пол</th>
-                <th data-col="year_from" style="width:86px">Год с</th>
-                <th data-col="year_to" style="width:86px">Год по</th>
-                <th data-col="lap_length" style="width:100px">Круг, км</th>
-                <th data-col="hd" style="width:70px">HD</th>
-                <th data-col="ms" style="width:70px">МС</th>
-                <th data-col="ts" style="width:70px">ТС</th>
-                <th data-col="actions" style="width:120px">Действия</th>
+                <th class="th-sort">Сортировка</th>
+                <th class="th-name">Название</th>
+                <th class="th-laps">Кругов</th>
+                <th class="th-act" aria-label="Действия"></th>
             </tr>
         </thead>
         <tbody>
@@ -79,23 +70,23 @@
             {% set s = submitted.get(cat.id) if submitted else none %}
             {% set err = row_errors.get(cat.id) if row_errors else none %}
             {% set g = (s.gender if s else cat.gender) or '' %}
+            {% set has_cond = g or (s.year_from if s else cat.year_from) or (s.year_to if s else cat.year_to)
+                              or (s.lap_length if s else cat.lap_length) or (s.hd if s else cat.hd)
+                              or (s.ms if s else cat.ms) or (s.ts if s else cat.ts) %}
             <tr class="cat-row {{ 'row-overlap' if ov }} {{ 'row-error' if err }}" data-id="{{ cat.id }}">
-                <td data-col="id" data-label="ID">{{ cat.id }}</td>
-                <td data-col="sort" data-label="Сортировка" class="td-sort">
-                    <span class="sort-wrap">
-                        <span class="drag-handle" draggable="true" role="button" tabindex="-1"
-                              title="Перетащите строку, чтобы изменить порядок">⋮⋮</span>
-                        <input type="number" name="cat_{{ cat.id }}_sort" class="row-input sort-input" min="0" step="1"
-                               value="{{ s.sort_order if s else (cat.sort_order if cat.sort_order is not none else cat.id) }}"
-                               title="Порядок групп при сортировке старта «по группе, затем номер»">
-                    </span>
+                <td class="td-sort" data-label="Порядок">
+                    <span class="drag-handle" draggable="true" role="button" tabindex="-1"
+                          title="Перетащите строку, чтобы изменить порядок">⋮⋮</span>
+                    <input type="number" name="cat_{{ cat.id }}_sort" class="row-input sort-input" min="0" step="1"
+                           value="{{ s.sort_order if s else (cat.sort_order if cat.sort_order is not none else cat.id) }}"
+                           title="Порядок групп на старте «по группе, затем номер»">
                 </td>
-                <td data-col="name" data-label="Название" class="td-name">
+                <td class="td-name" data-label="Название">
                     <input type="text" name="cat_{{ cat.id }}_name"
                            value="{{ s.name if s else cat.name }}" required
                            placeholder="Название категории"
                            class="row-input name-input {{ 'input-error' if err and err[1] == 'name' else '' }}"
-                           style="width:100%">
+                           title="{{ s.name if s else cat.name }}">
                     {% if err %}
                         <div class="row-error-text">⚠ {{ err[0] }}</div>
                     {% endif %}
@@ -103,65 +94,89 @@
                         <div class="cat-overlap">⚠ условия пересекаются: {{ ov|join(', ') }}</div>
                     {% endif %}
                 </td>
-                <td data-col="laps" data-label="Кругов">
-                    <input type="number" name="cat_{{ cat.id }}_laps"
-                           value="{{ s.laps if s else cat.laps_total }}" min="1" required
-                           class="row-input {{ 'input-error' if err and err[1] == 'laps' else '' }}"
-                           style="width:70px">
-                </td>
-                <td data-col="gender" data-label="Пол">
-                    <span class="g-pick">
-                        <label class="g"><input type="checkbox" name="cat_{{ cat.id }}_gender" value="M"
-                            {% if 'M' in g %}checked{% endif %}> М</label>
-                        <label class="g"><input type="checkbox" name="cat_{{ cat.id }}_gender" value="F"
-                            {% if 'F' in g %}checked{% endif %}> Ж</label>
+                <td class="td-laps" data-label="Кругов">
+                    <span class="stepper">
+                        <button type="button" class="step-btn" data-step="-1" tabindex="-1"
+                                aria-label="Меньше кругов">−</button>
+                        <input type="number" name="cat_{{ cat.id }}_laps"
+                               value="{{ s.laps if s else cat.laps_total }}" min="1" required
+                               class="row-input laps-input {{ 'input-error' if err and err[1] == 'laps' else '' }}">
+                        <button type="button" class="step-btn" data-step="1" tabindex="-1"
+                                aria-label="Больше кругов">+</button>
                     </span>
                 </td>
-                <td data-col="year_from" data-label="Год с">
-                    <input type="number" name="cat_{{ cat.id }}_year_from"
-                           value="{{ s.year_from if s else (cat.year_from or '') }}" min="1900" max="2030"
-                           class="row-input {{ 'input-error' if err and err[1] == 'year_from' else '' }}"
-                           style="width:76px" placeholder="—">
-                </td>
-                <td data-col="year_to" data-label="Год по">
-                    <input type="number" name="cat_{{ cat.id }}_year_to"
-                           value="{{ s.year_to if s else (cat.year_to or '') }}" min="1900" max="2030"
-                           class="row-input {{ 'input-error' if err and err[1] == 'year_to' else '' }}"
-                           style="width:76px" placeholder="—">
-                </td>
-                <td data-col="lap_length" data-label="Круг, км">
-                    <input type="text" name="cat_{{ cat.id }}_lap_length"
-                           value="{{ s.lap_length if s else (cat.lap_length or '') }}" placeholder="2,3"
-                           class="row-input" style="width:90px">
-                </td>
-                <td data-col="hd" data-label="HD">
-                    <input type="text" name="cat_{{ cat.id }}_hd"
-                           value="{{ s.hd if s else (cat.hd or '') }}"
-                           class="row-input" style="width:70px">
-                </td>
-                <td data-col="ms" data-label="МС">
-                    <input type="text" name="cat_{{ cat.id }}_ms"
-                           value="{{ s.ms if s else (cat.ms or '') }}"
-                           class="row-input" style="width:70px">
-                </td>
-                <td data-col="ts" data-label="ТС">
-                    <input type="text" name="cat_{{ cat.id }}_ts"
-                           value="{{ s.ts if s else (cat.ts or '') }}"
-                           class="row-input" style="width:70px">
-                </td>
-                <td data-col="actions" data-label="">
-                    <button type="submit" class="danger del-btn" formnovalidate
+                <td class="td-act" data-label="">
+                    <button type="button" class="icon-btn gear {{ 'active' if has_cond }}"
+                            data-modal="cat-modal-{{ cat.id }}"
+                            title="Условия категории: пол, годы рождения, трасса">⚙</button>
+                    <button type="submit" class="icon-btn trash del-btn" formnovalidate
                             formaction="{{ url_for('category_delete', catid=cat.id) }}"
                             formmethod="post"
-                            data-confirm="Удалить категорию «{{ cat.name }}»?">
-                        Удалить
-                    </button>
+                            data-confirm="Удалить категорию «{{ cat.name }}»?"
+                            title="Удалить категорию">🗑</button>
                 </td>
             </tr>
         {% endfor %}
         </tbody>
     </table>
     </div>
+
+    {# условия категорий — в модалке, поля остаются в этой же форме #}
+    {% for cat in categories %}
+        {% set s = submitted.get(cat.id) if submitted else none %}
+        {% set err = row_errors.get(cat.id) if row_errors else none %}
+        {% set g = (s.gender if s else cat.gender) or '' %}
+        <div class="cat-modal" id="cat-modal-{{ cat.id }}" data-for="{{ cat.id }}" hidden>
+            <div class="cat-modal-box" role="dialog" aria-modal="true"
+                 aria-labelledby="cat-modal-title-{{ cat.id }}">
+                <div class="cat-modal-head">
+                    <b id="cat-modal-title-{{ cat.id }}">{{ s.name if s else cat.name }}</b>
+                    <button type="button" class="icon-btn" data-close title="Закрыть">✕</button>
+                </div>
+                <div class="cat-modal-body">
+                    <div class="fld wide">
+                        <span>Пол</span>
+                        <span class="g-pick">
+                            <label class="g"><input type="checkbox" name="cat_{{ cat.id }}_gender" value="M"
+                                {% if 'M' in g %}checked{% endif %}> М</label>
+                            <label class="g"><input type="checkbox" name="cat_{{ cat.id }}_gender" value="F"
+                                {% if 'F' in g %}checked{% endif %}> Ж</label>
+                        </span>
+                    </div>
+                    <label class="fld"><span>Год с</span>
+                        <input type="number" name="cat_{{ cat.id }}_year_from"
+                               value="{{ s.year_from if s else (cat.year_from or '') }}" min="1900" max="2030"
+                               placeholder="—" class="{{ 'input-error' if err and err[1] == 'year_from' else '' }}">
+                    </label>
+                    <label class="fld"><span>Год по</span>
+                        <input type="number" name="cat_{{ cat.id }}_year_to"
+                               value="{{ s.year_to if s else (cat.year_to or '') }}" min="1900" max="2030"
+                               placeholder="—" class="{{ 'input-error' if err and err[1] == 'year_to' else '' }}">
+                    </label>
+                    <label class="fld"><span>Круг, км</span>
+                        <input type="text" name="cat_{{ cat.id }}_lap_length"
+                               value="{{ s.lap_length if s else (cat.lap_length or '') }}" placeholder="2,3">
+                    </label>
+                    <label class="fld"><span>HD</span>
+                        <input type="text" name="cat_{{ cat.id }}_hd"
+                               value="{{ s.hd if s else (cat.hd or '') }}">
+                    </label>
+                    <label class="fld"><span>МС</span>
+                        <input type="text" name="cat_{{ cat.id }}_ms"
+                               value="{{ s.ms if s else (cat.ms or '') }}">
+                    </label>
+                    <label class="fld"><span>ТС</span>
+                        <input type="text" name="cat_{{ cat.id }}_ts"
+                               value="{{ s.ts if s else (cat.ts or '') }}">
+                    </label>
+                </div>
+                <div class="cat-modal-foot">
+                    <span class="muted">Изменения сохранятся кнопкой «Сохранить все изменения».</span>
+                    <button type="button" class="btn-done" data-close>Готово</button>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
 
     <div class="save-bar">
         <button type="submit" class="btn-save-all" id="save-all-btn">
@@ -182,72 +197,124 @@
 <style>
 /* компактный режим: только сортировка, название, кругов (+ действия) */
 .cats-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 10px; }
-.btn-cols {
-    padding: 8px 14px; font-size: 13px; font-weight: 600; font-family: inherit;
-    border-radius: 8px; cursor: pointer; background: #fff; color: #374151; border: 1px solid #d1d5db;
-}
-.btn-cols:hover { background: #f3f4f6; }
-.btn-cols.on { background: #eef2ff; border-color: #6366f1; color: #3730a3; }
 .cats-tools-hint { font-size: 12px; color: #9ca3af; }
 .cats-status { font-size: 12px; font-weight: 600; }
 .cats-status.ok { color: #15803d; }
 .cats-status.err { color: #b91c1c; }
-#cats-table { table-layout: fixed; width: 100%; }
-#cats-table th { padding: 7px 10px; font-size: 12px; }
-#cats-table td { padding: 4px 10px; vertical-align: middle; }
-#cats-table .row-input { padding: 6px 8px; }
-#cats-table td.td-name .name-input { font-size: 15px; padding: 7px 10px; }
-#cats-table .c-id { width: 52px; }
-#cats-table .c-sort { width: 92px; }
-#cats-table .c-name { width: auto; }
-#cats-table .c-laps { width: 84px; }
-#cats-table .c-gender { width: 104px; }
-#cats-table .c-yf, #cats-table .c-yt { width: 84px; }
-#cats-table .c-lap { width: 96px; }
-#cats-table .c-hd, #cats-table .c-ms, #cats-table .c-ts { width: 68px; }
-#cats-table .c-act { width: 120px; }
-#cats-table.is-compact .c-id,
-#cats-table.is-compact .c-gender,
-#cats-table.is-compact .c-yf,
-#cats-table.is-compact .c-yt,
-#cats-table.is-compact .c-lap,
-#cats-table.is-compact .c-hd,
-#cats-table.is-compact .c-ms,
-#cats-table.is-compact .c-ts { width: 0; }
-.td-sort { white-space: nowrap; width: 92px; max-width: 92px; }
-.sort-wrap { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
-.sort-wrap .sort-input { width: 54px !important; min-width: 0; padding: 8px 6px; text-align: center; }
+/* таблица: узкие колонки по содержимому, растягивается только «Название» */
+#cats-table { width: 100%; border-collapse: collapse; }
+.cats-scroll { overflow-x: auto; }
+#cats-table th {
+    padding: 8px 10px; font-size: 11px; font-weight: 600; color: #9ca3af;
+    text-transform: uppercase; letter-spacing: .04em; background: #fff;
+    border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; z-index: 2;
+}
+#cats-table td { padding: 4px 10px; vertical-align: middle; border-bottom: 1px solid #eef0f3; }
+#cats-table tbody tr:nth-child(even) { background: #fafbfc; }
+#cats-table tbody tr:hover { background: #f3f6fb; }
+#cats-table tbody tr.row-changed { background: #fffbeb; }
+#cats-table tbody tr.row-changed:hover { background: #fff7e0; }
+#cats-table tbody tr.row-overlap,
+#cats-table tbody tr.row-error { background: #fef2f2; }
+#cats-table tbody tr.dragging { opacity: .5; background: #eff6ff; }
+
+#cats-table .th-sort, #cats-table .td-sort,
+#cats-table .th-laps, #cats-table .td-laps,
+#cats-table .th-act,  #cats-table .td-act { width: 1px; white-space: nowrap; }
+#cats-table .th-name, #cats-table .td-name { width: 100%; }
+
+#cats-table .row-input {
+    padding: 5px 7px; border: 1px solid transparent; background: transparent;
+    border-radius: 7px; font-family: inherit; transition: border-color .12s, background .12s;
+}
+#cats-table .row-input:hover { border-color: #e5e7eb; background: #fff; }
+#cats-table .row-input:focus {
+    outline: none; border-color: #93c5fd; background: #fff;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+}
+#cats-table .name-input { font-size: 15px; font-weight: 600; width: 100%; }
+#cats-table .sort-input { width: 52px !important; text-align: center; font-variant-numeric: tabular-nums; }
+#cats-table .laps-input { width: 40px !important; text-align: center; font-variant-numeric: tabular-nums; }
+#cats-table .input-error { border-color: #dc2626 !important; background: #fff5f5; }
+
+#cats-table input[type=number]::-webkit-outer-spin-button,
+#cats-table input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+#cats-table input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
 .drag-handle {
-    display: inline-block; margin-right: 6px; padding: 2px 3px;
-    color: #9ca3af; font-size: 15px; line-height: 1; letter-spacing: -1px;
+    display: inline-block; margin-right: 2px; padding: 2px 3px;
+    color: #d3dae3; font-size: 14px; line-height: 1; letter-spacing: -1px;
     cursor: grab; user-select: none; border-radius: 4px;
 }
-.drag-handle:hover { background: #f3f4f6; color: #4b5563; }
+#cats-table tr:hover .drag-handle { color: #94a3b8; }
+.drag-handle:hover { background: #eef2f7; color: #475569; }
 .drag-handle:active { cursor: grabbing; }
-#cats-table tr.dragging { opacity: .45; background: #eff6ff; }
-#cats-table tr.dragging td { border-bottom-color: #bfdbfe; }
-#cats-table.is-compact [data-col="id"],
-#cats-table.is-compact [data-col="gender"],
-#cats-table.is-compact [data-col="year_from"],
-#cats-table.is-compact [data-col="year_to"],
-#cats-table.is-compact [data-col="lap_length"],
-#cats-table.is-compact [data-col="hd"],
-#cats-table.is-compact [data-col="ms"],
-#cats-table.is-compact [data-col="ts"] { display: none; }
-#cats-table.is-compact td.td-name { width: auto; min-width: 260px; }
 
-/* название категории — главная колонка: шире и крупнее остальных */
-.cats-scroll { overflow-x: auto; }
-#cats-form th.th-name,
-#cats-form td.td-name { min-width: 300px; width: 34%; }
-#cats-form td.td-name .name-input {
-    font-size: 16px; font-weight: 600; padding: 10px 12px; letter-spacing: .01em;
+.stepper { display: inline-flex; align-items: center; gap: 2px; }
+.step-btn {
+    width: 22px; height: 26px; padding: 0; font-size: 14px; line-height: 1;
+    border: 1px solid #e5e7eb; background: #fff; color: #6b7280;
+    border-radius: 6px; cursor: pointer; font-family: inherit;
 }
-#cats-form td.td-name .name-input::placeholder { font-weight: 400; color: #9ca3af; }
-@media (max-width: 1100px) {
-    #cats-form th.th-name,
-    #cats-form td.td-name { min-width: 240px; }
+.step-btn:hover { background: #f3f4f6; color: #111827; }
+.step-btn:active { background: #e5e7eb; }
+
+#cats-table .td-act { text-align: right; }
+.icon-btn {
+    width: 30px; height: 30px; padding: 0; margin-left: 4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid transparent; background: transparent; color: #94a3b8;
+    border-radius: 8px; cursor: pointer; font-size: 15px; line-height: 1;
+    opacity: .4; transition: opacity .12s, background .12s, color .12s;
+    font-family: inherit;
 }
+#cats-table tr:hover .icon-btn { opacity: 1; }
+.icon-btn:hover { background: #eef2f7; color: #334155; }
+.icon-btn.gear.active { opacity: 1; color: #2563eb; }
+.icon-btn.trash:hover { background: #fee2e2; color: #dc2626; }
+@media (hover: none) { .icon-btn { opacity: 1; } }
+
+body.modal-open { overflow: hidden; }
+.cat-modal {
+    position: fixed; inset: 0; z-index: 60; padding: 16px;
+    background: rgba(15, 23, 42, .45);
+    display: flex; align-items: center; justify-content: center;
+}
+.cat-modal[hidden] { display: none; }
+.cat-modal-box {
+    background: #fff; border-radius: 12px; width: 100%; max-width: 430px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, .25); max-height: 90vh; overflow: auto;
+}
+.cat-modal-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 14px 16px; border-bottom: 1px solid #eef0f3;
+}
+.cat-modal-head b { font-size: 16px; line-height: 1.3; }
+.cat-modal-head .icon-btn { opacity: 1; margin: 0; }
+.cat-modal-body { padding: 14px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cat-modal-body .fld { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #6b7280; }
+.cat-modal-body .fld.wide { grid-column: 1 / -1; }
+.cat-modal-body .fld input[type=text],
+.cat-modal-body .fld input[type=number] {
+    padding: 8px 10px; font-size: 14px; border: 1px solid #d1d5db;
+    border-radius: 8px; font-family: inherit; width: 100%;
+}
+.cat-modal-body .fld input:focus {
+    outline: none; border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+}
+.cat-modal-body .fld input.input-error { border-color: #dc2626; background: #fff5f5; }
+.cat-modal-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 12px 16px; border-top: 1px solid #eef0f3; background: #fafbfc;
+    border-radius: 0 0 12px 12px;
+}
+.cat-modal-foot .muted { font-size: 12px; color: #9ca3af; }
+.btn-done {
+    padding: 8px 16px; font-size: 14px; font-weight: 600; border: none; border-radius: 8px;
+    background: #2563eb; color: #fff; cursor: pointer; font-family: inherit;
+}
+.btn-done:hover { background: #1d4ed8; }
+
 .cat-import {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
     margin: 10px 0 16px; padding: 10px 12px; background: #f9fafb;
@@ -335,6 +402,14 @@
     const initialState = new WeakMap();
     let unsavedCount = 0;
 
+    // поля строки: то, что в таблице, плюс условия из её модалки
+    function rowInputs(row) {
+        const list = [...row.querySelectorAll('input')];
+        const modal = document.querySelector('.cat-modal[data-for="' + row.dataset.id + '"]');
+        if (modal) list.push(...modal.querySelectorAll('input'));
+        return list;
+    }
+
     function val(el) { return el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value; }
 
     function updateCount() {
@@ -355,7 +430,7 @@
     function checkRow(row) {
         const snap = initialState.get(row);
         let changed = false;
-        row.querySelectorAll('input').forEach(el => {
+        rowInputs(row).forEach(el => {
             const key = el.name + '#' + (el.type === 'checkbox' ? el.value : '');
             if (snap[key] !== val(el)) changed = true;
         });
@@ -371,7 +446,7 @@
 
     rows.forEach(row => {
         const snap = {};
-        row.querySelectorAll('input').forEach(el => {
+        rowInputs(row).forEach(el => {
             snap[el.name + '#' + (el.type === 'checkbox' ? el.value : '')] = val(el);
         });
         initialState.set(row, snap);
@@ -386,7 +461,7 @@
             }
         };
 
-        row.querySelectorAll('input').forEach(el => {
+        rowInputs(row).forEach(el => {
             el.addEventListener('input', check);
             el.addEventListener('change', check);
         });
@@ -442,49 +517,7 @@
 })();
 </script>
 
-<script>
-// Компактная таблица: по умолчанию только сортировка, название и круги.
-// Colgroup перестраивается, чтобы видимые ячейки совпадали с колонками таблицы.
-(function () {
-    var table = document.getElementById('cats-table');
-    var btn = document.getElementById('cols-toggle');
-    if (!table || !btn) return;
 
-    var colgroup = table.querySelector('colgroup');
-    var ORDER = ['c-id', 'c-sort', 'c-name', 'c-laps', 'c-gender', 'c-yf', 'c-yt', 'c-lap', 'c-hd', 'c-ms', 'c-ts', 'c-act'];
-    var HIDDEN = ['c-id', 'c-gender', 'c-yf', 'c-yt', 'c-lap', 'c-hd', 'c-ms', 'c-ts'];
-    var KEY = 'cats_full_cols';
-
-    function rebuildCols(full) {
-        if (!colgroup) return;
-        while (colgroup.firstChild) colgroup.removeChild(colgroup.firstChild);
-        ORDER.forEach(function (cls) {
-            if (!full && HIDDEN.indexOf(cls) !== -1) return;
-            var col = document.createElement('col');
-            col.className = cls;
-            colgroup.appendChild(col);
-        });
-    }
-
-    function apply(full) {
-        table.classList.toggle('is-compact', !full);
-        rebuildCols(full);
-        btn.textContent = full ? '⇤ Скрыть лишние колонки' : '⚙ Все колонки';
-        btn.classList.toggle('on', full);
-        btn.setAttribute('aria-pressed', full ? 'true' : 'false');
-    }
-
-    var saved = false;
-    try { saved = localStorage.getItem(KEY) === '1'; } catch (e) {}
-    apply(saved);
-
-    btn.addEventListener('click', function () {
-        var full = table.classList.contains('is-compact');
-        try { localStorage.setItem(KEY, full ? '1' : '0'); } catch (e) {}
-        apply(full);
-    });
-})();
-</script>
 
 <script>
 // Перетаскивание строк: порядок строк = колонка «Сортировка» (пересчитывается 1..N).
@@ -579,6 +612,61 @@
                 setStatus('Не удалось сохранить: ' + (err.message || 'нет связи'), 'err');
             });
     }
+})();
+</script>
+
+<script>
+// Модалка условий категории + кнопки «−/+» у кругов.
+(function () {
+    var opened = null;
+
+    function close() {
+        if (!opened) return;
+        opened.hidden = true;
+        opened = null;
+        document.body.classList.remove('modal-open');
+    }
+
+    function open(modal) {
+        close();
+        opened = modal;
+        modal.hidden = false;
+        document.body.classList.add('modal-open');
+        var first = modal.querySelector('.cat-modal-body input, .cat-modal-body button');
+        if (first) first.focus();
+    }
+
+    document.querySelectorAll('[data-modal]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var m = document.getElementById(btn.getAttribute('data-modal'));
+            if (m) open(m);
+        });
+    });
+
+    document.querySelectorAll('.cat-modal').forEach(function (m) {
+        m.addEventListener('click', function (e) {
+            if (e.target === m || e.target.closest('[data-close]')) close();
+        });
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') close();
+    });
+
+    // «− 1 +»
+    document.querySelectorAll('.stepper .step-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var input = btn.closest('.stepper').querySelector('input');
+            var delta = parseInt(btn.dataset.step, 10) || 0;
+            var v = parseInt(input.value, 10);
+            if (isNaN(v)) v = 1;
+            v = Math.max(1, v + delta);
+            if (String(v) !== input.value) {
+                input.value = v;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        });
+    });
 })();
 </script>
 {% endblock %}
