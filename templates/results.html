@@ -70,6 +70,7 @@
         </div>
     {% endif %}
 
+    <div id="results-head">
     {% if info.mode == 'heat' %}
         <h3>
             {{ info.heat.name or ('Старт №' ~ info.heat.heat_number) }}
@@ -85,6 +86,7 @@
             </small>
         </h3>
     {% endif %}
+    </div>
 
     <div id="results-container">
         {% include '_results_details.html' %}
@@ -173,6 +175,16 @@
                 `/results/details?cid=${CID}&target=${encodeURIComponent(TARGET)}&include_auto=${INCLUDE_AUTO ? '1' : '0'}`,
                 { cache: 'no-store' });
             if (resp.ok) {
+                const heatStatus = resp.headers.get('X-Heat-Status');
+                const headSmall = document.querySelector('#results-head small');
+                if (heatStatus && headSmall) {
+                    const label = heatStatus === 'running' ? 'идёт' : 'завершён';
+                    if (/^\((идёт|завершён)\)$/.test(headSmall.textContent.trim())) {
+                        if (headSmall.textContent.trim() !== '(' + label + ')') {
+                            headSmall.textContent = '(' + label + ')';
+                        }
+                    }
+                }
                 const html = (await resp.text()).trim();
                 if (html === lastHtml) return;   // ничего не изменилось — не перерисовываем
                 lastHtml = html;

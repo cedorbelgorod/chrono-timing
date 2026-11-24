@@ -5,7 +5,7 @@ import io
 import re
 from datetime import datetime
 
-from flask import flash, redirect, render_template, request, send_file, url_for
+from flask import flash, make_response, redirect, render_template, request, send_file, url_for
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
@@ -38,8 +38,12 @@ def results_details():
     if not cid or not target: return '', 400
     conn = get_db()
     try:
-        _, _, _, details, _, _, _ = _prepare_results_data(conn, cid, target, include_auto)
-        return render_template('_results_details.html', details=details)
+        _, _, _, details, info, _, _ = _prepare_results_data(conn, cid, target, include_auto)
+        resp = make_response(render_template('_results_details.html', details=details))
+        heat = (info or {}).get('heat') or {}
+        if heat.get('status'):
+            resp.headers['X-Heat-Status'] = heat['status']
+        return resp
     finally: conn.close()
 
 

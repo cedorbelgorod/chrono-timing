@@ -76,6 +76,7 @@
 </div>
 
 <div class="wrap">
+    <div id="reg-live">
     <div class="count">
         Всего участников: <b>{{ total }}</b>{% if start_date %} · 📅 Старт: <b>{{ start_date }}</b>{% endif %}
     </div>
@@ -116,10 +117,39 @@
     {% else %}
         <div class="card"><div class="empty">Пока никто не зарегистрировался.</div></div>
     {% endif %}
+    </div>
 
     <div class="foot">
         <a href="{{ url_for('reg_form', slug=slug) }}">➕ Зарегистрировать участника</a>
     </div>
 </div>
+
+<script>
+/* Автообновление списка зарегистрированных */
+(function () {
+    var box = document.getElementById('reg-live');
+    if (!box) return;
+    var busy = false;
+
+    async function refresh() {
+        if (busy || document.hidden) return;
+        busy = true;
+        try {
+            var resp = await fetch(location.pathname + location.search, { cache: 'no-store' });
+            if (!resp.ok) return;
+            var doc = new DOMParser().parseFromString(await resp.text(), 'text/html');
+            var fresh = doc.getElementById('reg-live');
+            if (fresh && fresh.innerHTML !== box.innerHTML) box.innerHTML = fresh.innerHTML;
+        } catch (e) {
+            /* нет связи — ждём следующего опроса */
+        } finally {
+            busy = false;
+        }
+    }
+
+    setInterval(refresh, 10000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
+})();
+</script>
 </body>
 </html>

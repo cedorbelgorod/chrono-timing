@@ -72,6 +72,7 @@
         стартов: {{ data.heats|length }}
     </div>
 
+    <div id="hub-live">
     <div class="actions">
         {% if data.registration %}
             <a class="btn primary" href="{{ url_for('reg_intro', slug=data.slug) }}">Зарегистрироваться</a>
@@ -108,9 +109,38 @@
     {% else %}
         <div class="empty">Старты ещё не созданы</div>
     {% endif %}
+    </div>
 {% endif %}
 
     <div class="back"><a href="{{ url_for('index') }}">Хронометраж</a></div>
 </div>
+
+<script>
+/* Автообновление: счётчики, индикатор старта и статусы протоколов */
+(function () {
+    var box = document.getElementById('hub-live');
+    if (!box) return;
+    var busy = false;
+
+    async function refresh() {
+        if (busy || document.hidden) return;
+        busy = true;
+        try {
+            var resp = await fetch(location.pathname + location.search, { cache: 'no-store' });
+            if (!resp.ok) return;
+            var doc = new DOMParser().parseFromString(await resp.text(), 'text/html');
+            var fresh = doc.getElementById('hub-live');
+            if (fresh && fresh.innerHTML !== box.innerHTML) box.innerHTML = fresh.innerHTML;
+        } catch (e) {
+            /* нет связи — ждём следующего опроса */
+        } finally {
+            busy = false;
+        }
+    }
+
+    setInterval(refresh, 10000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
+})();
+</script>
 </body>
 </html>

@@ -70,6 +70,26 @@ class PublicHubTest(ChronoTestCase):
         self.assertIn('Результаты (1)', html)
         self.assertIn('live-dot off', html)
 
+    def test_public_pages_have_autorefresh(self):
+        self.itt_heat(laps=(2, 3))
+        slug = self.comp['slug']
+        anon = self.public_client()
+        hub = anon.get(f'/p/{slug}').get_data(as_text=True)
+        self.assertIn('id="hub-live"', hub)
+        self.assertIn('setInterval(refresh, 10000)', hub)
+        reg = anon.get(f'/reg/{slug}/list').get_data(as_text=True)
+        self.assertIn('id="reg-live"', reg)
+
+    def test_results_details_reports_heat_status(self):
+        hid, p1, p2 = self.itt_heat(laps=(2, 3))
+        cid = self.comp['id']
+        url = f'/results/details?cid={cid}&target=heat:{hid}&include_auto=1'
+        self.board('begin')
+        self.board('start')
+        self.assertEqual(self.client.get(url).headers.get('X-Heat-Status'), 'running')
+        self.client.post(f'/heats/{hid}/force_finish')
+        self.assertEqual(self.client.get(url).headers.get('X-Heat-Status'), 'finished')
+
     def test_hidden_and_archived_are_404(self):
         self._add_competition('Скрытое', 'hidden-one', hidden=True)
         self._add_competition('Архивное', 'archive-one', archived=True)
