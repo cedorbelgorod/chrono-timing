@@ -31,6 +31,16 @@
         <form method="post" action="{{ url_for('heat_create') }}" id="create-heat-form">
             <input type="hidden" name="competition_id" value="{{ competition.id }}">
 
+            <div class="ch-name-row">
+                <label class="ch-name">
+                    <span>Название старта</span>
+                    <input type="text" name="name" maxlength="120" autocomplete="off"
+                           value="Старт №{{ heat_data.next_number }}"
+                           placeholder="Старт №{{ heat_data.next_number }}"
+                           title="По умолчанию — «Старт №N». Попадает в карточку старта и заголовок протокола">
+                </label>
+            </div>
+
             <div class="ch-body">
                 <aside class="ch-cats">
                     <div class="ch-panel-head">
@@ -59,12 +69,6 @@
             </div>
 
             <div class="ch-params" id="ch-params" hidden>
-                <label class="ch-switch">
-                    <span>Название старта</span>
-                    <input type="text" class="ch-num" name="name" maxlength="120"
-                           placeholder="необязательно" autocomplete="off"
-                           title="Например: «Заезд 1 · юноши» — попадёт в заголовок протокола">
-                </label>
                 {% if race_format != 'itt' %}
                 <label class="ch-switch">
                     <input type="checkbox" name="finish_on_leader" value="1" {% if heat_defaults.finish_on_leader %}checked{% endif %}>
@@ -193,6 +197,14 @@
     padding: 1px 10px; font-size: 12px; font-weight: 700;
 }
 .ch-hint { color: #6b7280; font-size: 13px; }
+
+.ch-name-row { padding: 14px 16px; border-bottom: 1px solid #e5e7eb; background: #fff; }
+.ch-name { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #6b7280; }
+.ch-name input {
+    padding: 9px 12px; font-size: 16px; font-weight: 700; font-family: inherit;
+    border: 1px solid #d1d5db; border-radius: 8px; color: #111827; max-width: 460px;
+}
+.ch-name input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
 
 .ch-body { display: grid; grid-template-columns: 300px 1fr; min-height: 300px; }
 @media (max-width: 900px) { .ch-body { grid-template-columns: 1fr; } }
@@ -347,6 +359,21 @@
     margin-bottom: 12px;
 }
 .heat-title { font-size: 18px; font-weight: 700; }
+.heat-title-input {
+    font-size: 19px; font-weight: 700; font-family: inherit; color: #111827;
+    padding: 4px 8px; min-width: 200px; max-width: 420px;
+    border: 1px solid transparent; border-radius: 7px; background: transparent;
+    transition: border-color .12s, background .12s;
+}
+.heat-title-input:hover { border-color: #e5e7eb; background: #fff; }
+.heat-title-input:focus {
+    outline: none; border-color: #93c5fd; background: #fff;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+}
+.heat-num { color: #9ca3af; font-size: 13px; font-weight: 600; }
+.heat-save-status { font-size: 12px; font-weight: 600; }
+.heat-save-status.ok { color: #15803d; }
+.heat-save-status.err { color: #b91c1c; }
 .badge {
     display: inline-block; padding: 2px 10px; border-radius: 12px;
     font-size: 12px; font-weight: 600; text-transform: uppercase;
@@ -949,6 +976,7 @@ document.addEventListener('DOMContentLoaded', () => {
             box.innerHTML = html;
             applyCollapsed();
             if (typeof window.initStartOrder === 'function') window.initStartOrder();
+            if (typeof window.initHeatAutosave === 'function') window.initHeatAutosave();
             if (typeof tick === 'function') tick();
         } catch (e) {
             /* нет связи — ждём следующего опроса */
@@ -1122,6 +1150,74 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     document.addEventListener('DOMContentLoaded', window.initStartOrder);
+})();
+</script>
+
+<script>
+/* Автосохранение в карточке старта: название и фактическое время старта */
+(function () {
+    function setStatus(card, text, kind) {
+        var el = card && card.querySelector('.heat-save-status');
+        if (!el) return;
+        el.textContent = text || '';
+        el.className = 'heat-save-status ' + (kind || '');
+        if (kind === 'ok') {
+            clearTimeout(el._statusTimer);
+            el._statusTimer = setTimeout(function () {
+                el.textContent = '';
+                el.className = 'heat-save-status';
+            }, 2000);
+        }
+    }
+
+    function post(url, body, card) {
+        return fetch(url, {
+            method: 'POST', body: body, cache: 'no-store',
+            headers: { 'X-Requested-With': 'fetch' }
+        }).then(function (r) { return r.json(); })
+          .then(function (d) {
+              if (!d.ok) throw new Error(d.message || 'Ошибка');
+              setStatus(card, 'Сохранено', 'ok');
+              return d;
+          })
+          .catch(function (e) { setStatus(card, '⚠ ' + (e.message || 'нет связи'), 'err'); });
+    }
+
+    function saveName(input) {
+        var card = input.closest('.heat-card');
+        var fb = new FormData();
+        fb.append('name', input.value);
+        post('/heats/' + input.dataset.hid + '/rename', fb, card);
+    }
+
+    function saveStartTime(input) {
+        var card = input.closest('.heat-card');
+        var fb = new FormData();
+        fb.append('start_time', input.value);
+        post('/heats/' + input.dataset.hid + '/edit_start', fb, card).then(function (d) {
+            if (!d) return;
+            var mono = card.querySelector('.heat-start .mono');
+            if (mono && d.display) mono.textContent = d.display;
+        });
+    }
+
+    window.initHeatAutosave = function () {
+        document.querySelectorAll('.heat-title-input').forEach(function (el) {
+            if (el.dataset.bound === '1') return;
+            el.dataset.bound = '1';
+            el.addEventListener('change', function () { saveName(el); });
+            el.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+            });
+        });
+        document.querySelectorAll('.heat-start-input').forEach(function (el) {
+            if (el.dataset.bound === '1') return;
+            el.dataset.bound = '1';
+            el.addEventListener('change', function () { saveStartTime(el); });
+        });
+    };
+
+    document.addEventListener('DOMContentLoaded', window.initHeatAutosave);
 })();
 </script>
 {% endblock %}

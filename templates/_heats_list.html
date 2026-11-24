@@ -129,16 +129,13 @@
                 <div class="heat-header">
                     <button type="button" class="collapse-btn" onclick="toggleHeat(this)"
                             title="Свернуть/развернуть">▼</button>
-                    <span class="heat-title">Старт №{{ h.heat_number }}</span>
-                    <form method="post" action="{{ url_for('heat_rename', hid=h.id) }}"
-                          style="display:inline-flex;gap:4px;align-items:center;margin:0">
-                        <input type="text" name="name"
-                               value="{{ h.name or '' }}"
-                               placeholder="Название старта"
-                               style="padding:3px 8px;font-size:13px;width:170px;
-                                      border:1px solid #d1d5db;border-radius:6px">
-                        <button type="submit" style="padding:3px 10px;font-size:12px">OK</button>
-                    </form>
+                    <input type="text" class="heat-title-input" data-hid="{{ h.id }}"
+                           name="name" maxlength="120"
+                           value="{{ h.name or '' }}"
+                           placeholder="Старт №{{ h.heat_number }}"
+                           title="Название старта — сохраняется автоматически">
+                    <span class="heat-num">№{{ h.heat_number }}</span>
+                    <span class="heat-save-status"></span>
                     <span class="badge badge-{{ h.status }}">
                         {% if h.status == 'pending' %}готов
                         {% elif h.status == 'running' %}идёт
@@ -163,13 +160,10 @@
                             Старт: <span class="mono">{{ h.started_display }}</span>
                             <details style="display:inline-block;margin-left:4px">
                                 <summary style="cursor:pointer;color:#2563eb">✎</summary>
-                                <form method="post" action="{{ url_for('heat_edit_start', hid=h.id) }}"
-                                      style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
-                                    <input type="datetime-local" name="start_time"
-                                           value="{{ h.started_dt_local }}" step="1" required
-                                           style="padding:4px;font-size:12px">
-                                    <button type="submit" style="padding:4px 8px;font-size:12px">OK</button>
-                                </form>
+                                <input type="datetime-local" class="heat-start-input" data-hid="{{ h.id }}"
+                                       value="{{ h.started_dt_local }}" step="1"
+                                       style="margin-top:6px;padding:4px;font-size:12px"
+                                       title="Фактическое время старта — сохраняется автоматически">
                             </details>
                         </span>
                     {% endif %}

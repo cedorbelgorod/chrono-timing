@@ -88,3 +88,13 @@ class MassStartlistTest(ChronoTestCase):
         self.assertEqual(resp.status_code, 302)
         h = self.conn.execute('SELECT * FROM heats ORDER BY id DESC LIMIT 1').fetchone()
         self.assertEqual(h['name'], 'Заезд 1 · юноши')
+        html = self.client.get('/races').get_data(as_text=True)
+        self.assertIn('value="Заезд 1 · юноши"', html)
+
+    def test_create_form_prefills_name(self):
+        self.login_admin()
+        self.set_format('mass')
+        cat = self.add_category('Массовая', 1, 1)
+        self.add_participant(1, 'Один', cat)
+        html = self.client.get('/races').get_data(as_text=True)
+        self.assertIn('value="Старт №1"', html)

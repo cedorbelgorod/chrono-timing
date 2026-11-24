@@ -93,12 +93,19 @@ def races_data():
 
 
 def heat_rename(hid):
+    """Название старта. Для fetch-запроса (автосохранение) отвечает JSON."""
     conn = get_db()
     try:
         h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
-        if not h: return 'Не найден', 404
-        with conn: conn.execute('UPDATE heats SET name = ? WHERE id = ?', (request.form.get('name', '').strip() or None, hid))
-        flash('Название обновлено', 'success'); return redirect(url_for('races_page', cid=h['competition_id']))
+        if not h:
+            return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
+        name = (request.form.get('name', '').strip()[:120]) or None
+        with conn:
+            conn.execute('UPDATE heats SET name = ? WHERE id = ?', (name, hid))
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({'ok': True, 'name': name or ''})
+        flash('Название обновлено', 'success')
+        return redirect(url_for('races_page', cid=h['competition_id']))
     finally: conn.close()
 
 
@@ -246,17 +253,22 @@ def heat_delete(hid):
 
 
 def heat_edit_start(hid):
+    """Правка фактического времени старта (автосохранение, отвечает JSON)."""
     conn = get_db()
     try:
         h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
-        if h:
-            try: dt = datetime.fromisoformat(request.form.get('start_time', '').strip())
-            except: flash('Неверный формат', 'error'); return redirect(url_for('races_page', cid=h['competition_id']))
-            with conn:
-                conn.execute('UPDATE heats SET started_at = ? WHERE id = ?', (dt.isoformat(), hid))
-                conn.execute("UPDATE races SET start_time = ? WHERE heat_id = ? AND status != 'dns'", (dt.isoformat(), hid))
-            flash('Время старта обновлено', 'success')
-        return redirect(url_for('races_page', cid=h['competition_id']))
+        if not h:
+            return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
+        raw = (request.form.get('start_time') or '').strip()
+        try:
+            dt = datetime.fromisoformat(raw)
+        except (TypeError, ValueError):
+            return jsonify({'ok': False, 'message': 'Неверный формат даты и времени'}), 400
+        with conn:
+            conn.execute('UPDATE heats SET started_at = ? WHERE id = ?', (dt.isoformat(), hid))
+            conn.execute("UPDATE races SET start_time = ? WHERE heat_id = ? AND status != 'dns'",
+                         (dt.isoformat(), hid))
+        return jsonify({'ok': True, 'display': dt.strftime('%H:%M:%S')})
     finally: conn.close()
 
 
