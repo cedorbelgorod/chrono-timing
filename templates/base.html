@@ -757,6 +757,64 @@
     });
 })();
 
+/* ======================= АВТОСОХРАНЕНИЕ ПОЛЕЙ ======================= */
+/* Декларативно: data-autosave-url, data-autosave-field (по умолчанию name),
+   data-autosave-status (селектор элемента-статуса). Сохраняет по change и
+   с задержкой 700 мс после ввода. */
+(function () {
+    const fields = [...document.querySelectorAll('[data-autosave-url]')];
+    if (!fields.length) return;
+
+    fields.forEach((el) => {
+        const url = el.dataset.autosaveUrl;
+        const field = el.dataset.autosaveField || el.name;
+        if (!url || !field) return;
+        let statusEl = null;
+        if (el.dataset.autosaveStatus) {
+            statusEl = document.querySelector(el.dataset.autosaveStatus);
+        } else {
+            const scope = el.closest('.set-row, .card, form');
+            statusEl = scope ? scope.querySelector('.save-status') : null;
+        }
+        let timer = null;
+
+        function setStatus(text, kind) {
+            if (!statusEl) return;
+            statusEl.textContent = text;
+            statusEl.className = 'save-status ' + (kind || '');
+        }
+
+        async function save() {
+            clearTimeout(timer);
+            timer = null;
+            const body = new FormData();
+            body.append(field, el.value);
+            setStatus('Сохраняем…', '');
+            try {
+                const resp = await fetch(url, {
+                    method: 'POST', body, cache: 'no-store',
+                    headers: { 'X-Requested-With': 'fetch' }
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok || !data.ok) {
+                    setStatus('⚠ ' + (data.error || 'Не сохранено'), 'err');
+                    return;
+                }
+                setStatus('Сохранено', 'ok');
+            } catch (e) {
+                setStatus('⚠ Нет связи с сервером', 'err');
+            }
+        }
+
+        el.addEventListener('change', save);
+        el.addEventListener('input', () => {
+            clearTimeout(timer);
+            timer = setTimeout(save, 700);
+        });
+        el.addEventListener('blur', () => { if (timer) save(); });
+    });
+})();
+
 /* ======================= ТАБЛИЦЫ НА ПЛАНШЕТЕ ======================= */
 (function () {
     function wrapTables(root) {

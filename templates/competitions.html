@@ -5,14 +5,30 @@
 
 <section class="card set-card">
     <div class="set-row">
-        <div class="set-label">Название</div>
+        <div class="set-label">Основное</div>
         <div class="set-value">
-            <form method="post" action="{{ url_for('competition_edit', cid=competition.id) }}" class="set-form">
-                <input type="text" name="name" value="{{ competition.name }}" required
-                       placeholder="Название соревнования" autocomplete="off">
-                <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
-            </form>
-            <div class="set-hint">Видно в шапке всех страниц и в экспорте результатов.</div>
+            <div class="set-inline-fields">
+                <label class="set-field set-field-name">
+                    <span>Название</span>
+                    <input type="text" id="comp-name" name="name" value="{{ competition.name }}"
+                           required autocomplete="off" placeholder="Название соревнования"
+                           data-autosave-url="{{ url_for('competition_edit', cid=competition.id) }}"
+                           data-autosave-field="name"
+                           data-autosave-status="#settings-status">
+                </label>
+                <label class="set-field">
+                    <span>Дата старта</span>
+                    <input type="date" id="start-date-input" name="start_date"
+                           value="{{ settings.start_date }}"
+                           data-old-date="{{ settings.start_date }}"
+                           aria-label="Плановая дата старта">
+                </label>
+                <span id="settings-status" class="save-status"></span>
+            </div>
+            <div class="set-hint">
+                Название видно в шапке и в экспорте результатов; дата — в регистрации и списке
+                зарегистрировавшихся. От года считается возраст участников в категориях.
+            </div>
         </div>
     </div>
 
@@ -44,22 +60,25 @@
             </div>
         </div>
     </div>
+</section>
 
-    <div class="set-row">
-        <div class="set-label">Дата старта</div>
-        <div class="set-value">
-            <form method="post" action="{{ url_for('competition_start_date_save') }}" class="set-form">
-                <input type="date" name="start_date" value="{{ settings.start_date }}"
-                       aria-label="Плановая дата старта">
-                <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
-            </form>
-            <div class="set-hint">
-                Показывается в регистрации и списке зарегистрировавшихся; от года считается
-                возраст участников в категориях.
-            </div>
+<div class="dialog-overlay" id="date-confirm" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="date-confirm-title">
+        <div class="dialog-head">
+            <b id="date-confirm-title">Год старта изменился</b>
+        </div>
+        <div class="dialog-body">
+            <p id="date-confirm-text">Пересчитать категории участников под новый год?</p>
+            <div class="set-hint">При пересчёте категории назначаются заново по полу и возрасту.
+                Без пересчёта останутся текущие категории.</div>
+        </div>
+        <div class="dialog-foot">
+            <button type="button" class="btn btn-sm btn-ghost" id="dc-cancel">Отмена</button>
+            <button type="button" class="btn btn-sm btn-secondary" id="dc-no">Без пересчёта</button>
+            <button type="button" class="btn btn-sm btn-primary" id="dc-yes">Пересчитать</button>
         </div>
     </div>
-</section>
+</div>
 
 <section class="card" style="margin-top:16px">
     <div class="card-head"><h3>Готовность к старту</h3></div>
@@ -174,6 +193,13 @@
 .set-inline input { width: 90px; }
 .set-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #374151; }
 .set-check input { width: 16px; height: 16px; accent-color: #2563eb; }
+.set-inline-fields { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+.set-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #6b7280; }
+.set-field input { font-weight: 400; }
+.set-field-name { flex: 1 1 280px; }
+.set-field-name input { width: 100%; }
+.set-field input[type=date] { width: 170px; }
+#settings-status { align-self: center; }
 @media (max-width: 700px) {
     .set-row { grid-template-columns: 1fr; gap: 2px; padding: 12px 14px; }
     .set-label { padding-top: 0; }
@@ -219,5 +245,108 @@
 .links-row .link { font-size: 14px; font-weight: 600; }
 .hint { color: #6b7280; font-size: 13px; margin: 10px 0 0; }
 </style>
+
+<script>
+/* Автосохранение даты старта (название — общим обработчиком из base.html) */
+(function () {
+    var input = document.getElementById('start-date-input');
+    var status = document.getElementById('settings-status');
+    var dialog = document.getElementById('date-confirm');
+    if (!input) return;
+
+    var pending = null;
+
+    function setStatus(text, kind) {
+        if (!status) return;
+        status.textContent = text;
+        status.className = 'save-status ' + (kind || '');
+    }
+
+    function post(choice) {
+        var fd = new FormData();
+        fd.append('start_date', input.value);
+        if (choice !== undefined) fd.append('recalc', choice);
+        return fetch('{{ url_for("competition_start_date_save") }}', {
+            method: 'POST', body: fd, cache: 'no-store',
+            headers: { 'X-Requested-With': 'fetch' }
+        }).then(function (r) { return r.json(); });
+    }
+
+    function closeDialog() { if (dialog) dialog.hidden = true; }
+
+    function showConfirm(data) {
+        pending = data;
+        var text = document.getElementById('date-confirm-text');
+        if (text) {
+            text.textContent = 'Год меняется с ' + (data.old_year || '—') + ' на ' +
+                (data.new_year || '—') + '. Пересчитать категории ' +
+                data.participants + ' участников?';
+        }
+        if (dialog) dialog.hidden = false;
+    }
+
+    input.addEventListener('change', function () {
+        setStatus('Сохраняем…', '');
+        post().then(function (data) {
+            if (data && data.need_confirm) { setStatus('', ''); showConfirm(data); return; }
+            if (!data || !data.ok) {
+                setStatus('⚠ ' + ((data && data.error) || 'Не сохранено'), 'err');
+                return;
+            }
+            setStatus('Сохранено', 'ok');
+        }).catch(function () { setStatus('⚠ Нет связи с сервером', 'err'); });
+    });
+
+    function choose(choice) {
+        post(choice).then(function (data) {
+            if (data && data.ok) {
+                input.value = data.date || input.value;
+                input.dataset.oldDate = input.value;
+                setStatus(choice === '1' && data.recalculated
+                    ? 'Сохранено, категорий пересчитано: ' + data.recalculated
+                    : 'Сохранено', 'ok');
+                pending = null;
+                closeDialog();
+            } else {
+                setStatus('⚠ ' + ((data && data.error) || 'Не сохранено'), 'err');
+                closeDialog();
+            }
+        }).catch(function () {
+            setStatus('⚠ Нет связи с сервером', 'err');
+            closeDialog();
+        });
+    }
+
+    var yes = document.getElementById('dc-yes');
+    var no = document.getElementById('dc-no');
+    var cancel = document.getElementById('dc-cancel');
+    if (yes) yes.addEventListener('click', function () { choose('1'); });
+    if (no) no.addEventListener('click', function () { choose('0'); });
+    if (cancel) cancel.addEventListener('click', function () {
+        input.value = input.dataset.oldDate || '';
+        pending = null;
+        closeDialog();
+        setStatus('', '');
+    });
+    if (dialog) {
+        dialog.addEventListener('click', function (e) {
+            if (e.target === dialog) {
+                input.value = input.dataset.oldDate || '';
+                pending = null;
+                closeDialog();
+                setStatus('', '');
+            }
+        });
+    }
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && dialog && !dialog.hidden) {
+            input.value = input.dataset.oldDate || '';
+            pending = null;
+            closeDialog();
+            setStatus('', '');
+        }
+    });
+})();
+</script>
 
 {% endblock %}

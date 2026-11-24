@@ -91,6 +91,7 @@ def competition_format_save():
 
 def competition_start_date_save():
     """Плановая дата старта. При смене года — вопрос о пересчёте категорий."""
+    is_ajax = request.headers.get('X-Requested-With') == 'fetch'
     conn = get_db()
     try:
         comp = _get_competition(conn)
@@ -100,6 +101,8 @@ def competition_start_date_save():
             try:
                 normalized = datetime.strptime(raw, '%Y-%m-%d').strftime('%Y-%m-%d')
             except ValueError:
+                if is_ajax:
+                    return jsonify({'ok': False, 'error': 'Дата должна быть в формате ГГГГ-ММ-ДД'}), 400
                 flash('Дата должна быть в формате ГГГГ-ММ-ДД', 'error')
                 return redirect(url_for('competitions_list'))
         else:
@@ -116,6 +119,10 @@ def competition_start_date_save():
         participants = conn.execute(
             'SELECT COUNT(*) FROM participants WHERE competition_id = ?', (cid,)).fetchone()[0]
         if year_changed and participants and not chosen:
+            if is_ajax:
+                return jsonify({'ok': False, 'need_confirm': True, 'old_date': old,
+                                'new_date': normalized, 'old_year': old_year,
+                                'new_year': new_year, 'participants': participants})
             return render_template('start_date_confirm.html', competition=comp,
                                    start_date=normalized, old_year=old_year,
                                    new_year=new_year, participants=participants)
@@ -135,6 +142,9 @@ def competition_start_date_save():
                             conn.execute('UPDATE participants SET category_id = ? WHERE id = ?',
                                          (cat, p['id']))
                             recalc += 1
+        if is_ajax:
+            return jsonify({'ok': True, 'date': normalized, 'recalculated': recalc,
+                            'year_changed': year_changed})
         if need_recalc and recalc:
             flash(f'Дата старта сохранена, категории пересчитаны: {recalc}', 'success')
         elif year_changed and participants and chosen and not need_recalc:
@@ -147,12 +157,20 @@ def competition_start_date_save():
 
 
 def competition_edit(cid):
+    """Название соревнования. Для fetch (автосохранение) отвечает JSON."""
     name = request.form.get('name', '').strip()
-    if not name: flash('Название пустое', 'error'); return redirect(url_for('competitions_list'))
+    is_ajax = request.headers.get('X-Requested-With') == 'fetch'
+    if not name:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Название не может быть пустым'}), 400
+        flash('Название пустое', 'error')
+        return redirect(url_for('competitions_list'))
     conn = get_db()
     try:
         with conn: conn.execute('UPDATE competitions SET name = ? WHERE id = ?', (name, cid))
         _invalidate_competition_meta()
+        if is_ajax:
+            return jsonify({'ok': True, 'name': name})
         flash('Название сохранено', 'success'); return redirect(url_for('competitions_list'))
     finally: conn.close()
 

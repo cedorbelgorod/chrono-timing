@@ -58,9 +58,61 @@ class UiSettingsLayoutTest(ChronoTestCase):
         html = self.client.get('/competitions').get_data(as_text=True)
         self.assertIn('class="set-row"', html)
         self.assertIn('class="set-label"', html)
-        self.assertIn('btn btn-primary btn-sm', html)
+        self.assertIn('class="set-inline-fields"', html)
         self.assertNotIn('class="comp-grid"', html)
         self.assertNotIn('class="name-form"', html)
+
+
+class UiSettingsAutosaveTest(ChronoTestCase):
+    def test_settings_markup(self):
+        self.login_admin()
+        html = self.client.get('/competitions').get_data(as_text=True)
+        self.assertIn('data-autosave-url', html)
+        self.assertIn('id="settings-status"', html)
+        self.assertIn('id="start-date-input"', html)
+        self.assertIn('id="date-confirm"', html)
+        self.assertIn('data-autosave-url', self.client.get('/races').get_data(as_text=True))
+
+    def test_name_saved_by_fetch(self):
+        self.login_admin()
+        resp = self.client.post(
+            f'/competitions/{self.comp["id"]}/edit', data={'name': 'Новое название'},
+            headers={'X-Requested-With': 'fetch'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json(), {'ok': True, 'name': 'Новое название'})
+        self.assertIn('Новое название', self.client.get('/competitions').get_data(as_text=True))
+
+    def test_empty_name_rejected_by_fetch(self):
+        self.login_admin()
+        resp = self.client.post(
+            f'/competitions/{self.comp["id"]}/edit', data={'name': '   '},
+            headers={'X-Requested-With': 'fetch'})
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(resp.get_json()['ok'])
+
+    def test_start_date_saved_by_fetch(self):
+        self.login_admin()
+        resp = self.client.post('/competition/start-date', data={'start_date': '2027-05-15'},
+                                headers={'X-Requested-With': 'fetch'})
+        data = resp.get_json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['date'], '2027-05-15')
+        # смена года при наличии участников — просит подтвердить пересчёт
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender) "
+                "VALUES (?, 1, 'Тестовый Участник', 'M')", (self.comp['id'],))
+        resp = self.client.post('/competition/start-date', data={'start_date': '2026-05-15'},
+                                headers={'X-Requested-With': 'fetch'})
+        data = resp.get_json()
+        self.assertTrue(data['need_confirm'])
+        self.assertEqual(data['old_year'], 2027)
+        self.assertEqual(data['new_year'], 2026)
+        # подтверждённый вариант сохраняется
+        resp = self.client.post('/competition/start-date',
+                                data={'start_date': '2026-05-15', 'recalc': '0'},
+                                headers={'X-Requested-With': 'fetch'})
+        self.assertTrue(resp.get_json()['ok'])
 
 
 class UiTerminologyTest(ChronoTestCase):
