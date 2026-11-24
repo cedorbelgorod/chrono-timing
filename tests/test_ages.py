@@ -122,7 +122,9 @@ class StartDateRecalcTest(ChronoTestCase):
         # смена года без подтверждения — страница вопроса
         resp = self.client.post('/competition/start-date', data={'start_date': '2027-05-01'})
         self.assertEqual(resp.status_code, 200)
-        self.assertIn('Пересчитать и сохранить', resp.get_data(as_text=True))
+        page = resp.get_data(as_text=True)
+        self.assertIn('Пересчитать и сохранить', page)
+        self.assertIn('Сохранить без пересчёта', page)
 
         # подтверждаем — категории и участник пересчитаны
         resp = self.client.post('/competition/start-date',
@@ -134,6 +136,30 @@ class StartDateRecalcTest(ChronoTestCase):
         self.assertEqual((b2['year_from'], b2['year_to']), (2009, 2010))
         person = self.conn.execute('SELECT category_id FROM participants WHERE id = ?', (pid,)).fetchone()
         self.assertEqual(person['category_id'], b['id'])
+
+    def test_year_change_without_recalc_keeps_participants(self):
+        self.login_admin()
+        self.client.post('/competition/start-date', data={'start_date': '2026-05-01'})
+        cid = self.comp['id']
+        self.client.post('/competitions/%s/categories' % cid,
+                         data={'name': '15-16', 'laps_total': '1', 'age_range': '15-16'})
+        self.client.post('/competitions/%s/categories' % cid,
+                         data={'name': '17-18', 'laps_total': '1', 'age_range': '17-18'})
+        a = self.conn.execute("SELECT * FROM categories WHERE name = '15-16'").fetchone()
+        with self.conn:
+            pid = self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender, category_id, birth_year) "
+                "VALUES (?, 1, 'Райдер', 'M', ?, 2010)", (cid, a['id'])).lastrowid
+
+        resp = self.client.post('/competition/start-date',
+                                data={'start_date': '2027-05-01', 'recalc': '0'})
+        self.assertEqual(resp.status_code, 302)
+        # годы категорий пересчитаны (условия по возрасту остаются верными)
+        a2 = self.conn.execute("SELECT * FROM categories WHERE id = ?", (a['id'],)).fetchone()
+        self.assertEqual((a2['year_from'], a2['year_to']), (2011, 2012))
+        # а категория участника не тронута
+        person = self.conn.execute('SELECT category_id FROM participants WHERE id = ?', (pid,)).fetchone()
+        self.assertEqual(person['category_id'], a['id'])
 
 
 class AutoCategoriesTest(ChronoTestCase):
@@ -233,6 +259,18 @@ class RowAutosaveTest(ChronoTestCase):
             'pid': str(pid), 'number': '1', 'full_name': '', 'gender': 'M'}).get_json()
         self.assertFalse(data['ok'])
         self.assertIn('ФИО', data['error'])
+
+
+class ParticipantYearDisplayTest(ChronoTestCase):
+    def test_four_digit_year_in_list(self):
+        self.login_admin()
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender, birth_year) "
+                "VALUES (?, 1, 'Райдер', 'M', 2016)", (self.comp['id'],))
+        html = self.client.get('/competitions/%s' % self.comp['id']).get_data(as_text=True)
+        self.assertIn('value="2016"', html)
+        self.assertNotIn('value="16"', html)
 
 
 class AgeMigrationTest(ChronoTestCase):

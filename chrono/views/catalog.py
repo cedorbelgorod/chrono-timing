@@ -108,10 +108,14 @@ def competition_start_date_save():
         old_year = int(old[:4]) if old[:4].isdigit() else None
         new_year = int(normalized[:4]) if normalized[:4].isdigit() else None
         year_changed = old_year != new_year
-        confirm = request.form.get('confirm') == '1'
+        recalc_raw = request.form.get('recalc')
+        if recalc_raw is None:
+            recalc_raw = request.form.get('confirm')
+        chosen = recalc_raw in ('0', '1')
+        need_recalc = recalc_raw == '1'
         participants = conn.execute(
             'SELECT COUNT(*) FROM participants WHERE competition_id = ?', (cid,)).fetchone()[0]
-        if year_changed and participants and not confirm:
+        if year_changed and participants and not chosen:
             return render_template('start_date_confirm.html', competition=comp,
                                    start_date=normalized, old_year=old_year,
                                    new_year=new_year, participants=participants)
@@ -122,7 +126,7 @@ def competition_start_date_save():
             recalc = 0
             if new_year:
                 _apply_age_range(conn, cid, new_year)
-                if confirm:
+                if need_recalc:
                     for p in conn.execute(
                             'SELECT id, gender, birth_year, category_id FROM participants '
                             'WHERE competition_id = ?', (cid,)).fetchall():
@@ -131,8 +135,10 @@ def competition_start_date_save():
                             conn.execute('UPDATE participants SET category_id = ? WHERE id = ?',
                                          (cat, p['id']))
                             recalc += 1
-        if confirm and recalc:
+        if need_recalc and recalc:
             flash(f'Дата старта сохранена, категории пересчитаны: {recalc}', 'success')
+        elif year_changed and participants and chosen and not need_recalc:
+            flash('Дата старта сохранена. Категории участников не пересчитывались.', 'success')
         else:
             flash('Дата старта сохранена', 'success')
         return redirect(url_for('competitions_list'))

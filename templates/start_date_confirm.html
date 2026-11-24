@@ -1,26 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Пересчёт категорий — {{ competition.name }}{% endblock %}
 {% block content %}
-<h2>Пересчёт категорий</h2>
+<h2>Год старта изменился</h2>
 
-<div class="card" style="max-width:640px">
-    <div class="card-head"><h3>Год старта изменился</h3></div>
+<div class="card" style="max-width:680px">
+    <div class="card-head"><h3>Пересчитать категории участников?</h3></div>
     <div class="card-body">
         <p>
             Плановая дата старта меняется с
             <b>{{ old_year if old_year else '—' }}</b> на <b>{{ new_year }}</b> год.
-            Возраст участников считается на 31 декабря года старта, поэтому
-            категории нужно пересчитать.
+            Возраст участников считается на 31 декабря года старта, поэтому годы рождения
+            в категориях будут пересчитаны из возраста автоматически.
         </p>
         <p class="muted">
-            Будет пересчитан возрастной диапазон категорий и заново назначены категории
-            всем участникам ({{ participants }} чел.) по полу и возрасту.
-            Если подходящей категории нет — у участника останется текущая.
+            Категории участников ({{ participants }} чел.) можно пересчитать по полу и возрасту
+            или оставить как есть. Если подходящей категории нет — у участника останется текущая.
         </p>
-        <form method="post" action="{{ url_for('competition_start_date_save') }}" class="toolbar">
+        <form method="post" action="{{ url_for('competition_start_date_save') }}"
+              class="toolbar" style="gap:10px">
             <input type="hidden" name="start_date" value="{{ start_date }}">
-            <input type="hidden" name="confirm" value="1">
-            <button type="submit">Пересчитать и сохранить</button>
+            <button type="submit" name="recalc" value="1">Пересчитать и сохранить</button>
+            <button type="submit" name="recalc" value="0"
+                    style="background:#fff;color:#374151;border:1px solid #d1d5db">
+                Сохранить без пересчёта
+            </button>
             <a class="link" href="{{ url_for('competitions_list') }}">Отмена</a>
         </form>
     </div>

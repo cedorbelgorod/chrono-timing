@@ -59,9 +59,9 @@
             </label>
             <label>
                 <span>Год рождения</span>
-                <input type="number" name="birth_year" min="0" max="2100" placeholder="ГГ"
-                       title="Две последние цифры: 16 → 2016, 90 → 1990">
-                <small>две цифры: 16 → 2016</small>
+                <input type="number" name="birth_year" min="1900" max="2100" placeholder="2016"
+                       title="Год рождения четырьмя цифрами: 2016">
+                <small>четыре цифры: 2016</small>
             </label>
             <label>
                 <span>Группа</span>
@@ -206,10 +206,10 @@
                 </td>
                 <td data-label="Год">
                     <input type="number" name="birth_year_{{ p.id }}"
-                           value="{{ (p.birth_year|string)[-2:] if p.birth_year else '' }}"
-                           min="0" max="2100"
-                           class="row-input" style="width:60px"
-                           title="Две последние цифры: 16 → 2016, 90 → 1990">
+                           value="{{ p.birth_year or '' }}"
+                           min="1900" max="2100"
+                           class="row-input" style="width:80px"
+                           title="Год рождения четырьмя цифрами: 2016">
                 </td>
                 <td data-label="Категория">
                     <select name="category_id_{{ p.id }}"
