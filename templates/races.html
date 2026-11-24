@@ -359,14 +359,14 @@
     margin-bottom: 12px;
 }
 .heat-title { font-size: 18px; font-weight: 700; }
-.heat-title-input {
+#heats-list .heat-title-input {
     font-size: 19px; font-weight: 700; font-family: inherit; color: #111827;
     padding: 4px 0; min-width: 200px; max-width: 520px;
     border: none; border-bottom: 1px solid transparent; background: transparent;
-    outline: none; transition: border-color .12s;
+    outline: none; box-shadow: none; transition: border-color .12s;
 }
-.heat-title-input:hover { border-bottom-color: #e5e7eb; }
-.heat-title-input:focus { border-bottom-color: #93c5fd; }
+#heats-list .heat-title-input:hover { border-bottom-color: #e5e7eb; }
+#heats-list .heat-title-input:focus { border-bottom-color: #93c5fd; box-shadow: none; }
 .heat-save-status { font-size: 12px; font-weight: 600; }
 .heat-save-status.ok { color: #15803d; }
 .heat-save-status.err { color: #b91c1c; }
