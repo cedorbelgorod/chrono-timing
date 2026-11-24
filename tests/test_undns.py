@@ -88,6 +88,28 @@ class HeatUndnsTest(ChronoTestCase):
         html = self.client.get('/races').get_data(as_text=True)
         self.assertNotIn('class="so-dns"', html)
 
+
+    def test_no_flash_leak_to_pages(self):
+        hid, p1, p2 = self._setup()
+        self.client.post(f'/heats/{hid}/set_dns', data={'pid': p1},
+                         headers={'X-Requested-With': 'fetch'})
+        html = self.client.get('/races').get_data(as_text=True)
+        self.assertNotIn('class="flash success">Отмечен DNS', html)
+        self.client.post(f'/heats/{hid}/undns', data={'pid': p1},
+                         headers={'X-Requested-With': 'fetch'})
+        html = self.client.get(f'/competitions/{self.comp["id"]}').get_data(as_text=True)
+        self.assertNotIn('class="flash success">В старт возвращён', html)
+
+    def test_dns_actions_logged_with_labels(self):
+        hid, p1, p2 = self._setup()
+        self.client.post(f'/heats/{hid}/set_dns', data={'pid': p1},
+                         headers={'X-Requested-With': 'fetch'})
+        self.client.post(f'/heats/{hid}/undns', data={'pid': p1},
+                         headers={'X-Requested-With': 'fetch'})
+        html = self.client.get('/logs').get_data(as_text=True)
+        self.assertIn('DNS (до старта)', html)
+        self.assertIn('возврат в старт', html)
+
     def test_button_shown_only_for_pending_heat(self):
         hid, p1, p2 = self._setup()
         html = self.client.get('/races').get_data(as_text=True)

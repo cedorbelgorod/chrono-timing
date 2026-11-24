@@ -258,13 +258,14 @@ def heat_set_dns(hid):
                 'WHERE heat_id = ? AND participant_id = ?', (hid, pid))
             conn.execute(
                 'DELETE FROM races WHERE heat_id = ? AND participant_id = ?', (hid, pid))
-        _log_timing(conn, 'races', 'dns', True, competition_id=heat['competition_id'], heat_id=hid,
-                    participant_id=pid, user_login=session.get('user'),
-                    detail='DNS до старта (старт не запущен)')
+        with conn:
+            _log_timing(conn, 'races', 'dns', True, competition_id=heat['competition_id'], heat_id=hid,
+                        participant_id=pid, user_login=session.get('user'),
+                        detail='DNS до старта (старт не запущен)')
         person = conn.execute('SELECT full_name, number FROM participants WHERE id = ?',
                               (pid,)).fetchone()
-        flash(f'Отмечен DNS: №{person["number"]} {person["full_name"]}', 'success')
-        return jsonify({'ok': True})
+        return jsonify({'ok': True,
+                        'message': f'Отмечен DNS: №{person["number"]} {person["full_name"]}'})
     finally:
         conn.close()
 
@@ -295,13 +296,14 @@ def heat_undns(hid):
             conn.execute(
                 "DELETE FROM races WHERE heat_id = ? AND participant_id = ? AND status = 'dns'",
                 (hid, pid))
-        _log_timing(conn, 'races', 'undns', True, competition_id=heat['competition_id'], heat_id=hid,
-                    participant_id=pid, user_login=session.get('user'),
-                    detail='DNS снят: участник вернулся до старта')
+        with conn:
+            _log_timing(conn, 'races', 'undns', True, competition_id=heat['competition_id'], heat_id=hid,
+                        participant_id=pid, user_login=session.get('user'),
+                        detail='DNS снят: участник вернулся до старта')
         person = conn.execute('SELECT full_name, number FROM participants WHERE id = ?',
                               (pid,)).fetchone()
-        flash(f'В старт возвращён: №{person["number"]} {person["full_name"]}', 'success')
-        return jsonify({'ok': True})
+        return jsonify({'ok': True,
+                        'message': f'В старт возвращён: №{person["number"]} {person["full_name"]}'})
     finally:
         conn.close()
 

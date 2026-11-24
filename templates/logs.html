@@ -68,6 +68,8 @@
                 {% elif r.action == 'finish' %}финиш
                 {% elif r.action == 'scan' %}сканирование
                 {% elif r.action == 'undo' %}отмена
+                {% elif r.action == 'dns' %}DNS (до старта)
+                {% elif r.action == 'undns' %}возврат в старт
                 {% else %}{{ r.action }}{% endif %}
             </td>
             <td class="mono">{{ r.number or '—' }}</td>
