@@ -140,6 +140,28 @@ class UiCategoryCountsTest(ChronoTestCase):
         self.assertIn('cats-legend', html)
 
 
+class UiNumbersLiveSearchTest(ChronoTestCase):
+    def test_live_search_markup_and_filtering(self):
+        self.login_admin()
+        cid = self.comp['id']
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender) "
+                "VALUES (?, 1, 'Иванов Иван', 'M')", (cid,))
+            self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender) "
+                "VALUES (?, 2, 'Петров Пётр', 'M')", (cid,))
+        html = self.client.get(f'/competitions/{cid}/numbers').get_data(as_text=True)
+        self.assertIn('id="num-results"', html)
+        self.assertIn('id="num-q"', html)
+        self.assertIn('id="num-search-form"', html)
+        self.assertIn('setTimeout(search, 300)', html)
+        self.assertIn('id="num-reset"', html)
+        filtered = self.client.get(f'/competitions/{cid}/numbers?q=Иванов').get_data(as_text=True)
+        self.assertIn('Иванов Иван', filtered)
+        self.assertNotIn('Петров Пётр', filtered)
+
+
 class UiTerminologyTest(ChronoTestCase):
     def test_participants_use_category_wording(self):
         self.login_admin()

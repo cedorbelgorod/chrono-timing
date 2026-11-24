@@ -4,7 +4,8 @@
 <h2>Выдача стартовых номеров <small>— {{ competition.name }}</small></h2>
 
 <p class="muted" style="margin-top:-6px">
-    Участник пришёл на старт — найдите его по ФИО или ID и впишите номер. Без номера участник не может
+    Участник пришёл на старт — начните вводить ФИО (или ID/номер), список фильтруется сразу,
+    нажимать «Найти» не нужно. Впишите номер и нажмите «Выдать». Без номера участник не может
     попасть в старт. Номер уникален в пределах соревнования.
 </p>
 
@@ -15,12 +16,17 @@
     <span class="hint">Следующий свободный номер: <b>{{ next_number }}</b></span>
 </div>
 
-<form method="get" class="num-search">
-    <input type="text" name="q" value="{{ q }}" placeholder="ФИО, ID или номер" autofocus>
-    <button type="submit">Найти</button>
-    {% if q %}<a class="link" href="{{ url_for('numbers_page', cid=competition.id) }}">Сбросить</a>{% endif %}
+<form method="get" class="num-search" id="num-search-form"
+      action="{{ url_for('numbers_page', cid=competition.id) }}">
+    <input type="text" name="q" id="num-q" value="{{ q }}"
+           placeholder="Начните вводить ФИО, ID или номер…" autofocus
+           autocomplete="off" spellcheck="false">
+    <a class="link" id="num-reset" href="{{ url_for('numbers_page', cid=competition.id) }}"
+       {% if not q %}hidden{% endif %}>Сбросить</a>
+    <button type="submit" class="sr-only" tabindex="-1">Найти</button>
 </form>
 
+<div id="num-results">
 {% if rows %}
 <div class="num-list">
     {% for p in rows %}
@@ -50,6 +56,71 @@
 {% else %}
     <div class="empty">{% if q %}Никого не найдено{% else %}В соревновании пока нет участников{% endif %}</div>
 {% endif %}
+</div>
+
+<script>
+/* Живой поиск: список обновляется по мере ввода, без кнопки «Найти» */
+(function () {
+    var form = document.getElementById('num-search-form');
+    var input = document.getElementById('num-q');
+    var box = document.getElementById('num-results');
+    var reset = document.getElementById('num-reset');
+    if (!form || !input || !box) return;
+
+    var action = form.getAttribute('action') || location.pathname;
+    var timer = null;
+    var seq = 0;
+    var lastHtml = box.innerHTML;
+
+    function targetUrl() {
+        var q = input.value.trim();
+        return action + (q ? '?q=' + encodeURIComponent(q) : '');
+    }
+
+    function apply(html) {
+        if (html === lastHtml) return;
+        lastHtml = html;
+        box.innerHTML = html;
+    }
+
+    function search() {
+        clearTimeout(timer);
+        var my = ++seq;
+        var url = targetUrl();
+        fetch(url, { cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } })
+            .then(function (r) { return r.text(); })
+            .then(function (text) {
+                if (my !== seq) return;
+                var doc = new DOMParser().parseFromString(text, 'text/html');
+                var fresh = doc.getElementById('num-results');
+                if (fresh) apply(fresh.innerHTML);
+                history.replaceState(null, '', url);
+                if (reset) reset.hidden = !input.value.trim();
+            })
+            .catch(function () { /* нет связи — оставляем текущий список */ });
+    }
+
+    input.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(search, 300);
+    });
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        search();
+    });
+
+    if (reset) {
+        reset.addEventListener('click', function (e) {
+            e.preventDefault();
+            input.value = '';
+            reset.hidden = true;
+            search();
+            input.focus();
+        });
+    }
+})();
+</script>
 
 <style>
 .num-summary { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
@@ -64,9 +135,10 @@
     border: 2px solid #d1d5db; border-radius: 10px;
 }
 .num-search input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
-.num-search button {
-    padding: 12px 20px; font-size: 15px; font-weight: 600; font-family: inherit;
-    border: none; border-radius: 10px; background: #2563eb; color: #fff; cursor: pointer;
+.num-search .link { font-size: 14px; }
+.sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
 .num-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
