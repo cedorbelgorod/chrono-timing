@@ -21,7 +21,7 @@ from chrono.utils import (_age_range_hint, _age_range_years, _format_age_range,
 from chrono.catalog import (
     CATEGORY_HEADER_ALIASES, HEADER_ALIASES, MAX_TAGS_PER_NUMBER, PARTICIPANT_SORTS,
     TAGS_HEADER_ALIASES, _apply_age_range, _auto_category, _category_age_hint,
-    _category_mismatch, _category_overlaps, _cell_text, _find_header_col,
+    _cat_genders, _category_mismatch, _category_overlaps, _cell_text, _find_header_col,
     _invalidate_competition_meta, _issue_number, _join_genders, _next_number, _norm_header,
     _norm_name, _parse_gender_cell, _participants_redirect, _plabel, _save_bib_tags, _scalar,
     _tags_by_number,
@@ -552,6 +552,127 @@ def categories_save_all(cid):
         if not updated and not errors: flash('Изменений нет', 'success')
         return redirect(url_for('categories_list', cid=cid))
     finally: conn.close()
+
+
+def _merge_error(message, cid, is_ajax, code=400):
+    if is_ajax:
+        return jsonify({'ok': False, 'error': message}), code
+    flash(message, 'error')
+    return redirect(url_for('categories_list', cid=cid))
+
+
+def categories_merge(cid):
+    """Объединение категорий: участники переезжают в выбранную целевую.
+
+    Название, круги и порядок целевой не меняются; пол и возраст — объединение
+    диапазонов. Категории, участвовавшие в проведённых стартах, не трогаем.
+    """
+    is_ajax = request.headers.get('X-Requested-With') == 'fetch'
+    conn = get_db()
+    try:
+        comp = conn.execute('SELECT * FROM competitions WHERE id = ?', (cid,)).fetchone()
+        if not comp:
+            return 'Не найдено', 404
+        raw_ids = [v for v in request.form.getlist('ids') if str(v).strip()]
+        raw_target = (request.form.get('target_id') or '').strip()
+        try:
+            ids = sorted({int(v) for v in raw_ids})
+            target = int(raw_target)
+        except (TypeError, ValueError):
+            return _merge_error('Некорректный выбор категорий', cid, is_ajax)
+        if len(ids) < 2:
+            return _merge_error('Выберите хотя бы две категории', cid, is_ajax)
+        if target not in ids:
+            return _merge_error('Выберите категорию, в которую объединять', cid, is_ajax)
+        ph = ','.join('?' * len(ids))
+        cats = conn.execute(
+            f'SELECT * FROM categories WHERE competition_id = ? AND id IN ({ph})',
+            (cid, *ids)).fetchall()
+        if len(cats) != len(ids):
+            return _merge_error('Некоторые категории не найдены', cid, is_ajax)
+        by_id = {c['id']: c for c in cats}
+        target_cat = by_id[target]
+        sources = [i for i in ids if i != target]
+        s_ph = ','.join('?' * len(sources))
+
+        used = conn.execute(
+            'SELECT DISTINCT c.name FROM categories c '
+            'JOIN heat_categories hc ON hc.category_id = c.id '
+            'JOIN heats h ON h.id = hc.heat_id '
+            'LEFT JOIN races r ON r.heat_id = h.id '
+            f'WHERE c.id IN ({s_ph}) '
+            "AND (h.status IN ('running', 'finished') OR r.id IS NOT NULL) "
+            'ORDER BY c.name', tuple(sources)).fetchall()
+        if used:
+            names = ', '.join(f'«{r["name"]}»' for r in used)
+            return _merge_error(
+                f'Нельзя объединять категории, участвовавшие в стартах: {names}. '
+                'Сначала завершите эти старты.', cid, is_ajax)
+
+        allowed = set()
+        for c in cats:
+            allowed |= _cat_genders(c['gender'])
+        gender = ''.join(g for g in ('M', 'F') if g in allowed)
+
+        bounds = [_parse_age_range(c['age_range']) for c in cats]
+        year_from = year_to = None
+        if any(a is None and b is None for a, b, _ in bounds):
+            age_range = ''
+        else:
+            # «без нижней/верхней границы» хотя бы у одной категории — без границы и в итоге
+            age_min = None if any(a is None for a, b, _ in bounds) else min(a for a, b, _ in bounds)
+            age_max = None if any(b is None for a, b, _ in bounds) else max(b for a, b, _ in bounds)
+            age_range = _format_age_range(age_min, age_max)
+            year_from, year_to = _age_range_years(_competition_start_year(), age_min, age_max)
+
+        moved = conn.execute(
+            f'SELECT COUNT(*) FROM participants WHERE competition_id = ? '
+            f'AND category_id IN ({s_ph})', (cid, *sources)).fetchone()[0]
+
+        with conn:
+            conn.execute(
+                f'UPDATE participants SET category_id = ? WHERE competition_id = ? '
+                f'AND category_id IN ({s_ph})', (target, cid, *sources))
+            conn.execute(
+                'INSERT OR IGNORE INTO heat_categories (heat_id, category_id) '
+                f'SELECT heat_id, ? FROM heat_categories WHERE category_id IN ({s_ph})',
+                (target, *sources))
+            conn.execute(f'DELETE FROM heat_categories WHERE category_id IN ({s_ph})',
+                         tuple(sources))
+            conn.execute(
+                'UPDATE categories SET gender = ?, age_range = ?, year_from = ?, year_to = ? '
+                'WHERE id = ?', (gender, age_range, year_from, year_to, target))
+            conn.execute(
+                f'DELETE FROM categories WHERE competition_id = ? AND id IN ({s_ph})',
+                (cid, *sources))
+
+        categories = conn.execute(
+            'SELECT * FROM categories WHERE competition_id = ? '
+            'ORDER BY COALESCE(sort_order, id), id', (cid,)).fetchall()
+        overlaps = _category_overlaps(categories)
+        ov = overlaps.get(target)
+
+        msg = (f'Объединено: {len(sources)} → «{target_cat["name"]}»; '
+               f'участников переехало: {moved}')
+        parts = []
+        if gender:
+            parts.append('пол: ' + '/'.join('М' if g == 'M' else 'Ж' for g in gender))
+        if age_range:
+            parts.append('возраст: ' + age_range)
+        if parts:
+            msg += '; ' + ', '.join(parts)
+        flash(msg, 'success')
+        if ov:
+            flash('Внимание: новые условия пересекаются с ' + ', '.join(f'«{n}»' for n in ov),
+                  'error')
+
+        if is_ajax:
+            return jsonify({'ok': True, 'merged': len(sources), 'moved': moved,
+                            'target': target_cat['name'], 'gender': gender,
+                            'age_range': age_range})
+        return redirect(url_for('categories_list', cid=cid))
+    finally:
+        conn.close()
 
 
 def categories_reorder(cid):
@@ -1323,6 +1444,7 @@ RULES = [
     ('/competitions/<int:cid>/categories/import', 'categories_import', categories_import, ['POST']),
     ('/competitions/<int:cid>/categories/import/confirm', 'categories_import_confirm', categories_import_confirm, ['POST']),
     ('/competitions/<int:cid>/categories/save_all', 'categories_save_all', categories_save_all, ['POST']),
+    ('/competitions/<int:cid>/categories/merge', 'categories_merge', categories_merge, ['POST']),
     ('/competitions/<int:cid>/categories/reorder', 'categories_reorder', categories_reorder, ['POST']),
     ('/competitions/<int:cid>/categories/row', 'categories_row_save', categories_row_save, ['POST']),
     ('/categories/<int:catid>/delete', 'category_delete', category_delete, ['POST']),

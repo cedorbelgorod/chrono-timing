@@ -51,16 +51,19 @@
       data-start-year="{{ start_year }}">
     <div class="cats-tools">
         <span class="cats-tools-hint">перетащите строку за ⋮⋮, чтобы изменить порядок — он сохраняется сразу</span>
+        <button type="button" class="btn btn-sm btn-secondary" id="merge-open" disabled
+                title="Выберите две или больше категорий">Объединить</button>
         <span id="sort-status" class="cats-status"></span>
     </div>
     <div class="cats-scroll">
     <table id="cats-table" class="cats-table is-compact"
            data-reorder-url="{{ url_for('categories_reorder', cid=competition.id) }}">
         <colgroup>
-            <col class="c-sort"><col class="c-name"><col class="c-laps"><col class="c-cnt"><col class="c-act">
+            <col class="c-sel"><col class="c-sort"><col class="c-name"><col class="c-laps"><col class="c-cnt"><col class="c-act">
         </colgroup>
         <thead>
             <tr>
+                <th class="th-sel"><input type="checkbox" id="sel-all-cats" title="Выбрать все категории"></th>
                 <th class="th-sort">Сортировка</th>
                 <th class="th-name">Название</th>
                 <th class="th-laps">Кругов</th>
@@ -80,6 +83,10 @@
                               or (s.ms if s else cat.ms) or (s.ts if s else cat.ts) %}
             <tr class="cat-row {{ 'row-overlap' if ov }} {{ 'row-error' if err }} {{ 'cat-empty' if not cnt }} {{ 'cat-few' if cnt and cnt < 3 }}"
                 data-id="{{ cat.id }}">
+                <td class="td-sel" data-label="">
+                    <input type="checkbox" class="cat-check" value="{{ cat.id }}"
+                           title="Выбрать для объединения">
+                </td>
                 <td class="td-sort" data-label="Порядок">
                     <span class="drag-handle" draggable="true" role="button" tabindex="-1"
                           title="Перетащите строку, чтобы изменить порядок">⋮⋮</span>
@@ -245,6 +252,17 @@
     margin-top: 8px; font-size: 12px; color: #6b7280;
 }
 .cats-legend .cat-cnt { margin-right: 4px; }
+
+/* объединение категорий */
+.merge-lead { margin: 0 0 10px; font-size: 14px; color: #374151; line-height: 1.5; }
+.merge-targets { display: flex; flex-direction: column; gap: 6px; }
+.merge-opt {
+    display: flex; align-items: center; gap: 8px; font-size: 14px;
+    padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer;
+}
+.merge-opt:hover { background: #f9fafb; }
+.merge-opt input { accent-color: #2563eb; }
+.merge-opt .merge-cnt { margin-left: auto; font-size: 12px; color: #6b7280; }
 #cats-table tbody tr:hover { background: #f3f6fb; }
 #cats-table tbody tr.row-changed { background: #fffbeb; }
 #cats-table tbody tr.row-changed:hover { background: #fff7e0; }
@@ -252,6 +270,7 @@
 #cats-table tbody tr.row-error { background: #fef2f2; }
 #cats-table tbody tr.dragging { opacity: .5; background: #eff6ff; }
 
+#cats-table .th-sel, #cats-table .td-sel { width: 1px; white-space: nowrap; text-align: center; }
 #cats-table .th-sort, #cats-table .td-sort,
 #cats-table .th-laps, #cats-table .td-laps,
 #cats-table .th-cnt, #cats-table .td-cnt,
@@ -684,4 +703,106 @@ body.modal-open { overflow: hidden; }
     });
 })();
 </script>
+<div class="dialog-overlay" id="merge-dialog" hidden>
+    <form class="dialog" method="post" action="{{ url_for('categories_merge', cid=competition.id) }}"
+          id="merge-form" role="dialog" aria-modal="true" aria-labelledby="merge-title">
+        <div class="dialog-head">
+            <b id="merge-title">Объединение категорий</b>
+            <button type="button" class="icon-btn" data-merge-close title="Закрыть">✕</button>
+        </div>
+        <div class="dialog-body">
+            <p class="merge-lead">
+                Участники переезжают в выбранную категорию. Её название, круги и порядок
+                не меняются; пол и возраст расширятся до объединённых. Остальные выбранные
+                категории будут удалены.
+            </p>
+            <div class="merge-targets" id="merge-targets"></div>
+        </div>
+        <div class="dialog-foot">
+            <button type="button" class="btn btn-sm btn-ghost" data-merge-close>Отмена</button>
+            <button type="submit" class="btn btn-sm btn-primary">Объединить</button>
+        </div>
+    </form>
+</div>
+
+<script>
+/* Объединение категорий: выбор строк → диалог → POST /categories/merge */
+(function () {
+    var table = document.getElementById('cats-table');
+    var openBtn = document.getElementById('merge-open');
+    var dialog = document.getElementById('merge-dialog');
+    var mform = document.getElementById('merge-form');
+    var targets = document.getElementById('merge-targets');
+    if (!table || !openBtn || !dialog || !mform) return;
+
+    var checks = [...table.querySelectorAll('.cat-check')];
+    var selAll = document.getElementById('sel-all-cats');
+
+    function selectedRows() {
+        return checks.filter(function (c) { return c.checked; })
+                     .map(function (c) { return c.closest('tr'); });
+    }
+
+    function updateButton() {
+        var n = selectedRows().length;
+        openBtn.disabled = n < 2;
+        openBtn.textContent = n > 1 ? 'Объединить (' + n + ')' : 'Объединить';
+    }
+
+    checks.forEach(function (c) { c.addEventListener('change', updateButton); });
+    if (selAll) {
+        selAll.addEventListener('change', function () {
+            checks.forEach(function (c) { c.checked = selAll.checked; });
+            updateButton();
+        });
+    }
+
+    function close() { dialog.hidden = true; }
+    dialog.querySelectorAll('[data-merge-close]').forEach(function (b) {
+        b.addEventListener('click', close);
+    });
+    dialog.addEventListener('click', function (e) { if (e.target === dialog) close(); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !dialog.hidden) close();
+    });
+
+    openBtn.addEventListener('click', function () {
+        var rows = selectedRows();
+        if (rows.length < 2) return;
+        targets.innerHTML = '';
+        mform.querySelectorAll('input[name="ids"]').forEach(function (n) { n.remove(); });
+        rows.forEach(function (row) {
+            var id = row.dataset.id;
+            var nameInput = row.querySelector('.name-input');
+            var cnt = row.querySelector('.cat-cnt');
+
+            var hidden = document.createElement('input');
+            hidden.type = 'hidden'; hidden.name = 'ids'; hidden.value = id;
+            mform.appendChild(hidden);
+
+            var label = document.createElement('label');
+            label.className = 'merge-opt';
+            var radio = document.createElement('input');
+            radio.type = 'radio'; radio.name = 'target_id'; radio.value = id;
+            label.appendChild(radio);
+            var span = document.createElement('span');
+            span.textContent = nameInput ? nameInput.value : ('#' + id);
+            label.appendChild(span);
+            var count = document.createElement('span');
+            count.className = 'merge-cnt';
+            count.textContent = (cnt ? cnt.textContent.trim() : '0') + ' уч.';
+            label.appendChild(count);
+            targets.appendChild(label);
+        });
+        var best = null, bestN = -1;
+        targets.querySelectorAll('.merge-opt').forEach(function (opt) {
+            var n = parseInt(opt.querySelector('.merge-cnt').textContent, 10) || 0;
+            if (n > bestN) { bestN = n; best = opt.querySelector('input'); }
+        });
+        if (best) best.checked = true;
+        dialog.hidden = false;
+    });
+})();
+</script>
+
 {% endblock %}
