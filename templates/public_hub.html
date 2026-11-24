@@ -75,7 +75,7 @@
         {% for h in data.heats %}
             <li>
                 <a class="heat-link" href="{{ url_for('public_startlist', slug=data.slug, hid=h.id) }}">
-                    <span class="heat-num">Старт №{{ h.number }}{% if h.name %} · {{ h.name }}{% endif %}</span>
+                    <span class="heat-num">{{ h.name or ('Старт №' ~ h.number) }}</span>
                     <span class="heat-meta">
                         {{ h.total }} уч. ·
                         {% if h.status == 'running' %}идёт{% elif h.status == 'finished' %}завершён{% else %}готов{% endif %}

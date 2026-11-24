@@ -44,6 +44,14 @@ class PublicHubTest(ChronoTestCase):
         self.assertIn('Зарегистрированные (2)', html)
         self.assertEqual(anon.get(f'/reg/{slug}/list').status_code, 200)
 
+    def test_hub_shows_heat_name_without_number(self):
+        hid, p1, p2 = self.itt_heat(laps=(2, 3))
+        with self.conn:
+            self.conn.execute("UPDATE heats SET name = 'Заезд А' WHERE id = ?", (hid,))
+        html = self.public_client().get(f"/p/{self.comp['slug']}").get_data(as_text=True)
+        self.assertIn('Заезд А', html)
+        self.assertNotIn('Старт №1 · Заезд А', html)
+
     def test_hidden_and_archived_are_404(self):
         self._add_competition('Скрытое', 'hidden-one', hidden=True)
         self._add_competition('Архивное', 'archive-one', archived=True)
