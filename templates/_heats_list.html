@@ -46,7 +46,12 @@
                 <td class="so-st">
                     {% if r.status == 'running' %}<span class="tag tag-active">на дистанции</span>
                     {% elif r.status == 'finished' %}<span class="tag tag-ok">финиш {{ r.finish_display }}</span>
-                    {% elif r.status == 'dns' %}<span class="tag tag-dns">DNS</span>
+                    {% elif r.status == 'dns' %}
+                        <span class="tag tag-dns">DNS</span>
+                        {% if editable %}
+                            <button type="button" class="so-undns" data-pid="{{ r.participant_id }}"
+                                    title="Участник успел — вернуть его в старт">↩ Вернуть</button>
+                        {% endif %}
                     {% else %}<span class="muted">ждёт старта</span>{% endif %}
                 </td>
             </tr>

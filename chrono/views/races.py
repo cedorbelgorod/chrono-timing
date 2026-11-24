@@ -22,6 +22,7 @@ from chrono.timing import (
 )
 from chrono.utils import (_fmt_start_at, _new_startlist_token, format_secs)
 from chrono.catalog import (_category_participants, _parse_duration, _tags_by_number)
+from chrono.manual_helpers import (_log_timing)
 from chrono.results_helpers import (_base_url)
 
 
@@ -232,6 +233,43 @@ def heat_force_finish_and_next(hid):
             flash(msg, 'success')
         return redirect(url_for('races_page', cid=h['competition_id']) + '#create-heat')
     finally: conn.close()
+
+
+def heat_undns(hid):
+    """Вернуть участника в ещё не запущенный старт (был DNS, но успел)."""
+    pid = request.form.get('pid', type=int)
+    if not pid:
+        return jsonify({'ok': False, 'message': 'Не выбран участник'}), 400
+    conn = get_db()
+    try:
+        heat = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
+        if not heat:
+            return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
+        if heat['status'] != 'pending':
+            return jsonify({'ok': False, 'message': 'Старт уже запущен — вернуть нельзя'}), 400
+        row = conn.execute(
+            'SELECT status FROM heat_participants WHERE heat_id = ? AND participant_id = ?',
+            (hid, pid)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'message': 'Участник не в этом старте'}), 404
+        if row['status'] == 'active':
+            return jsonify({'ok': True, 'message': 'Участник уже в старте'})
+        with conn:
+            conn.execute(
+                "UPDATE heat_participants SET status = 'active' "
+                'WHERE heat_id = ? AND participant_id = ?', (hid, pid))
+            conn.execute(
+                "DELETE FROM races WHERE heat_id = ? AND participant_id = ? AND status = 'dns'",
+                (hid, pid))
+        _log_timing(conn, 'races', 'undns', True, competition_id=heat['competition_id'], heat_id=hid,
+                    participant_id=pid, user_login=session.get('user'),
+                    detail='DNS снят: участник вернулся до старта')
+        person = conn.execute('SELECT full_name, number FROM participants WHERE id = ?',
+                              (pid,)).fetchone()
+        flash(f'В старт возвращён: №{person["number"]} {person["full_name"]}', 'success')
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
 
 
 def heat_mark_dnf(hid):
@@ -622,6 +660,7 @@ RULES = [
     ('/heats/<int:hid>/start', 'heat_start', heat_start, ['POST']),
     ('/heats/<int:hid>/force_finish', 'heat_force_finish', heat_force_finish, ['POST']),
     ('/heats/<int:hid>/force_finish_and_next', 'heat_force_finish_and_next', heat_force_finish_and_next, ['POST']),
+    ('/heats/<int:hid>/undns', 'heat_undns', heat_undns, ['POST']),
     ('/heats/<int:hid>/mark_dnf', 'heat_mark_dnf', heat_mark_dnf, ['POST']),
     ('/heats/<int:hid>/delete', 'heat_delete', heat_delete, ['POST']),
     ('/heats/<int:hid>/edit_start', 'heat_edit_start', heat_edit_start, ['POST']),

@@ -377,6 +377,13 @@
 .so-key-main { border-color: #93c5fd; background: #eff6ff; color: #1e40af; }
 .so-key.dragging { opacity: .45; }
 .so-key[disabled] { cursor: default; opacity: .75; }
+.so-undns {
+    margin-left: 6px; padding: 1px 8px; font-size: 11px; font-family: inherit;
+    border: 1px solid #bfdbfe; border-radius: 6px; background: #eff6ff;
+    color: #1e40af; cursor: pointer; white-space: nowrap;
+}
+.so-undns:hover { background: #dbeafe; }
+.so-undns[disabled] { opacity: .6; cursor: default; }
 .so-dir { font-size: 13px; line-height: 1; color: #2563eb; }
 .so-manual { font-size: 11px; color: #b45309; font-weight: 600; }
 .so-badge {
@@ -1007,6 +1014,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 2500);
             }
         }
+
+        // Вернуть DNS-участника в незапущенный старт
+        box.addEventListener('click', function (e) {
+            var btn = e.target && e.target.closest ? e.target.closest('.so-undns') : null;
+            if (!btn) return;
+            e.preventDefault();
+            var fd = new FormData();
+            fd.append('pid', btn.dataset.pid);
+            btn.disabled = true;
+            fetch('/heats/' + box.dataset.hid + '/undns', {
+                method: 'POST', body: fd, cache: 'no-store',
+                headers: { 'X-Requested-With': 'fetch' }
+            }).then(function (r) { return r.json(); })
+              .then(function (data) {
+                  if (!data.ok) {
+                      setStatus('⚠ ' + (data.message || 'Не удалось вернуть'), 'err');
+                      btn.disabled = false;
+                      return;
+                  }
+                  setStatus('Возвращён в старт', 'ok');
+                  if (typeof window.__refreshHeats === 'function') window.__refreshHeats();
+              })
+              .catch(function () {
+                  setStatus('⚠ Нет связи с сервером', 'err');
+                  btn.disabled = false;
+              });
+        });
 
         function waitingRows() {
             return Array.prototype.slice.call(body.querySelectorAll('tr.so-row[data-status="waiting"]'));
