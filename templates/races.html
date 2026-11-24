@@ -12,7 +12,7 @@
         <p style="margin:0 0 12px 0;color:#4b5563">
             Отдельная мобильная страница для фиксации кругов и финиша.
         </p>
-        <a href="{{ url_for('manual_page', cid=competition.id) }}" class="btn-manual-link">
+        <a href="{{ url_for('manual_page', cid=competition.id) }}" class="btn btn-sm btn-ghost">
             📱 Открыть ручной хронометраж →
         </a>
     </div>
@@ -163,7 +163,7 @@
 
         <div class="fd-actions">
             <button type="button" class="btn-ghost" id="fd-cancel">Отмена</button>
-            <button type="button" class="btn-save" id="fd-ok">Сохранить</button>
+            <button type="button" class="btn btn-primary" id="fd-ok">Сохранить</button>
         </div>
     </div>
 </div>
@@ -1179,24 +1179,22 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        var saveAt = box.querySelector('.so-start-at-save');
-        if (saveAt) {
-            saveAt.addEventListener('click', function () {
-                var input = box.querySelector('.so-start-at-input');
+        var startAtInput = box.querySelector('.so-start-at-input');
+        if (startAtInput) {
+            startAtInput.addEventListener('change', function () {
                 var fd = new FormData();
-                fd.append('start_at', input ? input.value : '');
-                saveAt.disabled = true;
+                fd.append('start_at', startAtInput.value);
+                setStatus('Сохраняем…', '');
                 fetch('/heats/' + box.dataset.hid + '/start_at', {
                     method: 'POST', body: fd, cache: 'no-store'
                 }).then(function (r) { return r.json(); })
                   .then(function (data) {
                       if (!data.ok) throw new Error(data.message || 'Ошибка');
-                      box.dataset.startAt = input ? input.value : '';
+                      box.dataset.startAt = startAtInput.value;
                       refreshNumbers();
                       setStatus('Время старта сохранено', 'ok');
                   })
-                  .catch(function (err) { setStatus('Ошибка: ' + (err.message || 'нет связи'), 'err'); })
-                  .finally(function () { saveAt.disabled = false; });
+                  .catch(function (err) { setStatus('Ошибка: ' + (err.message || 'нет связи'), 'err'); });
             });
         }
     }

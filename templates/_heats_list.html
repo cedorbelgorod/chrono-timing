@@ -16,8 +16,8 @@
         </span>
         <label class="so-start-at">
             <span>Старт в</span>
-            <input type="datetime-local" class="so-start-at-input" value="{{ h.start_at_local or '' }}">
-            <button type="button" class="so-start-at-save" data-hid="{{ h.id }}">Сохранить</button>
+            <input type="datetime-local" class="so-start-at-input" value="{{ h.start_at_local or '' }}"
+                   title="Плановое время старта — сохраняется автоматически">
         </label>
         <span class="so-status"></span>
     </div>

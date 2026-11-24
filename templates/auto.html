@@ -28,7 +28,7 @@
                 {% if settings.swrfid_enabled == '1' %}
                     <button type="submit" class="btn-stop">⏹ Остановить</button>
                 {% else %}
-                    <button type="submit" class="btn-go">▶ Запустить</button>
+                    <button type="submit" class="btn btn-primary">▶ Запустить</button>
                 {% endif %}
             </form>
             <a class="btn-ghost" href="{{ url_for('auto_device_page', cid=competition.id) }}">⚙ Устройство</a>

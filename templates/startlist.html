@@ -7,13 +7,13 @@
 </h2>
 
 <div class="slt-bar">
-    <a class="btn-tpl" href="{{ url_for('startlist_pdf', hid=data.heat.id) }}">⬇ PDF</a>
-    <a class="btn-tpl" href="{{ url_for('startlist_xlsx', hid=data.heat.id) }}">⬇ Excel</a>
-    <button type="button" class="btn-tpl" onclick="window.print()">🖨 Печать</button>
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('startlist_pdf', hid=data.heat.id) }}">⬇ PDF</a>
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('startlist_xlsx', hid=data.heat.id) }}">⬇ Excel</a>
+    <button type="button" class="btn btn-sm btn-ghost" onclick="window.print()">🖨 Печать</button>
     {% if public_url %}
-        <a class="btn-tpl" href="{{ public_url }}" target="_blank" rel="noopener">🔗 Публичная страница</a>
+        <a class="btn btn-sm btn-ghost" href="{{ public_url }}" target="_blank" rel="noopener">🔗 Публичная страница</a>
     {% else %}
-        <button type="button" class="btn-tpl" id="make-link" data-hid="{{ data.heat.id }}">🔗 Получить публичную ссылку</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="make-link" data-hid="{{ data.heat.id }}">🔗 Получить публичную ссылку</button>
     {% endif %}
     <span class="slt-status" id="link-status"></span>
 </div>

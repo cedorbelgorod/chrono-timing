@@ -36,7 +36,7 @@
 {% block content %}
 <div class="proto-actions no-print">
     <a class="btn-ghost" href="{{ url_for('competitions_list') }}">← К соревнованию</a>
-    <a class="btn-save" href="{{ url_for('protocol_pdf') }}">⬇ Скачать PDF</a>
+    <a class="btn btn-secondary" href="{{ url_for('protocol_pdf') }}">⬇ Скачать PDF</a>
     <span class="hint-print">Данные ниже попадают в шапку и подвал протокола; техданные трассы — в «Категориях»</span>
 </div>
 
@@ -83,7 +83,7 @@
         </div>
 
         <div class="proto-actions">
-            <button type="submit" class="btn-save">💾 Сохранить данные протокола</button>
+            <button type="submit" class="btn btn-primary">💾 Сохранить данные протокола</button>
             <button type="submit" class="btn-weather"
                     formaction="{{ url_for('weather_fetch') }}">🌤 Узнать погоду</button>
             <span class="weather-hint">по городу или координатам, на дату гонки</span>

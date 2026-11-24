@@ -18,7 +18,7 @@
             <input type="file" name="file" accept=".xlsx" onchange="this.form.submit()">
         </label>
     </form>
-    <a class="btn-tpl" href="{{ url_for('bib_tags_template', cid=competition.id) }}">⬇ Шаблон</a>
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('bib_tags_template', cid=competition.id) }}">⬇ Шаблон</a>
     <span class="ti-hint">колонки: Номер · Метка 1 · Метка 2</span>
 </div>
 
@@ -70,8 +70,8 @@
                 <input type="text" name="tag2" class="mono" value="{{ g.tags[1] if g.tags|length > 1 else '' }}"
                        placeholder="резервная" autocomplete="off">
                 <div class="row-actions">
-                    <button type="submit" class="btn-save">Сохранить</button>
-                    <button type="submit" name="action" value="delete" class="btn-del"
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="submit" name="action" value="delete" class="btn btn-danger"
                             data-confirm="Снять метки с номера {{ g.number }}?">Снять</button>
                 </div>
             </form>

@@ -49,7 +49,7 @@
         <input type="hidden" name="row_{{ loop.index0 }}_tag2" value="{{ r.tags[1] if r.tags|length > 1 else '' }}">
     {% endfor %}
     <a class="btn-back-link" href="{{ url_for('bib_tags_page', cid=competition.id) }}">← Отмена</a>
-    <button type="submit" class="btn-import" {% if not ok %}disabled{% endif %}>
+    <button type="submit" class="btn btn-primary" {% if not ok %}disabled{% endif %}>
         Импортировать {{ ok }} {{ 'номер' if ok == 1 else ('номера' if ok < 5 else 'номеров') }}
     </button>
 </form>

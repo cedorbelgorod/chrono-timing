@@ -23,7 +23,7 @@
     <div class="reg-link-title">Ссылка для участников</div>
     <div class="reg-link-row">
         <input type="text" id="reg-url" value="{{ public_url }}" readonly onclick="this.select()">
-        <button type="button" class="btn-copy" id="btn-copy">Копировать</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-copy">Копировать</button>
     </div>
     <div class="reg-link-hint">
         Отправьте ссылку участникам (мессенджер, соцсети, наклейка с QR). Регистрация открыта
@@ -44,7 +44,7 @@
     <div class="reg-link-title">Ссылка на список участников</div>
     <div class="reg-link-row">
         <input type="text" id="list-url" value="{{ list_url }}" readonly onclick="this.select()">
-        <button type="button" class="btn-copy" id="btn-copy-list">Копировать</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-copy-list">Копировать</button>
     </div>
     <div class="reg-link-hint">
         Публичный список: ФИО, год, город, клуб, категория — <b>без телефонов</b>.
@@ -115,7 +115,7 @@
     </div>
 
     <div class="save-row">
-        <button type="submit" class="btn-save">Сохранить настройки</button>
+        <button type="submit" class="btn btn-primary">Сохранить настройки</button>
     </div>
 </form>
 
@@ -127,7 +127,7 @@
             <a class="link" href="{{ url_for('registrations_page') }}">📋 Весь журнал заявок →</a>
             {% if uncategorized %}
             <form method="post" action="{{ url_for('registration_autocat') }}" style="margin:0">
-                <button type="submit" class="btn-autocat">🎯 Подобрать категории ({{ uncategorized }})</button>
+                <button type="submit" class="btn btn-ghost">🎯 Подобрать категории ({{ uncategorized }})</button>
             </form>
             {% endif %}
         </div>

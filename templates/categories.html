@@ -41,7 +41,7 @@
             <input type="file" name="file" accept=".xlsx" onchange="this.form.submit()">
         </label>
     </form>
-    <a class="btn-tpl" href="{{ url_for('categories_template', cid=competition.id) }}">⬇ Шаблон</a>
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('categories_template', cid=competition.id) }}">⬇ Шаблон</a>
     <span class="cat-import-hint">колонки: Название · Кругов · Пол · Возраст</span>
 </div>
 

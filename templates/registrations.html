@@ -12,7 +12,7 @@
     <span class="pill">Всего заявок: <b>{{ total }}</b></span>
     <span class="pill ok">В списке: <b>{{ alive }}</b></span>
     <span class="pill del">Удалены: <b>{{ deleted }}</b></span>
-    <a class="xlsx-btn" href="{{ url_for('registrations_xlsx') }}">⬇ Excel</a>
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('registrations_xlsx') }}">⬇ Excel</a>
 </div>
 
 {% if rows %}

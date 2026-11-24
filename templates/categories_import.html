@@ -66,7 +66,7 @@
         <input type="hidden" name="row_{{ loop.index0 }}_age_range" value="{{ r.age_range or '' }}">
     {% endfor %}
     <a class="btn-back-link" href="{{ url_for('categories_list', cid=competition.id) }}">← Отмена</a>
-    <button type="submit" class="btn-import" {% if not ok %}disabled{% endif %}>
+    <button type="submit" class="btn btn-primary" {% if not ok %}disabled{% endif %}>
         Импортировать {{ ok }} {{ 'категорию' if ok == 1 else ('категории' if ok < 5 else 'категорий') }}
     </button>
 </form>

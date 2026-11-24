@@ -35,7 +35,7 @@
                     <input name="swrfid_baud" value="{{ settings.swrfid_baud }}" required
                            inputmode="numeric" placeholder="115200">
                 </label>
-                <button type="submit" class="btn-save">💾 Сохранить</button>
+                <button type="submit" class="btn btn-primary">💾 Сохранить</button>
             </form>
 
             <form method="post" action="{{ url_for('swrfid_toggle') }}" style="margin-top:14px">
@@ -44,7 +44,7 @@
                 {% if settings.swrfid_enabled == '1' %}
                     <button type="submit" class="btn-stop big">⏹ Остановить считыватель</button>
                 {% else %}
-                    <button type="submit" class="btn-go big">▶ Запустить считыватель</button>
+                    <button type="submit" class="btn btn-primary big">▶ Запустить считыватель</button>
                 {% endif %}
             </form>
 

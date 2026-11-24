@@ -22,6 +22,29 @@ class UiTokensTest(ChronoTestCase):
         self.assertIn('class="btn btn-ghost"', html)
 
 
+class UiButtonsTest(ChronoTestCase):
+    def test_protocol_buttons_use_common_classes(self):
+        self.login_admin()
+        html = self.client.get('/protocol').get_data(as_text=True)
+        self.assertIn('class="btn btn-secondary"', html)
+        self.assertNotIn('class="btn-save"', html)
+
+    def test_toolbar_buttons_use_common_classes(self):
+        self.login_admin()
+        cid = self.comp['id']
+        tags = self.client.get(f'/competitions/{cid}/tags').get_data(as_text=True)
+        self.assertIn('class="btn btn-sm btn-ghost"', tags)
+        self.assertIn('class="btn btn-primary"', tags)
+        regs = self.client.get('/registrations').get_data(as_text=True)
+        self.assertIn('btn btn-sm btn-ghost', regs)
+
+    def test_planned_start_time_saved_automatically(self):
+        hid, p1, p2 = self.itt_heat(laps=(2, 3))
+        html = self.client.get('/races').get_data(as_text=True)
+        self.assertNotIn('so-start-at-save', html)
+        self.assertIn('Время старта сохранено', html)
+
+
 class UiTerminologyTest(ChronoTestCase):
     def test_participants_use_category_wording(self):
         self.login_admin()
