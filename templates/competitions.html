@@ -3,63 +3,63 @@
 {% block content %}
 <h2>Соревнование</h2>
 
-<div class="comp-grid">
-    <section class="card">
-        <div class="card-head"><h3>Название</h3></div>
-        <div class="card-body">
-            <form method="post" action="{{ url_for('competition_edit', cid=competition.id) }}" class="name-form">
+<section class="card set-card">
+    <div class="set-row">
+        <div class="set-label">Название</div>
+        <div class="set-value">
+            <form method="post" action="{{ url_for('competition_edit', cid=competition.id) }}" class="set-form">
                 <input type="text" name="name" value="{{ competition.name }}" required
                        placeholder="Название соревнования" autocomplete="off">
-                <button type="submit">Сохранить</button>
+                <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
             </form>
-            <p class="hint">Название видно в шапке всех страниц и в экспорте результатов.</p>
+            <div class="set-hint">Видно в шапке всех страниц и в экспорте результатов.</div>
         </div>
-    </section>
+    </div>
 
-    <section class="card">
-        <div class="card-head"><h3>Формат стартов</h3></div>
-        <div class="card-body">
-            <p class="fmt-readonly">
+    <div class="set-row">
+        <div class="set-label">Формат стартов</div>
+        <div class="set-value">
+            <div class="set-static">
                 <b>{{ formats[race_format] }}</b>
-                <span class="muted">— задаётся при создании соревнования и дальше не меняется</span>
-            </p>
+                <span class="badge badge-neutral">задан при создании</span>
+            </div>
             {% if race_format == 'itt' %}
-            <form method="post" action="{{ url_for('competition_format_save') }}" class="format-form">
-                <label class="fmt-row">
-                    <span>Интервал старта, секунд</span>
+            <form method="post" action="{{ url_for('competition_format_save') }}" class="set-form">
+                <label class="set-inline">
+                    <span>Интервал, с</span>
                     <input type="number" name="itt_start_interval" min="5" max="600" step="5"
                            value="{{ settings.itt_start_interval }}">
                 </label>
-                <label class="fmt-check">
+                <label class="set-check">
                     <input type="checkbox" name="itt_countdown_sound" value="1"
                            {{ 'checked' if settings.itt_countdown_sound == '1' }}>
-                    Звуковой отсчёт 5-4-3-2-1 на старте
+                    Звуковой отсчёт
                 </label>
-                <button type="submit">Сохранить</button>
+                <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
             </form>
             {% endif %}
-            <p class="hint">
-                Формат действует на все новые старты. В разделке участники стартуют по номерам
-                по одному; старт фиксирует стартовый судья, результат — личное время.
-            </p>
+            <div class="set-hint">
+                Меняется только при создании соревнования. В разделке участники стартуют по номерам
+                по одному; в групповом — все вместе.
+            </div>
         </div>
-    </section>
+    </div>
 
-    <section class="card">
-        <div class="card-head"><h3>Дата старта</h3></div>
-        <div class="card-body">
-            <form method="post" action="{{ url_for('competition_start_date_save') }}" class="name-form">
+    <div class="set-row">
+        <div class="set-label">Дата старта</div>
+        <div class="set-value">
+            <form method="post" action="{{ url_for('competition_start_date_save') }}" class="set-form">
                 <input type="date" name="start_date" value="{{ settings.start_date }}"
-                       class="date-input" aria-label="Плановая дата старта">
-                <button type="submit">Сохранить</button>
+                       aria-label="Плановая дата старта">
+                <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
             </form>
-            <p class="hint">
-                Плановая дата старта: показывается в форме регистрации и в списке зарегистрировавшихся.
-                От года старта считается возраст участников в категориях.
-            </p>
+            <div class="set-hint">
+                Показывается в регистрации и списке зарегистрировавшихся; от года считается
+                возраст участников в категориях.
+            </div>
         </div>
-    </section>
-</div>
+    </div>
+</section>
 
 <section class="card" style="margin-top:16px">
     <div class="card-head"><h3>Готовность к старту</h3></div>
@@ -150,38 +150,35 @@
 </section>
 
 <style>
-.comp-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-@media (max-width: 900px) { .comp-grid { grid-template-columns: 1fr; } }
-
 .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; }
 .card-head { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 10px; }
 .card-head h3 { margin: 0; font-size: 15px; }
 .card-body { padding: 16px; }
 
-.name-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.format-form { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
-.fmt-row { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #6b7280; font-weight: 600; }
-.fmt-row select, .fmt-row input {
-    padding: 9px 11px; font-size: 14px; font-family: inherit; border: 1px solid #d1d5db;
-    border-radius: 8px; background: #fff; color: #111827; min-width: 220px;
+/* настройки — компактный список «подпись → значение» */
+.set-card { margin-bottom: 16px; }
+.set-row {
+    display: grid; grid-template-columns: 170px minmax(0, 1fr);
+    gap: 6px 20px; padding: 13px 16px; align-items: start;
+    border-bottom: 1px solid #f1f5f9;
 }
-.fmt-row select:focus, .fmt-row input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
-.fmt-itt { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
-.fmt-itt[hidden] { display: none; }
-.fmt-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; }
-.fmt-check input { width: 16px; height: 16px; accent-color: #2563eb; }
-.format-form button { background: #16a34a; padding: 9px 20px; font-weight: 600; border: none; border-radius: 8px; color: #fff; cursor: pointer; }
-.format-form button:hover { background: #15803d; }
-.name-form input {
-    flex: 1 1 220px; padding: 9px 12px; font-size: 15px; font-family: inherit;
-    border: 1px solid #d1d5db; border-radius: 8px;
+.set-row:last-child { border-bottom: none; }
+.set-label { font-size: 13px; font-weight: 600; color: #6b7280; padding-top: 8px; }
+.set-value { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.set-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.set-form input[type=text] { flex: 1 1 260px; font-size: 15px; }
+.set-form input[type=date] { flex: 0 0 180px; }
+.set-static { display: flex; align-items: center; gap: 8px; font-size: 15px; flex-wrap: wrap; }
+.set-hint { font-size: 12px; color: #9ca3af; line-height: 1.45; }
+.set-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #374151; }
+.set-inline input { width: 90px; }
+.set-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #374151; }
+.set-check input { width: 16px; height: 16px; accent-color: #2563eb; }
+@media (max-width: 700px) {
+    .set-row { grid-template-columns: 1fr; gap: 2px; padding: 12px 14px; }
+    .set-label { padding-top: 0; }
+    .set-form input[type=text] { flex: 1 1 100%; }
 }
-.name-form input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
-.name-form button { background: #16a34a; padding: 9px 20px; font-weight: 600; }
-.name-form button:hover { background: #15803d; }
-.name-form .date-input { flex: 0 0 200px; }
-.fmt-readonly { margin: 0 0 12px; font-size: 15px; }
-.fmt-readonly .muted { font-weight: 400; font-size: 13px; }
 
 /* чеклист готовности */
 .ready-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }

@@ -42,4 +42,4 @@ class FormatCreationTest(ChronoTestCase):
         self.assertEqual(comp['format'], 'mass')
         html = self.client.get('/competitions').get_data(as_text=True)
         self.assertNotIn('name="format"', html)
-        self.assertIn('задаётся при создании', html)
+        self.assertIn('при создании', html)

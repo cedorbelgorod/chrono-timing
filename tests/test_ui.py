@@ -52,6 +52,17 @@ class UiButtonsTest(ChronoTestCase):
         self.assertIn('Время старта сохранено', html)
 
 
+class UiSettingsLayoutTest(ChronoTestCase):
+    def test_settings_are_compact_rows(self):
+        self.login_admin()
+        html = self.client.get('/competitions').get_data(as_text=True)
+        self.assertIn('class="set-row"', html)
+        self.assertIn('class="set-label"', html)
+        self.assertIn('btn btn-primary btn-sm', html)
+        self.assertNotIn('class="comp-grid"', html)
+        self.assertNotIn('class="name-form"', html)
+
+
 class UiTerminologyTest(ChronoTestCase):
     def test_participants_use_category_wording(self):
         self.login_admin()
