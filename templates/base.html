@@ -725,6 +725,15 @@
         groups.forEach((g) => { if (g !== except) g.classList.remove('open'); });
     }
 
+    // меню не должно уходить за правый край окна
+    function align(group) {
+        const menu = group.querySelector('.nav-menu');
+        if (!menu) return;
+        menu.classList.remove('right');
+        const rect = menu.getBoundingClientRect();
+        if (rect.right > window.innerWidth - 8) menu.classList.add('right');
+    }
+
     groups.forEach((group) => {
         const toggle = group.querySelector('.nav-toggle');
         if (!toggle) return;
@@ -733,11 +742,17 @@
             const willOpen = !group.classList.contains('open');
             closeAll(group);
             group.classList.toggle('open', willOpen);
+            if (willOpen) align(group);
         });
+        // наведение открывает меню (CSS :hover), но только одно за раз
+        group.addEventListener('mouseenter', () => closeAll(group));
     });
 
     document.addEventListener('click', () => closeAll(null));
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAll(null); });
+    window.addEventListener('resize', () => {
+        groups.forEach((g) => { if (g.classList.contains('open')) align(g); });
+    });
 })();
 
 /* ======================= ТАБЛИЦЫ НА ПЛАНШЕТЕ ======================= */

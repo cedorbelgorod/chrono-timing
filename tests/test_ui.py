@@ -31,6 +31,12 @@ class UiTerminologyTest(ChronoTestCase):
         self.assertIn('— без категории —', html)
         self.assertNotIn('без группы', html)
 
+    def test_nav_menu_opens_one_at_a_time(self):
+        self.login_admin()
+        html = self.client.get('/competitions').get_data(as_text=True)
+        self.assertIn("group.addEventListener('mouseenter'", html)
+        self.assertIn("menu.classList.add('right')", html)
+
     def test_heading_without_emoji(self):
         self.login_admin()
         cid = self.comp['id']
