@@ -38,6 +38,13 @@ class UiButtonsTest(ChronoTestCase):
         regs = self.client.get('/registrations').get_data(as_text=True)
         self.assertIn('btn btn-sm btn-ghost', regs)
 
+    def test_links_page_buttons_use_common_classes(self):
+        self.login_admin()
+        html = self.client.get(f'/competitions/{self.comp["id"]}/links').get_data(as_text=True)
+        self.assertIn('btn btn-sm btn-secondary', html)
+        self.assertIn('btn btn-sm btn-ghost', html)
+        self.assertNotIn('link-btn', html)
+
     def test_planned_start_time_saved_automatically(self):
         hid, p1, p2 = self.itt_heat(laps=(2, 3))
         html = self.client.get('/races').get_data(as_text=True)

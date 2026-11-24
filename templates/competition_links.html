@@ -22,8 +22,8 @@
         <div class="link-desc">Регистрация, результаты, табло и все протоколы стартов — одна ссылка для участников.</div>
         <div class="link-row">
             <input class="link-input" readonly value="{{ base_url }}{{ url_for('public_hub', slug=slug) }}">
-            <button type="button" class="link-btn" data-copy>Копировать</button>
-            <a class="link-btn ghost" href="{{ url_for('public_hub', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
+            <button type="button" class="btn btn-sm btn-secondary" data-copy>Копировать</button>
+            <a class="btn btn-sm btn-ghost" href="{{ url_for('public_hub', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
         </div>
     </div>
     {% endif %}
@@ -36,8 +36,8 @@
         </div>
         <div class="link-row">
             <input class="link-input" readonly value="{{ base_url }}{{ url_for('reg_intro', slug=slug) }}">
-            <button type="button" class="link-btn" data-copy>Копировать</button>
-            <a class="link-btn ghost" href="{{ url_for('reg_intro', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
+            <button type="button" class="btn btn-sm btn-secondary" data-copy>Копировать</button>
+            <a class="btn btn-sm btn-ghost" href="{{ url_for('reg_intro', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
         </div>
     </div>
 
@@ -46,8 +46,8 @@
         <div class="link-desc">Кто уже подал заявку — публично, без входа.</div>
         <div class="link-row">
             <input class="link-input" readonly value="{{ base_url }}{{ url_for('reg_list', slug=slug) }}">
-            <button type="button" class="link-btn" data-copy>Копировать</button>
-            <a class="link-btn ghost" href="{{ url_for('reg_list', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
+            <button type="button" class="btn btn-sm btn-secondary" data-copy>Копировать</button>
+            <a class="btn btn-sm btn-ghost" href="{{ url_for('reg_list', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
         </div>
     </div>
 
@@ -56,8 +56,8 @@
         <div class="link-desc">Итоги по стартам и категориям.</div>
         <div class="link-row">
             <input class="link-input" readonly value="{{ base_url }}{{ url_for('public_results', slug=slug) }}">
-            <button type="button" class="link-btn" data-copy>Копировать</button>
-            <a class="link-btn ghost" href="{{ url_for('public_results', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
+            <button type="button" class="btn btn-sm btn-secondary" data-copy>Копировать</button>
+            <a class="btn btn-sm btn-ghost" href="{{ url_for('public_results', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
         </div>
     </div>
 
@@ -66,8 +66,8 @@
         <div class="link-desc">Экран финиша для проектора или телефона.</div>
         <div class="link-row">
             <input class="link-input" readonly value="{{ base_url }}{{ url_for('public_live', slug=slug) }}">
-            <button type="button" class="link-btn" data-copy>Копировать</button>
-            <a class="link-btn ghost" href="{{ url_for('public_live', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
+            <button type="button" class="btn btn-sm btn-secondary" data-copy>Копировать</button>
+            <a class="btn btn-sm btn-ghost" href="{{ url_for('public_live', slug=slug) }}" target="_blank" rel="noopener">Открыть</a>
         </div>
     </div>
     {% endif %}
@@ -77,8 +77,8 @@
         <div class="link-desc">Страница с Android-приложением.</div>
         <div class="link-row">
             <input class="link-input" readonly value="{{ base_url }}{{ url_for('app_page') }}">
-            <button type="button" class="link-btn" data-copy>Копировать</button>
-            <a class="link-btn ghost" href="{{ url_for('app_page') }}" target="_blank" rel="noopener">Открыть</a>
+            <button type="button" class="btn btn-sm btn-secondary" data-copy>Копировать</button>
+            <a class="btn btn-sm btn-ghost" href="{{ url_for('app_page') }}" target="_blank" rel="noopener">Открыть</a>
         </div>
     </div>
 </div>
@@ -109,18 +109,18 @@
             <td>
                 <div class="link-row">
                     <input class="link-input" readonly value="{{ base_url }}{{ url_for('public_startlist', slug=slug, hid=h.id) }}">
-                    <button type="button" class="link-btn" data-copy>Копировать</button>
-                    <a class="link-btn ghost" href="{{ url_for('public_startlist', slug=slug, hid=h.id) }}" target="_blank" rel="noopener">Открыть</a>
+                    <button type="button" class="btn btn-sm btn-secondary" data-copy>Копировать</button>
+                    <a class="btn btn-sm btn-ghost" href="{{ url_for('public_startlist', slug=slug, hid=h.id) }}" target="_blank" rel="noopener">Открыть</a>
                 </div>
             </td>
             <td>
                 <div class="link-row" data-short="{{ h.id }}">
                     {% if h.short_url %}
                         <input class="link-input short-url" readonly value="{{ h.short_url }}">
-                        <button type="button" class="link-btn" data-copy>Копировать</button>
-                        <button type="button" class="link-btn ghost" data-rotate title="Старая ссылка перестанет работать">↻</button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-copy>Копировать</button>
+                        <button type="button" class="btn btn-sm btn-ghost" data-rotate title="Старая ссылка перестанет работать">↻</button>
                     {% else %}
-                        <button type="button" class="link-btn" data-create>Создать ссылку</button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-create>Создать ссылку</button>
                     {% endif %}
                 </div>
             </td>
@@ -144,14 +144,6 @@
     border: 1px solid #e5e7eb; border-radius: 7px; background: #f9fafb; color: #374151;
     font-family: ui-monospace, Consolas, monospace;
 }
-.link-btn {
-    padding: 6px 10px; font-size: 12px; font-weight: 600; font-family: inherit;
-    border: 1px solid #2563eb; background: #2563eb; color: #fff;
-    border-radius: 7px; cursor: pointer; white-space: nowrap;
-}
-.link-btn:hover { background: #1d4ed8; }
-.link-btn.ghost { background: #fff; color: #2563eb; }
-.link-btn.ghost:hover { background: #eff6ff; }
 .links-warn {
     margin: 0 0 12px; padding: 9px 12px; border-radius: 8px;
     background: #fef3c7; color: #92400e; font-size: 13px;
@@ -211,7 +203,7 @@
         input.value = url;
         var copyBtn = document.createElement('button');
         copyBtn.type = 'button';
-        copyBtn.className = 'link-btn';
+        copyBtn.className = 'btn btn-sm btn-secondary';
         copyBtn.setAttribute('data-copy', '');
         copyBtn.textContent = 'Копировать';
         copyBtn.addEventListener('click', function () {
@@ -221,7 +213,7 @@
         });
         var rotateBtn = document.createElement('button');
         rotateBtn.type = 'button';
-        rotateBtn.className = 'link-btn ghost';
+        rotateBtn.className = 'btn btn-sm btn-ghost';
         rotateBtn.title = 'Старая ссылка перестанет работать';
         rotateBtn.textContent = '↻';
         rotateBtn.addEventListener('click', function () { request(row, true); });
