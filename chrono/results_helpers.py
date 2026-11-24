@@ -409,4 +409,6 @@ def _hub_data(conn, entry):
         'registration': get_cached_setting('reg_enabled', '0') == '1',
         'participants': conn.execute(
             'SELECT COUNT(*) FROM participants WHERE competition_id = ?', (cid,)).fetchone()[0],
+        'finished_heats': sum(1 for h in heats if h['status'] == 'finished'),
+        'has_running': any(h['status'] == 'running' for h in heats),
     }

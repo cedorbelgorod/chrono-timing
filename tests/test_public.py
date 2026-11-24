@@ -52,6 +52,24 @@ class PublicHubTest(ChronoTestCase):
         self.assertIn('Заезд А', html)
         self.assertNotIn('Старт №1 · Заезд А', html)
 
+    def test_hub_results_counter_and_live_indicator(self):
+        hid, p1, p2 = self.itt_heat(laps=(2, 3))
+        slug = self.comp['slug']
+        anon = self.public_client()
+        html = anon.get(f'/p/{slug}').get_data(as_text=True)
+        self.assertIn('live-dot off', html)
+        self.assertIn('Результаты', html)
+
+        self.board('begin')
+        self.board('start')
+        html = anon.get(f'/p/{slug}').get_data(as_text=True)
+        self.assertIn('live-dot on', html)
+
+        self.client.post(f'/heats/{hid}/force_finish')
+        html = anon.get(f'/p/{slug}').get_data(as_text=True)
+        self.assertIn('Результаты (1)', html)
+        self.assertIn('live-dot off', html)
+
     def test_hidden_and_archived_are_404(self):
         self._add_competition('Скрытое', 'hidden-one', hidden=True)
         self._add_competition('Архивное', 'archive-one', archived=True)
