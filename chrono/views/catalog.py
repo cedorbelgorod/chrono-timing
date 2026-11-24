@@ -394,6 +394,55 @@ def categories_import_confirm(cid):
         conn.close()
 
 
+def categories_row_save(cid):
+    """Автосохранение одной категории (AJAX). Возвращает JSON с подсказкой годов."""
+    conn = get_db()
+    try:
+        comp = conn.execute('SELECT id FROM competitions WHERE id = ?', (cid,)).fetchone()
+        if not comp:
+            return jsonify({'ok': False, 'error': 'Соревнование не найдено'}), 404
+        cat_id = request.form.get('cat_id', type=int)
+        cat = conn.execute('SELECT * FROM categories WHERE id = ? AND competition_id = ?',
+                           (cat_id, cid)).fetchone()
+        if not cat:
+            return jsonify({'ok': False, 'error': 'Категория не найдена'}), 404
+        start_year = _competition_start_year()
+        name = (request.form.get('name') or '').strip()
+        laps_raw = (request.form.get('laps') or '').strip()
+        laps = int(laps_raw) if laps_raw.isdigit() else None
+        sort_raw = (request.form.get('sort') or '').strip()
+        sort_order = int(sort_raw) if sort_raw.lstrip('-').isdigit() else cat['id']
+        gender = _join_genders(request.form.getlist('gender'))
+        age_range = (request.form.get('age_range') or '').strip()
+        age_min, age_max, age_err = _parse_age_range(age_range)
+        if not name:
+            return jsonify({'ok': False, 'error': 'Введите название категории'})
+        if laps is None or laps < 1:
+            return jsonify({'ok': False, 'error': 'Кругов должно быть не меньше 1'})
+        if age_err:
+            return jsonify({'ok': False, 'error': age_err})
+        year_from, year_to = _age_range_years(start_year, age_min, age_max)
+        try:
+            with conn:
+                conn.execute(
+                    'UPDATE categories SET name = ?, laps_total = ?, lap_length = ?, hd = ?, ms = ?, '
+                    'ts = ?, gender = ?, age_range = ?, year_from = ?, year_to = ?, sort_order = ? '
+                    'WHERE id = ?',
+                    (name, laps, (request.form.get('lap_length') or '').strip() or None,
+                     (request.form.get('hd') or '').strip() or None,
+                     (request.form.get('ms') or '').strip() or None,
+                     (request.form.get('ts') or '').strip() or None,
+                     gender, age_range, year_from, year_to, sort_order, cat_id))
+        except sqlite3.IntegrityError:
+            return jsonify({'ok': False, 'error': f'«{name}» уже есть'})
+        hint = _age_range_hint(start_year, age_min, age_max)
+        return jsonify({'ok': True, 'age_range': age_range, 'age_hint': hint,
+                        'year_from': year_from, 'year_to': year_to, 'laps': laps,
+                        'sort_order': sort_order})
+    finally:
+        conn.close()
+
+
 def categories_save_all(cid):
     conn = get_db()
     try:
@@ -877,6 +926,84 @@ def participants_bulk(cid):
     finally: conn.close()
 
 
+def participant_row_save(cid):
+    """Автосохранение одной строки участника (AJAX). Возвращает JSON."""
+    conn = get_db()
+    try:
+        p = conn.execute('SELECT * FROM participants WHERE id = ? AND competition_id = ?',
+                         (request.form.get('pid', type=int), cid)).fetchone()
+        if not p:
+            return jsonify({'ok': False, 'error': 'Участник не найден'}), 404
+        number_str = (request.form.get('number') or '').strip()
+        full_name = (request.form.get('full_name') or '').strip()
+        birth_year_str = (request.form.get('birth_year') or '').strip()
+        category_raw = (request.form.get('category_id') or '').strip()
+        category_id = int(category_raw) if category_raw.isdigit() else None
+        gender = (request.form.get('gender') or '').strip()
+        city = (request.form.get('city') or '').strip() or None
+        team = (request.form.get('team') or '').strip() or None
+        try:
+            number_int = int(number_str) if number_str else None
+        except ValueError:
+            return jsonify({'ok': False, 'error': 'Неверный номер'})
+        if number_int is not None and number_int < 1:
+            return jsonify({'ok': False, 'error': 'Номер должен быть больше нуля'})
+        if not full_name:
+            return jsonify({'ok': False, 'error': 'ФИО обязательно'})
+        if gender not in ('M', 'F'):
+            return jsonify({'ok': False, 'error': 'Не выбран пол'})
+        year_int = _parse_year(birth_year_str)
+        if birth_year_str and year_int is None:
+            return jsonify({'ok': False, 'error': 'Неверный год'})
+        if category_id is not None and not conn.execute(
+                'SELECT id FROM categories WHERE id = ? AND competition_id = ?',
+                (category_id, cid)).fetchone():
+            return jsonify({'ok': False, 'error': 'Категория не найдена'})
+        try:
+            with conn:
+                conn.execute(
+                    'UPDATE participants SET number = ?, full_name = ?, birth_year = ?, '
+                    'category_id = ?, gender = ?, city = ?, team = ? WHERE id = ?',
+                    (number_int, full_name, year_int, category_id, gender, city, team, p['id']))
+        except sqlite3.IntegrityError:
+            return jsonify({'ok': False, 'error': f'Номер {number_int} занят'})
+        cat = conn.execute('SELECT * FROM categories WHERE id = ?',
+                           (category_id,)).fetchone() if category_id else None
+        mismatch = bool(cat and _category_mismatch(cat, gender, year_int))
+        return jsonify({'ok': True, 'mismatch': mismatch, 'number': number_int,
+                        'birth_year': year_int, 'category_id': category_id})
+    finally:
+        conn.close()
+
+
+def participants_auto_categories(cid):
+    """Пересчитывает категории всех участников по полу и возрасту (как при смене года)."""
+    conn = get_db()
+    try:
+        comp = conn.execute('SELECT id FROM competitions WHERE id = ?', (cid,)).fetchone()
+        if not comp:
+            return 'Не найдено', 404
+        start_year = _competition_start_year()
+        updated = total = 0
+        with conn:
+            _apply_age_range(conn, cid, start_year)
+            for p in conn.execute(
+                    'SELECT id, gender, birth_year, category_id FROM participants '
+                    'WHERE competition_id = ?', (cid,)).fetchall():
+                total += 1
+                cat = _auto_category(conn, cid, p['gender'], p['birth_year'])
+                if cat and cat != p['category_id']:
+                    conn.execute('UPDATE participants SET category_id = ? WHERE id = ?',
+                                 (cat, p['id']))
+                    updated += 1
+        _app_logger.info('Participants auto categories: comp=%s updated=%s of %s',
+                         cid, updated, total)
+        flash(f'Категории пересчитаны: обновлено {updated} из {total}', 'success')
+        return redirect(url_for('participants_list', cid=cid))
+    finally:
+        conn.close()
+
+
 def participant_add(cid):
     number, full_name, birth_year, category_id, gender = [request.form.get(x, '').strip() for x in ['number', 'full_name', 'birth_year', 'category_id', 'gender']]
     def err(msg): flash(msg, 'error'); return redirect(url_for('participants_list', cid=cid))
@@ -1165,6 +1292,7 @@ RULES = [
     ('/competitions/<int:cid>/categories/import/confirm', 'categories_import_confirm', categories_import_confirm, ['POST']),
     ('/competitions/<int:cid>/categories/save_all', 'categories_save_all', categories_save_all, ['POST']),
     ('/competitions/<int:cid>/categories/reorder', 'categories_reorder', categories_reorder, ['POST']),
+    ('/competitions/<int:cid>/categories/row', 'categories_row_save', categories_row_save, ['POST']),
     ('/categories/<int:catid>/delete', 'category_delete', category_delete, ['POST']),
     ('/competitions/<int:cid>', 'participants_list', participants_list, ['GET']),
     ('/competitions/<int:cid>/numbers', 'numbers_page', numbers_page, ['GET', 'POST']),
@@ -1173,6 +1301,10 @@ RULES = [
     ('/competitions/<int:cid>/tags/import/confirm', 'bib_tags_import_confirm', bib_tags_import_confirm, ['POST']),
     ('/competitions/<int:cid>/tags', 'bib_tags_page', bib_tags_page, ['GET', 'POST']),
     ('/competitions/<int:cid>/participants/bulk', 'participants_bulk', participants_bulk, ['POST']),
+    ('/competitions/<int:cid>/participants/auto-categories', 'participants_auto_categories',
+     participants_auto_categories, ['POST']),
+    ('/competitions/<int:cid>/participants/row', 'participant_row_save',
+     participant_row_save, ['POST']),
     ('/competitions/<int:cid>/participants/add', 'participant_add', participant_add, ['POST']),
     ('/competitions/<int:cid>/participants/save_all', 'participants_save_all', participants_save_all, ['POST']),
     ('/participants/<int:pid>/delete', 'participant_delete', participant_delete, ['POST']),

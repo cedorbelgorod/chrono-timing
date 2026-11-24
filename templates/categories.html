@@ -46,7 +46,9 @@
 </div>
 
 {% if categories %}
-<form method="post" action="{{ url_for('categories_save_all', cid=competition.id) }}" id="cats-form">
+<form method="post" action="{{ url_for('categories_save_all', cid=competition.id) }}" id="cats-form"
+      data-autosave-url="{{ url_for('categories_row_save', cid=competition.id) }}"
+      data-start-year="{{ start_year }}">
     <div class="cats-tools">
         <span class="cats-tools-hint">перетащите строку за ⋮⋮, чтобы изменить порядок — он сохраняется сразу</span>
         <span id="sort-status" class="cats-status"></span>
@@ -173,7 +175,7 @@
                     </label>
                 </div>
                 <div class="cat-modal-foot">
-                    <span class="muted">Изменения сохранятся кнопкой «Сохранить все изменения».</span>
+                    <span class="muted">Изменения сохраняются автоматически.</span>
                     <button type="button" class="btn-done" data-close>Готово</button>
                 </div>
             </div>
@@ -181,10 +183,8 @@
     {% endfor %}
 
     <div class="save-bar">
-        <button type="submit" class="btn-save-all" id="save-all-btn">
-            💾 Сохранить все изменения
-        </button>
-        <span id="changed-count" class="changed-count"></span>
+        <span class="autosave-note">💾 Изменения сохраняются автоматически</span>
+        <span id="save-status" class="cats-status"></span>
     </div>
 </form>
 {% else %}
@@ -373,6 +373,7 @@ body.modal-open { overflow: hidden; }
 .btn-save-all:hover { background: #15803d; }
 .btn-save-all:disabled { background: #9ca3af; cursor: not-allowed; }
 .changed-count { color: #b45309; font-weight: 600; font-size: 14px; }
+.autosave-note { font-size: 14px; font-weight: 600; color: #374151; }
 
 /* карточки на узком экране */
 @media (max-width: 860px) {
@@ -400,12 +401,10 @@ body.modal-open { overflow: hidden; }
 (function () {
     const form = document.getElementById('cats-form');
     if (!form) return;
+    const url = form.dataset.autosaveUrl;
+    const statusEl = document.getElementById('save-status');
+    const timers = new Map();
 
-    const rows = [...form.querySelectorAll('tr.cat-row')];
-    const initialState = new WeakMap();
-    let unsavedCount = 0;
-
-    // поля строки: то, что в таблице, плюс условия из её модалки
     function rowInputs(row) {
         const list = [...row.querySelectorAll('input')];
         const modal = document.querySelector('.cat-modal[data-for="' + row.dataset.id + '"]');
@@ -413,110 +412,74 @@ body.modal-open { overflow: hidden; }
         return list;
     }
 
-    function val(el) { return el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value; }
-
-    function updateCount() {
-        const cnt = document.getElementById('changed-count');
-        const btn = document.getElementById('save-all-btn');
-        if (!cnt) return;
-        if (unsavedCount === 0) {
-            cnt.textContent = 'Все изменения сохранены';
-            cnt.style.color = '#6b7280';
-            if (btn) btn.disabled = true;
-        } else {
-            cnt.textContent = `Изменено строк: ${unsavedCount} (не сохранено)`;
-            cnt.style.color = '#b45309';
-            if (btn) btn.disabled = false;
-        }
-    }
-
-    function checkRow(row) {
-        const snap = initialState.get(row);
-        let changed = false;
+    function bodyFor(row) {
+        const body = new FormData();
+        body.append('cat_id', row.dataset.id);
         rowInputs(row).forEach(el => {
-            const key = el.name + '#' + (el.type === 'checkbox' ? el.value : '');
-            if (snap[key] !== val(el)) changed = true;
-        });
-        row.classList.toggle('row-changed', changed);
-        return changed;
-    }
-
-    function refreshAll() {
-        unsavedCount = 0;
-        rows.forEach(r => { if (checkRow(r)) unsavedCount++; });
-        updateCount();
-    }
-
-    rows.forEach(row => {
-        const snap = {};
-        rowInputs(row).forEach(el => {
-            snap[el.name + '#' + (el.type === 'checkbox' ? el.value : '')] = val(el);
-        });
-        initialState.set(row, snap);
-
-        const check = () => {
-            const was = row.classList.contains('row-changed');
-            const now = checkRow(row);
-            if (was !== now) {
-                unsavedCount += (now ? 1 : -1);
-                if (unsavedCount < 0) unsavedCount = 0;
-                updateCount();
+            const m = (el.name || '').match(/^cat_\d+_(.+)$/);
+            if (!m) return;
+            if (el.type === 'checkbox') {
+                if (el.checked) body.append(m[1], el.value);
+            } else {
+                body.append(m[1], el.value);
             }
-        };
+        });
+        return body;
+    }
 
+    function setStatus(text, kind) {
+        if (!statusEl) return;
+        statusEl.textContent = text;
+        statusEl.className = 'cats-status ' + (kind || '');
+    }
+
+    function updateHints(row, hint) {
+        const rowHint = row.querySelector('.cat-age');
+        if (rowHint) rowHint.textContent = hint || '';
+        const modalHint = document.querySelector(
+            '.cat-modal[data-for="' + row.dataset.id + '"] .cat-age');
+        if (modalHint) modalHint.textContent = hint || '';
+    }
+
+    function save(row) {
+        setStatus('Сохраняем…', '');
+        fetch(url, { method: 'POST', body: bodyFor(row),
+                     headers: { 'X-Requested-With': 'fetch' }, cache: 'no-store' })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) { setStatus('⚠ ' + (data.error || 'Ошибка сохранения'), 'err'); return; }
+                updateHints(row, data.age_hint);
+                setStatus('Сохранено', 'ok');
+            })
+            .catch(() => setStatus('⚠ Нет связи с сервером', 'err'));
+    }
+
+    function schedule(row, delay) {
+        const id = row.dataset.id;
+        clearTimeout(timers.get(id));
+        timers.set(id, setTimeout(() => save(row), delay));
+    }
+
+    [...form.querySelectorAll('tr.cat-row')].forEach(row => {
         rowInputs(row).forEach(el => {
-            el.addEventListener('input', check);
-            el.addEventListener('change', check);
+            el.addEventListener('change', () => schedule(row, 0));
+            el.addEventListener('input', () => schedule(row, 500));
         });
     });
-
-    refreshAll();
-
-    // после автосохранения порядка обновляем снимок только по полям сортировки
-    window.__catsMarkSortSaved = function () {
-        rows.forEach(row => {
-            const snap = initialState.get(row);
-            if (!snap) return;
-            row.querySelectorAll('input[name$="_sort"]').forEach(el => {
-                snap[el.name + '#'] = val(el);
-            });
-        });
-        refreshAll();
-    };
-
-    const saveBtn = document.getElementById('save-all-btn');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', (e) => {
-            if (!form.checkValidity()) {
-                e.preventDefault();
-                form.reportValidity();
-            }
-        });
-    }
 
     // удаление — через общее окно подтверждения, со своим адресом формы
     form.querySelectorAll('.del-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             e.preventDefault();
-            const base = btn.dataset.confirm || 'Удалить?';
-            let msg = base;
-            if (unsavedCount > 0) {
-                msg = `У вас есть несохранённые изменения (${unsavedCount} строк). `
-                    + `Они будут потеряны.\n\n` + base;
-            }
-            const ok = await window.uiConfirm(msg, { okText: 'Удалить', danger: true });
+            const ok = await window.uiConfirm(btn.dataset.confirm || 'Удалить?',
+                                              { okText: 'Удалить', danger: true });
             if (!ok) return;
             if (typeof form.requestSubmit === 'function') form.requestSubmit(btn);
             else { form.action = btn.formAction || form.action; form.submit(); }
         });
     });
 
-    form.addEventListener('submit', () => { window.__formSubmitting = true; });
-
-    window.addEventListener('beforeunload', (e) => {
-        if (window.__formSubmitting) return;
-        if (unsavedCount > 0) { e.preventDefault(); e.returnValue = ''; }
-    });
+    window.__catsMarkSortSaved = function () {};
 })();
 </script>
 

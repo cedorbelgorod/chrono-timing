@@ -23,6 +23,14 @@
         <a class="btn btn-ghost" href="{{ url_for('participants_import', cid=competition.id) }}">📥 Импорт из Excel</a>
         <a class="btn btn-ghost" href="{{ url_for('participants_template', cid=competition.id) }}">⬇ Шаблон</a>
         {% if categories %}
+            <form method="post" style="margin:0"
+                  action="{{ url_for('participants_auto_categories', cid=competition.id) }}"
+                  data-confirm-submit="Пересчитать категории всех участников по полу и возрасту? Ручные назначения будут перезаписаны, если найдётся подходящая категория.">
+                <button type="submit" class="btn btn-ghost"
+                        title="Как при смене года старта: пересчитать категории по возрасту и полу">
+                    🔄 Авто-категории
+                </button>
+            </form>
             <button type="button" class="btn btn-primary" id="toggle-add">＋ Добавить участника</button>
         {% endif %}
     </div>
@@ -152,11 +160,12 @@
 {% if participants %}
 <form method="post"
       action="{{ url_for('participants_save_all', cid=competition.id) }}"
-      id="save-all-form" novalidate>
+      id="save-all-form" novalidate
+      data-autosave-url="{{ url_for('participant_row_save', cid=competition.id) }}">
     <input type="hidden" name="q" value="{{ q }}">
     <input type="hidden" name="back" value="{{ qs }}">
 
-    <div class="table-hint">Клик по заголовку — сортировка · чекбоксы слева — массовые операции · правки в строках сохраняются кнопкой внизу</div>
+    <div class="table-hint">Клик по заголовку — сортировка · чекбоксы слева — массовые операции · правки в строках сохраняются автоматически</div>
 
     <div class="tw">
     <table id="participants-table">
@@ -260,10 +269,8 @@
     </div>
 
     <div class="save-bar">
-        <button type="submit" class="btn-save-all" id="save-all-btn">
-            💾 Сохранить все изменения
-        </button>
-        <span id="changed-count" class="changed-count"></span>
+        <span class="autosave-note">💾 Изменения сохраняются автоматически</span>
+        <span id="save-status" class="cats-status"></span>
     </div>
 </form>
 
@@ -355,6 +362,11 @@
 .btn-save-all:hover { background: #15803d; }
 .btn-save-all:disabled { background: #9ca3af; cursor: not-allowed; }
 .changed-count { color: #b45309; font-weight: 600; font-size: 14px; }
+.autosave-note { font-size: 14px; font-weight: 600; color: #374151; }
+.cats-status { font-size: 13px; font-weight: 600; }
+.cats-status.ok { color: #15803d; }
+.cats-status.err { color: #b91c1c; }
+.part-row.row-error td { background: #fee2e2; }
 
 /* Фильтр по ФИО */
 .filter-count {
@@ -520,108 +532,94 @@ tr.row-selected td { background: #eff6ff; }
 (function () {
     const form = document.getElementById('save-all-form');
     if (!form) return;
+    const url = form.dataset.autosaveUrl;
+    const statusEl = document.getElementById('save-status');
+    const timers = new Map();
 
-    const rows = [...form.querySelectorAll('tr.part-row')];
-    const initialState = new WeakMap();
-    let unsavedCount = 0;
+    function pidOf(row) { return row.dataset.pid; }
 
-    function updateCount() {
-        const cnt = document.getElementById('changed-count');
-        const btn = document.getElementById('save-all-btn');
-        if (!cnt) return;
-        if (unsavedCount === 0) {
-            cnt.textContent = 'Все изменения сохранены';
-            cnt.style.color = '#6b7280';
-            if (btn) btn.disabled = true;
-        } else {
-            cnt.textContent = `Изменено строк: ${unsavedCount} (не сохранено)`;
-            cnt.style.color = '#b45309';
-            if (btn) btn.disabled = false;
+    function bodyFor(row) {
+        const body = new FormData();
+        const pid = pidOf(row);
+        body.append('pid', pid);
+        row.querySelectorAll('input, select').forEach(el => {
+            if (!el.name) return;
+            const m = el.name.match(/^(?:number|full_name|birth_year|category_id|gender|city|team)_(\d+)$/);
+            if (!m || m[1] !== pid) return;
+            const key = el.name.substring(0, el.name.length - pid.length - 1);
+            body.append(key, el.value);
+        });
+        return body;
+    }
+
+    function setStatus(text, kind) {
+        if (!statusEl) return;
+        statusEl.textContent = text;
+        statusEl.className = 'cats-status ' + (kind || '');
+    }
+
+    function setMismatch(row, on) {
+        row.classList.toggle('row-mismatch', !!on);
+        const cell = row.querySelector('td[data-label="Категория"]');
+        if (!cell) return;
+        let note = cell.querySelector('.mismatch-note');
+        if (on && !note) {
+            note = document.createElement('span');
+            note.className = 'mismatch-note';
+            note.textContent = '⚠ не по возрасту';
+            note.title = 'Участник не попадает в условия этой категории по возрасту или полу';
+            cell.appendChild(note);
+        } else if (!on && note) {
+            note.remove();
         }
     }
 
-    function checkRow(row) {
-        const snap = initialState.get(row);
-        let changed = false;
-        row.querySelectorAll('input, select').forEach(el => {
-            if (snap[el.name] !== el.value) changed = true;
-        });
-        row.classList.toggle('row-changed', changed);
-        return changed;
+    function save(row) {
+        setStatus('Сохраняем…', '');
+        fetch(url, { method: 'POST', body: bodyFor(row),
+                     headers: { 'X-Requested-With': 'fetch' }, cache: 'no-store' })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) {
+                    row.classList.add('row-error');
+                    setStatus('⚠ ' + (data.error || 'Ошибка сохранения'), 'err');
+                    return;
+                }
+                row.classList.remove('row-error');
+                setMismatch(row, data.mismatch);
+                setStatus('Сохранено', 'ok');
+            })
+            .catch(() => setStatus('⚠ Нет связи с сервером', 'err'));
     }
 
-    function refreshAll() {
-        unsavedCount = 0;
-        rows.forEach(r => { if (checkRow(r)) unsavedCount++; });
-        updateCount();
+    function schedule(row, delay) {
+        const id = pidOf(row);
+        clearTimeout(timers.get(id));
+        timers.set(id, setTimeout(() => save(row), delay));
     }
 
-    rows.forEach(row => {
-        const snap = {};
+    [...form.querySelectorAll('tr.part-row')].forEach(row => {
         row.querySelectorAll('input, select').forEach(el => {
-            snap[el.name] = el.value;
-        });
-        initialState.set(row, snap);
-
-        const check = () => {
-            const was = row.classList.contains('row-changed');
-            const now = checkRow(row);
-            if (was !== now) {
-                unsavedCount += (now ? 1 : -1);
-                if (unsavedCount < 0) unsavedCount = 0;
-                updateCount();
-            }
-        };
-
-        row.querySelectorAll('input, select').forEach(el => {
-            el.addEventListener('input', check);
-            el.addEventListener('change', check);
+            el.addEventListener('change', () => schedule(row, 0));
+            el.addEventListener('input', () => schedule(row, 500));
         });
     });
-
-    refreshAll();
-
-    const saveBtn = document.getElementById('save-all-btn');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', (e) => {
-            if (!form.checkValidity()) {
-                e.preventDefault();
-                form.reportValidity();
-            }
-        });
-    }
 
     form.querySelectorAll('.del-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             e.preventDefault();
-            const base = btn.dataset.confirm || 'Удалить?';
-            let msg = base;
-            if (unsavedCount > 0) {
-                msg = `У вас есть несохранённые изменения (${unsavedCount} строк). `
-                    + `Они будут потеряны.\n\n` + base;
-            }
-            const ok = await window.uiConfirm(msg, { okText: 'Удалить', danger: true });
+            const ok = await window.uiConfirm(btn.dataset.confirm || 'Удалить?',
+                                              { okText: 'Удалить', danger: true });
             if (!ok) return;
-            // повторяем отправку именно этой кнопкой, чтобы сработал её formaction
             if (typeof form.requestSubmit === 'function') form.requestSubmit(btn);
             else { form.action = btn.formAction || form.action; form.submit(); }
         });
     });
 
     form.addEventListener('submit', () => {
-        window.__formSubmitting = true;
-        // сохраняем текущий фильтр, чтобы он не сбросился после сохранения
         const qh = form.querySelector('input[name="q"]');
         const fi = document.getElementById('fio-filter');
         if (qh && fi) qh.value = fi.value.trim();
-    });
-
-    window.addEventListener('beforeunload', (e) => {
-        if (window.__formSubmitting) return;
-        if (unsavedCount > 0) {
-            e.preventDefault();
-            e.returnValue = '';
-        }
     });
 })();
 </script>

@@ -136,6 +136,105 @@ class StartDateRecalcTest(ChronoTestCase):
         self.assertEqual(person['category_id'], b['id'])
 
 
+class AutoCategoriesTest(ChronoTestCase):
+    def test_button_recalculates_wrong_category(self):
+        self.login_admin()
+        self.client.post('/competition/start-date', data={'start_date': '2026-05-01'})
+        cid = self.comp['id']
+        for name in ('15-16', '17-18'):
+            self.client.post('/competitions/%s/categories' % cid, data={
+                'name': name, 'laps_total': '1', 'age_range': name})
+        a = self.conn.execute("SELECT * FROM categories WHERE name = '15-16'").fetchone()
+        b = self.conn.execute("SELECT * FROM categories WHERE name = '17-18'").fetchone()
+        with self.conn:
+            pid = self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender, category_id, birth_year) "
+                "VALUES (?, 1, 'Райдер', 'M', ?, 2010)", (cid, b['id'])).lastrowid
+        resp = self.client.post('/competitions/%s/participants/auto-categories' % cid)
+        self.assertEqual(resp.status_code, 302)
+        person = self.conn.execute('SELECT category_id FROM participants WHERE id = ?', (pid,)).fetchone()
+        self.assertEqual(person['category_id'], a['id'])
+
+    def test_button_keeps_category_without_match(self):
+        self.login_admin()
+        self.client.post('/competition/start-date', data={'start_date': '2026-05-01'})
+        cid = self.comp['id']
+        self.client.post('/competitions/%s/categories' % cid, data={
+            'name': '15-16', 'laps_total': '1', 'age_range': '15-16'})
+        a = self.conn.execute("SELECT * FROM categories WHERE name = '15-16'").fetchone()
+        with self.conn:
+            pid = self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender, category_id, birth_year) "
+                "VALUES (?, 1, 'Старый', 'M', ?, 1990)", (cid, a['id'])).lastrowid
+        self.client.post('/competitions/%s/participants/auto-categories' % cid)
+        person = self.conn.execute('SELECT category_id FROM participants WHERE id = ?', (pid,)).fetchone()
+        self.assertEqual(person['category_id'], a['id'])
+
+
+class RowAutosaveTest(ChronoTestCase):
+    def test_category_row_save(self):
+        self.login_admin()
+        self.client.post('/competition/start-date', data={'start_date': '2026-05-01'})
+        cid = self.comp['id']
+        self.client.post('/competitions/%s/categories' % cid, data={
+            'name': 'Дети', 'laps_total': '1', 'age_range': '0-8'})
+        cat = self.conn.execute("SELECT * FROM categories WHERE name = 'Дети'").fetchone()
+        resp = self.client.post('/competitions/%s/categories/row' % cid, data={
+            'cat_id': str(cat['id']), 'name': 'Дети', 'laps': '2', 'sort': str(cat['sort_order']),
+            'age_range': '1-8', 'gender': 'M'})
+        data = resp.get_json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['age_hint'], '2018–2025 г.р.')
+        cat2 = self.conn.execute('SELECT * FROM categories WHERE id = ?', (cat['id'],)).fetchone()
+        self.assertEqual(cat2['age_range'], '1-8')
+        self.assertEqual((cat2['year_from'], cat2['year_to']), (2018, 2025))
+        self.assertEqual(cat2['laps_total'], 2)
+        self.assertEqual(cat2['gender'], 'M')
+
+    def test_category_row_save_validation(self):
+        self.login_admin()
+        cid = self.comp['id']
+        self.client.post('/competitions/%s/categories' % cid, data={
+            'name': 'Плохая', 'laps_total': '1', 'age_range': '9-10'})
+        cat = self.conn.execute("SELECT * FROM categories WHERE name = 'Плохая'").fetchone()
+        data = self.client.post('/competitions/%s/categories/row' % cid, data={
+            'cat_id': str(cat['id']), 'name': 'Плохая', 'laps': '1', 'age_range': '10-9'}).get_json()
+        self.assertFalse(data['ok'])
+        self.assertIn('не может быть больше', data['error'])
+
+    def test_participant_row_save_sets_mismatch(self):
+        self.login_admin()
+        self.client.post('/competition/start-date', data={'start_date': '2026-05-01'})
+        cid = self.comp['id']
+        self.client.post('/competitions/%s/categories' % cid, data={
+            'name': 'Юноши 9-10', 'laps_total': '1', 'age_range': '9-10'})
+        cat = self.conn.execute("SELECT * FROM categories WHERE name = 'Юноши 9-10'").fetchone()
+        with self.conn:
+            pid = self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender, category_id, birth_year) "
+                "VALUES (?, 1, 'Райдер', 'M', ?, 2016)", (cid, cat['id'])).lastrowid
+        data = self.client.post('/competitions/%s/participants/row' % cid, data={
+            'pid': str(pid), 'number': '1', 'full_name': 'Райдер',
+            'birth_year': '10', 'category_id': str(cat['id']), 'gender': 'M',
+            'city': '', 'team': ''}).get_json()
+        self.assertTrue(data['ok'])
+        self.assertTrue(data['mismatch'])
+        person = self.conn.execute('SELECT birth_year FROM participants WHERE id = ?', (pid,)).fetchone()
+        self.assertEqual(person['birth_year'], 2010)
+
+    def test_participant_row_save_validation(self):
+        self.login_admin()
+        cid = self.comp['id']
+        with self.conn:
+            pid = self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender) "
+                "VALUES (?, 1, 'Райдер', 'M')", (cid,)).lastrowid
+        data = self.client.post('/competitions/%s/participants/row' % cid, data={
+            'pid': str(pid), 'number': '1', 'full_name': '', 'gender': 'M'}).get_json()
+        self.assertFalse(data['ok'])
+        self.assertIn('ФИО', data['error'])
+
+
 class AgeMigrationTest(ChronoTestCase):
     def test_old_years_get_age_range(self):
         self.login_admin()
