@@ -273,6 +273,31 @@ class ParticipantYearDisplayTest(ChronoTestCase):
         self.assertNotIn('value="16"', html)
 
 
+class DeleteButtonSafetyTest(ChronoTestCase):
+    """Enter в поле не должен отправлять форму (и удалять строку)."""
+
+    def test_categories_delete_is_button_and_enter_guarded(self):
+        self.login_admin()
+        cid = self.comp['id']
+        self.client.post('/competitions/%s/categories' % cid,
+                         data={'name': 'А', 'laps_total': '1'})
+        html = self.client.get('/competitions/%s/categories' % cid).get_data(as_text=True)
+        self.assertIn('data-del-url="/categories/', html)
+        self.assertIn("e.key === 'Enter'", html)
+        self.assertNotIn('formnovalidate', html)
+
+    def test_participants_delete_is_button_and_enter_guarded(self):
+        self.login_admin()
+        cid = self.comp['id']
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender) "
+                "VALUES (?, 1, 'Райдер', 'M')", (cid,))
+        html = self.client.get('/competitions/%s' % cid).get_data(as_text=True)
+        self.assertIn('data-del-url="/participants/', html)
+        self.assertIn("e.key === 'Enter'", html)
+
+
 class AgeMigrationTest(ChronoTestCase):
     def test_old_years_get_age_range(self):
         self.login_admin()

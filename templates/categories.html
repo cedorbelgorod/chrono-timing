@@ -116,9 +116,8 @@
                     <button type="button" class="icon-btn gear {{ 'active' if has_cond }}"
                             data-modal="cat-modal-{{ cat.id }}"
                             title="Условия категории: пол, годы рождения, трасса">⚙</button>
-                    <button type="submit" class="icon-btn trash del-btn" formnovalidate
-                            formaction="{{ url_for('category_delete', catid=cat.id) }}"
-                            formmethod="post"
+                    <button type="button" class="icon-btn trash del-btn"
+                            data-del-url="{{ url_for('category_delete', catid=cat.id) }}"
                             data-confirm="Удалить категорию «{{ cat.name }}»?"
                             title="Удалить категорию">🗑</button>
                 </td>
@@ -467,16 +466,31 @@ body.modal-open { overflow: hidden; }
         });
     });
 
-    // удаление — через общее окно подтверждения, со своим адресом формы
+    // удаление — через общее окно подтверждения (без отправки формы, чтобы Enter не удалял)
     form.querySelectorAll('.del-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.preventDefault();
+        btn.addEventListener('click', async () => {
             const ok = await window.uiConfirm(btn.dataset.confirm || 'Удалить?',
                                               { okText: 'Удалить', danger: true });
             if (!ok) return;
-            if (typeof form.requestSubmit === 'function') form.requestSubmit(btn);
-            else { form.action = btn.formAction || form.action; form.submit(); }
+            try {
+                const resp = await fetch(btn.dataset.delUrl, {
+                    method: 'POST', cache: 'no-store',
+                    headers: { 'X-Requested-With': 'fetch' }
+                });
+                if (resp.ok || resp.redirected) { location.reload(); return; }
+                setStatus('⚠ Не удалось удалить', 'err');
+            } catch (err) {
+                setStatus('⚠ Нет связи с сервером', 'err');
+            }
         });
+    });
+
+    // Enter в поле — сохранить и выйти из поля, а не отправлять форму
+    form.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') {
+            e.preventDefault();
+            e.target.blur();
+        }
     });
 
     window.__catsMarkSortSaved = function () {};
