@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Метки на номерах — {{ competition.name }}{% endblock %}
 {% block content %}
-<h2>📡 Метки на номерах <small>— {{ competition.name }}</small></h2>
+<h2>Метки на номерах <small>— {{ competition.name }}</small></h2>
 
 <p class="muted" style="margin-top:-6px">
     Метка клеится на стартовый номер. Участник получает метки вместе с номером — отдельно
@@ -42,7 +42,7 @@
                        autocomplete="off">
             </label>
             <div class="form-actions">
-                <button type="submit" class="btn-primary">Сохранить</button>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
             </div>
             <div class="hint">
                 Сохранение заменяет прежние метки этого номера. Пустые поля — метки будут сняты.
@@ -134,8 +134,6 @@
 .tags-form-card input.mono, .tags-row input.mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
 .tags-form-card input:focus, .tags-row input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
 .form-actions { margin-top: 4px; }
-.btn-primary { padding: 10px 18px; font-size: 14px; font-weight: 700; font-family: inherit; border: none; border-radius: 8px; background: #16a34a; color: #fff; cursor: pointer; }
-.btn-primary:hover { background: #15803d; }
 
 .tags-rows { display: flex; flex-direction: column; gap: 8px; }
 .tags-row {

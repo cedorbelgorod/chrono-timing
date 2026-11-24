@@ -12,7 +12,7 @@ from chrono.utils import _fmt_eta_short, _fmt_start_at, format_secs, format_secs
 
 SORT_MODES = ('number', 'category', 'name')
 
-SORT_LABELS = {'number': 'По номеру', 'category': 'По группе', 'name': 'По ФИО'}
+SORT_LABELS = {'number': 'По номеру', 'category': 'По категории', 'name': 'По ФИО'}
 
 
 def _parse_sort_spec(raw):

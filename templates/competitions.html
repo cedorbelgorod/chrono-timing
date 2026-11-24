@@ -69,7 +69,7 @@
                 <span class="ready-mark">{{ '✓' if stats.categories else '•' }}</span>
                 <div class="ready-main">
                     <a class="link" href="{{ url_for('categories_list', cid=competition.id) }}">Категории</a>
-                    <div class="ready-hint">группы и количество кругов</div>
+                    <div class="ready-hint">категории и количество кругов</div>
                 </div>
                 <span class="ready-count">{{ stats.categories }}</span>
                 <span class="ready-state">{{ 'готово' if stats.categories else 'завести' }}</span>

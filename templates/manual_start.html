@@ -256,7 +256,7 @@
 
         if (el.orderMode) {
             el.orderMode.textContent = (state.heat && state.heat.start_order === 'category')
-                ? ' · по группе, затем номер' : ' · по номеру';
+                ? ' · по категории, затем номер' : ' · по номеру';
         }
 
         el.last.innerHTML = (state.last || []).map(function (r) {

@@ -6,11 +6,44 @@
     <title>{% block title %}Хронометраж{% endblock %}</title>
     {% block head %}{% endblock %}
     <style>
+        /* ======================= ТОКЕНЫ ДИЗАЙН-СИСТЕМЫ ======================= */
+        :root {
+            --bg: #f4f6f8;
+            --surface: #fff;
+            --surface-2: #f9fafb;
+            --border: #e5e7eb;
+            --border-strong: #d1d5db;
+            --text: #222;
+            --text-2: #374151;
+            --text-3: #6b7280;
+            --text-4: #9ca3af;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --primary-soft: #eff6ff;
+            --ok: #16a34a;
+            --ok-hover: #15803d;
+            --ok-soft: #dcfce7;
+            --danger: #dc2626;
+            --danger-hover: #b91c1c;
+            --danger-soft: #fee2e2;
+            --warn: #d97706;
+            --warn-soft: #fef3c7;
+            --radius-sm: 6px;
+            --radius: 8px;
+            --radius-lg: 12px;
+            --radius-full: 999px;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, .06);
+            --shadow-md: 0 2px 10px rgba(0, 0, 0, .07);
+            --shadow-lg: 0 12px 34px rgba(0, 0, 0, .2);
+            --z-nav: 300;
+            --z-modal: 1000;
+        }
+
         /* ======================= БАЗОВЫЕ СТИЛИ ======================= */
         * { box-sizing: border-box; }
         body {
             font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-            margin: 0; background: #f4f6f8; color: #222;
+            margin: 0; background: var(--bg); color: var(--text);
         }
         header {
             background: #1f2937; color: #fff;
@@ -129,58 +162,134 @@
 
         /* ======================= ТАБЛИЦЫ ======================= */
         table {
-            width: 100%; border-collapse: collapse; background: #fff;
-            border-radius: 8px; overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0,0,0,.06);
+            width: 100%; border-collapse: collapse; background: var(--surface);
+            border-radius: var(--radius); overflow: hidden;
+            box-shadow: var(--shadow-sm);
         }
-        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
         th {
-            background: #f9fafb; font-size: 13px; color: #6b7280;
+            background: var(--surface-2); font-size: 13px; color: var(--text-3);
             font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
         }
         tr:last-child td { border-bottom: none; }
 
         /* ======================= ЭЛЕМЕНТЫ ФОРМ ======================= */
         input[type=text], input[type=number], input[type=datetime-local], input[type=password], select {
-            padding: 6px 8px; border: 1px solid #d1d5db;
-            border-radius: 6px; font-size: 14px;
-            background: #fff; color: #222;
+            padding: 6px 8px; border: 1px solid var(--border-strong);
+            border-radius: var(--radius-sm); font-size: 14px;
+            background: var(--surface); color: var(--text);
         }
         input[type=text]:focus, input[type=number]:focus,
         input[type=datetime-local]:focus, input[type=password]:focus, select:focus {
-            outline: none; border-color: #2563eb;
+            outline: none; border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(37,99,235,.15);
         }
         button {
-            padding: 6px 12px; border: none; border-radius: 6px;
-            background: #2563eb; color: #fff; cursor: pointer; font-size: 14px;
+            padding: 6px 12px; border: none; border-radius: var(--radius-sm);
+            background: var(--primary); color: #fff; cursor: pointer; font-size: 14px;
             transition: background .15s;
         }
-        button:hover { background: #1d4ed8; }
+        button:hover { background: var(--primary-hover); }
         button:disabled { opacity: .5; cursor: not-allowed; }
-        button.danger { background: #dc2626; }
-        button.danger:hover { background: #b91c1c; }
+        button.danger { background: var(--danger); }
+        button.danger:hover { background: var(--danger-hover); }
 
         /* ======================= ВСПОМОГАТЕЛЬНЫЕ КЛАССЫ ======================= */
         .inline { display: inline-flex; gap: 8px; align-items: center; }
         .toolbar { margin-bottom: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
+        /* ======================= ОБЩИЕ КОМПОНЕНТЫ ======================= */
+        /* заголовок страницы и описание */
+        .page-head {
+            display: flex; align-items: flex-start; justify-content: space-between;
+            gap: 16px; flex-wrap: wrap; margin: 0 0 16px;
+        }
+        .page-head-text { min-width: 0; }
+        .page-head h2 { margin: 0; font-size: 22px; font-weight: 600; color: #111827; }
+        .page-head h2 small { color: var(--text-3); font-size: 15px; font-weight: 400; }
+        .page-intro {
+            color: var(--text-3); font-size: 13px; line-height: 1.5;
+            margin: 6px 0 0; max-width: 780px;
+        }
+        .page-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        h2 { margin: 0 0 4px; font-size: 22px; font-weight: 600; color: #111827; }
+        h2 small { color: var(--text-3); font-size: 15px; font-weight: 400; }
+        .hint { color: var(--text-3); font-size: 13px; margin: 10px 0 0; }
+
+        /* кнопки */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 8px 14px; font-size: 14px; font-weight: 600; font-family: inherit;
+            border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+            background: var(--surface); color: var(--text-2); text-decoration: none;
+            cursor: pointer; white-space: nowrap; transition: background .12s, border-color .12s;
+        }
+        .btn:hover { background: var(--surface-2); }
+        .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-secondary { background: var(--primary-soft); border-color: #bfdbfe; color: #1e40af; }
+        .btn-secondary:hover { background: #dbeafe; }
+        .btn-ghost { background: transparent; border-color: var(--border-strong); color: var(--text-2); }
+        .btn-ghost:hover { background: var(--surface-2); }
+        .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+        .btn-danger:hover { background: var(--danger-hover); }
+        .btn-sm { padding: 5px 9px; font-size: 12px; }
+        .btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+        /* бейджи статусов */
+        .badge {
+            display: inline-block; padding: 2px 10px; border-radius: var(--radius-full);
+            font-size: 12px; font-weight: 600;
+        }
+        .badge-ok { background: var(--ok-soft); color: #166534; }
+        .badge-danger { background: var(--danger-soft); color: #991b1b; }
+        .badge-warn { background: var(--warn-soft); color: #92400e; }
+        .badge-neutral { background: #f3f4f6; color: var(--text-2); }
+
+        /* индикатор автосохранения (единый вид для всех страниц) */
+        .save-status { font-size: 12px; font-weight: 600; color: var(--text-3); }
+        .save-status.ok, .cats-status.ok, .heat-save-status.ok, .so-status.ok { color: var(--ok-hover); }
+        .save-status.err, .cats-status.err, .heat-save-status.err, .so-status.err { color: var(--danger-hover); }
+
+        /* общий каркас диалога */
+        .dialog-overlay {
+            position: fixed; inset: 0; z-index: var(--z-modal);
+            background: rgba(17, 24, 39, .45);
+            display: flex; align-items: center; justify-content: center; padding: 16px;
+        }
+        .dialog-overlay[hidden] { display: none; }
+        .dialog {
+            background: var(--surface); border-radius: var(--radius-lg);
+            width: 100%; max-width: 480px; max-height: 90vh; overflow: auto;
+            box-shadow: var(--shadow-lg);
+        }
+        .dialog-head {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 10px; padding: 14px 16px; border-bottom: 1px solid #eef0f3;
+        }
+        .dialog-head b, .dialog-head h3 { margin: 0; font-size: 16px; color: #111827; }
+        .dialog-body { padding: 14px 16px; color: var(--text-2); font-size: 14px; line-height: 1.5; }
+        .dialog-foot {
+            display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+            padding: 12px 16px; border-top: 1px solid #eef0f3; background: #fafbfc;
+        }
+
         /* ======================= УВЕДОМЛЕНИЯ ======================= */
         .flash {
-            padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 14px;
+            padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 14px;
         }
-        .flash.success { background: #dcfce7; color: #166534; }
-        .flash.error   { background: #fee2e2; color: #991b1b; }
+        .flash.success { background: var(--ok-soft); color: #166534; }
+        .flash.error   { background: var(--danger-soft); color: #991b1b; }
 
         /* ======================= ПУСТЫЕ СОСТОЯНИЯ ======================= */
         .empty {
-            padding: 20px; text-align: center; color: #6b7280;
-            background: #fff; border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,.06);
+            padding: 20px; text-align: center; color: var(--text-3);
+            background: var(--surface); border-radius: var(--radius);
+            box-shadow: var(--shadow-sm);
         }
 
         /* ======================= ССЫЛКИ ======================= */
-        a.link { color: #2563eb; text-decoration: none; }
+        a.link { color: var(--primary); text-decoration: none; }
         a.link:hover { text-decoration: underline; }
 
         details summary { list-style: none; }

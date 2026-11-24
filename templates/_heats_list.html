@@ -170,7 +170,7 @@
                           style="margin-left:auto"
                           data-confirm-submit="Удалить «{{ h.name or ('старт №' ~ h.heat_number) }}»?{% if h.status != 'pending' %} Все результаты этого старта будут потеряны безвозвратно.{% endif %}"
                           data-confirm-ok="Удалить" data-confirm-danger>
-                        <button type="submit" class="danger" style="padding:6px 12px;font-size:13px">
+                        <button type="submit" class="btn btn-sm btn-danger">
                             🗑 Удалить
                         </button>
                     </form>
@@ -209,7 +209,7 @@
                                       style="display:inline"
                                       data-confirm-submit="Удалить пустой старт?"
                                       data-confirm-ok="Удалить" data-confirm-danger>
-                                    <button type="submit" class="danger" style="padding:2px 8px;font-size:12px">удалить</button>
+                                    <button type="submit" class="btn btn-sm btn-danger">удалить</button>
                                 </form>
                             </div>
                         {% endif %}
@@ -294,22 +294,20 @@
                         </table>
                         {% if h.is_itt %}</details>{% endif %}
                         <div class="heat-actions">
-                            <a href="{{ url_for('manual_page', cid=competition.id) }}" class="btn-manual-link"
-                               style="text-decoration:none;font-size:13px;padding:6px 14px">
+                            <a href="{{ url_for('manual_page', cid=competition.id) }}" class="btn btn-sm btn-ghost">
                                 📱 Хронометраж
                             </a>
-                            <a href="{{ url_for('auto_page', cid=competition.id, hid=h.id) }}" class="btn-manual-link"
-                               style="text-decoration:none;font-size:13px;padding:6px 14px;background:#0e7490">
+                            <a href="{{ url_for('auto_page', cid=competition.id, hid=h.id) }}" class="btn btn-sm btn-secondary">
                                 📡 Авто
                             </a>
                             <form method="post" action="{{ url_for('heat_force_finish_and_next', hid=h.id) }}"
                                   data-finish-check="{{ h.running_list|tojson|forceescape }}"
                                   style="display:inline">
-                                <button type="submit" style="background:#f59e0b">▶ Завершить и создать следующий</button>
+                                <button type="submit" class="btn btn-primary">▶ Завершить и создать следующий</button>
                             </form>
                             <form method="post" action="{{ url_for('heat_force_finish', hid=h.id) }}"
                                   data-finish-check="{{ h.running_list|tojson|forceescape }}">
-                                <button type="submit" style="background:#6b7280">Завершить принудительно</button>
+                                <button type="submit" class="btn btn-ghost">Завершить принудительно</button>
                             </form>
                         </div>
 
@@ -330,11 +328,10 @@
                                 {{ render_races_table(h.races) }}
                             {% endif %}
                             <div class="heat-actions">
-                                <button type="submit" style="background:#b45309">
+                                <button type="submit" class="btn btn-secondary">
                                     💾 Сохранить DNF
                                 </button>
-                                <a href="{{ url_for('auto_page', cid=competition.id, hid=h.id) }}" class="btn-manual-link"
-                                   style="text-decoration:none;font-size:13px;padding:6px 14px;background:#0e7490">
+                                <a href="{{ url_for('auto_page', cid=competition.id, hid=h.id) }}" class="btn btn-sm btn-secondary">
                                     📡 Авто
                                 </a>
                                 <small style="color:#6b7280;align-self:center">

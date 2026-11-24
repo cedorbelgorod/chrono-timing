@@ -52,7 +52,7 @@
                       style="display:inline-flex;gap:4px;align-items:center">
                     <input type="password" name="password" placeholder="Новый пароль" required minlength="4"
                            style="width:150px;padding:4px 8px;font-size:13px" autocomplete="new-password">
-                    <button type="submit" style="padding:4px 10px;font-size:13px">🔑 Сменить</button>
+                    <button type="submit" class="btn btn-sm btn-secondary">🔑 Сменить</button>
                 </form>
                 {% if u.username != session.get('user') %}
                     <form method="post" action="{{ url_for('user_change_role', uid=u.id) }}"
@@ -64,13 +64,13 @@
                             <option value="timekeeper" {% if u.role == 'timekeeper' %}selected{% endif %}>Хронометрист</option>
                             <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Администратор</option>
                         </select>
-                        <button type="submit" style="padding:4px 10px;font-size:13px;background:#6b7280">OK</button>
+                        <button type="submit" class="btn btn-sm btn-ghost">OK</button>
                     </form>
                     <form method="post" action="{{ url_for('user_delete', uid=u.id) }}"
                           style="display:inline"
                           data-confirm-submit="Удалить пользователя «{{ u.username }}»?&#10;&#10;Ранее зафиксированные им круги сохранят его логин как снимок."
                           data-confirm-ok="Удалить" data-confirm-danger>
-                        <button type="submit" class="danger" style="padding:4px 10px;font-size:13px">Удалить</button>
+                        <button type="submit" class="btn btn-sm btn-danger">Удалить</button>
                     </form>
                 {% endif %}
             </td>

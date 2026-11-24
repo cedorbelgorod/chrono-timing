@@ -908,7 +908,7 @@ def participants_bulk(cid):
             with conn:
                 conn.execute(f'UPDATE participants SET category_id = ? WHERE competition_id = ? AND id IN ({ph})',
                              [cat_id, cid] + pids)
-            flash(f'Группа назначена участникам: {len(pids)}', 'success')
+            flash(f'Категория назначена участникам: {len(pids)}', 'success')
         elif action == 'city':
             value = (request.form.get('bulk_city') or '').strip() or None
             with conn:

@@ -451,7 +451,7 @@ def startlist_xlsx(hid):
         meta.append(f'участников {data["total"]}')
         ws.append([' · '.join(meta)])
         ws.append([])
-        headers = ['№ п/п', 'Номер', 'ФИО', 'Год', 'Группа', 'Круги', 'Город', 'Команда', 'Время старта', 'Прим.']
+        headers = ['№ п/п', 'Номер', 'ФИО', 'Год', 'Категория', 'Круги', 'Город', 'Команда', 'Время старта', 'Прим.']
         ws.append(headers)
         head_row = ws.max_row
         for c in range(1, len(headers) + 1):

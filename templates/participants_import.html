@@ -87,7 +87,7 @@
                     </td>
                     <td>
                         <select name="row_{{ loop.index0 }}_category_id" style="width:100%">
-                            <option value="">— без группы —</option>
+                            <option value="">— без категории —</option>
                             {% for cat in categories %}
                                 <option value="{{ cat.id }}"
                                         {% if cat.id == row.category_id %}selected{% endif %}>
@@ -124,7 +124,7 @@
                             <span class="badge-dup">метка занята — строка будет пропущена</span>
                         {% elif not row.category_id %}
                             {% if not row.category_name %}
-                                <span style="color:#6b7280">без группы</span>
+                                <span style="color:#6b7280">без категории</span>
                             {% elif missing_categories %}
                                 <span style="color:#b45309">Будет создана (1 круг)</span>
                             {% else %}
@@ -142,7 +142,7 @@
         </table>
 
         <div class="toolbar" style="margin-top:16px">
-            <button type="submit" style="background:#16a34a;padding:10px 24px;font-weight:600">
+            <button type="submit" class="btn btn-primary">
                 Импортировать
             </button>
             <a href="{{ url_for('participants_import', cid=competition.id) }}" class="link">

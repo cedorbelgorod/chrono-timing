@@ -16,7 +16,7 @@
         <h2>Участники <small>— {{ competition.name }}</small></h2>
         <div class="page-summary">
             {% if shown != total %}показано <b>{{ shown }}</b> из <b>{{ total }}</b>{% else %}всего участников: <b>{{ total }}</b>{% endif %}
-            {% if has_none_category %}<span class="summary-warn">· есть участники без группы</span>{% endif %}
+            {% if has_none_category %}<span class="summary-warn">· есть участники без категории</span>{% endif %}
         </div>
     </div>
     <div class="page-actions">
@@ -64,9 +64,9 @@
                 <small>четыре цифры: 2016</small>
             </label>
             <label>
-                <span>Группа</span>
+                <span>Категория</span>
                 <select name="category_id">
-                    <option value="">— без группы —</option>
+                    <option value="">— без категории —</option>
                     {% for cat in categories %}
                         <option value="{{ cat.id }}">{{ cat.name }} ({{ cat.laps_total }} кр.)</option>
                     {% endfor %}
@@ -82,7 +82,7 @@
             </label>
         </div>
         <div class="add-actions">
-            <button type="submit" class="btn-primary">Добавить</button>
+            <button type="submit" class="btn btn-primary">Добавить</button>
             <button type="button" class="btn-ghost" id="cancel-add">Отмена</button>
         </div>
         <div class="hint" style="margin:8px 0 0">
@@ -104,10 +104,10 @@
 
     <form method="get" class="filters-bar" id="filters-form">
         <label class="f-item">
-            <span>Группа</span>
+            <span>Категория</span>
             <select name="cat">
                 <option value="">все</option>
-                <option value="0" {% if filters.cat == '0' %}selected{% endif %}>Без группы</option>
+                <option value="0" {% if filters.cat == '0' %}selected{% endif %}>Без категории</option>
                 {% for cat in categories %}
                     <option value="{{ cat.id }}" {% if filters.cat == cat.id|string %}selected{% endif %}>{{ cat.name }}</option>
                 {% endfor %}
@@ -135,7 +135,7 @@
         </label>
         <label class="f-item f-year"><span>Год</span><input type="text" name="year1" value="{{ filters.year1 }}" placeholder="ГГ" inputmode="numeric"></label>
         <label class="f-item f-year" id="year2-wrap"><span>и</span><input type="text" name="year2" value="{{ filters.year2 }}" placeholder="ГГ" inputmode="numeric"></label>
-        <button type="submit" class="btn-primary">Применить</button>
+        <button type="submit" class="btn btn-primary">Применить</button>
         <a class="link reset-link" href="{{ url_for('participants_list', cid=competition.id) }}">Сбросить фильтры</a>
     </form>
 </section>
@@ -145,10 +145,10 @@
     <div class="bulk-bar" id="bulk-bar" hidden>
         <span class="bulk-count">Выбрано: <b id="sel-count">0</b></span>
         <select name="bulk_category">
-            <option value="">— без группы —</option>
+            <option value="">— без категории —</option>
             {% for cat in categories %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}
         </select>
-        <button type="submit" name="bulk" value="category">Назначить группу</button>
+        <button type="submit" name="bulk" value="category">Назначить категорию</button>
         <input type="text" name="bulk_city" placeholder="Город">
         <button type="submit" name="bulk" value="city">Задать город</button>
         <input type="text" name="bulk_team" placeholder="Команда">
@@ -209,7 +209,7 @@
                 <td data-label="Категория">
                     <select name="category_id_{{ p.id }}"
                             class="row-input cat-select" style="width:100%">
-                        <option value="">— без группы —</option>
+                        <option value="">— без категории —</option>
                         {% for cat in categories %}
                             <option value="{{ cat.id }}"
                                     {% if cat.id == p.category_id %}selected{% endif %}>
@@ -316,8 +316,6 @@
 }
 .btn-ghost { background: #fff; color: #374151; border-color: #d1d5db; }
 .btn-ghost:hover { background: #f3f4f6; }
-.btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-.btn-primary:hover { background: #1d4ed8; }
 
 /* панель добавления */
 .add-panel {

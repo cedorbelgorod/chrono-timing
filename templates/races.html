@@ -88,7 +88,7 @@
                     <span>Порядок старта</span>
                     <select name="start_order" class="ch-num" style="width:auto">
                         <option value="number" {{ 'selected' if heat_defaults.start_order != 'category' and heat_defaults.start_order != 'name' }}>По номеру</option>
-                        <option value="category" {{ 'selected' if heat_defaults.start_order == 'category' }}>По группе, затем номер</option>
+                        <option value="category" {{ 'selected' if heat_defaults.start_order == 'category' }}>По категории, затем номер</option>
                         <option value="name" {{ 'selected' if heat_defaults.start_order == 'name' }}>По ФИО</option>
                     </select>
                     <small>по возрастанию</small>

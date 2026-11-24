@@ -83,7 +83,7 @@ def _render_startlist_pdf(comp, data):
     widths_mm = [11, 13, 36, 11, 26, 12, 18, 20, 19, 20]
     scale = 186.0 / sum(widths_mm)
     col_w = [w * scale * mm for w in widths_mm]
-    head = ['№<br/>п/п', 'Номер', 'ФИО', 'Год', 'Группа', 'Круги',
+    head = ['№<br/>п/п', 'Номер', 'ФИО', 'Год', 'Категория', 'Круги',
             'Город', 'Команда', 'Время<br/>старта', 'Прим.']
     head_style = st(8, bold, TA_CENTER, 9.5)
     cell = st(8, None, TA_LEFT, 9.5)
