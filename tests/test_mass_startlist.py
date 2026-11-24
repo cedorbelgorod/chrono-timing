@@ -57,20 +57,33 @@ class MassStartlistTest(ChronoTestCase):
         self.assertIn('10:00:00', page)
         self.assertIn('групповой старт', page)
 
-    def test_sort_direction_toggles(self):
+    def test_sort_spec_priority_and_direction(self):
         hid, pids = self._mass_heat()
-        resp = self.client.post(f'/heats/{hid}/reset_order', data={'mode': 'number'})
-        self.assertEqual(resp.get_json()['dir'], 'desc')
+
+        def sort_spec(spec):
+            return self.client.post(f'/heats/{hid}/sort', data={'spec': spec})
+
+        # главный ключ — номер, по убыванию
+        self.assertTrue(sort_spec('number:desc,category:asc,name:asc').get_json()['ok'])
         self.assertEqual(self._numbers(hid), [5, 3, 1])
-        resp = self.client.post(f'/heats/{hid}/reset_order', data={'mode': 'number'})
-        self.assertEqual(resp.get_json()['dir'], 'asc')
+
+        # главный ключ — группа, затем ФИО
+        sort_spec('category:asc,name:asc,number:asc')
+        self.assertEqual(self._numbers(hid), [3, 5, 1])  # А: Сидоров, Яковлев; Б: Абрамов
+
+        # группа по убыванию, внутри — ФИО по убыванию
+        sort_spec('category:desc,name:desc,number:asc')
+        self.assertEqual(self._numbers(hid), [1, 5, 3])  # Б: Абрамов; А: Яковлев, Сидоров
+
+        # главный ключ — ФИО
+        sort_spec('name:asc,number:asc,category:asc')
         self.assertEqual(self._numbers(hid), [1, 3, 5])
 
-    def test_sort_direction_by_name(self):
+    def test_sort_spec_toggling_direction_by_name(self):
         hid, pids = self._mass_heat()
-        self.client.post(f'/heats/{hid}/reset_order', data={'mode': 'name'})
-        self.assertEqual(self._numbers(hid), [1, 3, 5])  # Абрамов, Сидоров, Яковлев
-        self.client.post(f'/heats/{hid}/reset_order', data={'mode': 'name'})
+        self.client.post(f'/heats/{hid}/sort', data={'spec': 'name:asc,number:asc,category:asc'})
+        self.assertEqual(self._numbers(hid), [1, 3, 5])
+        self.client.post(f'/heats/{hid}/sort', data={'spec': 'name:desc,number:asc,category:asc'})
         self.assertEqual(self._numbers(hid), [5, 3, 1])
 
     def test_create_heat_with_name(self):

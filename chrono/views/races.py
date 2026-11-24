@@ -16,8 +16,9 @@ from chrono.settings import (
     _comp_format, _heat_format, _itt_interval, get_cached_setting, set_cached_setting,
 )
 from chrono.timing import (
-    _build_races_heats, _find_heat_by_token, _force_finish_heat, _heat_startlist_data,
-    _race_lap_counts, _start_heat,
+    _build_races_heats, _find_heat_by_token, _force_finish_heat, _format_sort_spec,
+    _heat_sort_spec, _heat_startlist_data, _parse_sort_spec, _race_lap_counts, _start_heat,
+    SORT_MODES,
 )
 from chrono.utils import (_fmt_start_at, _new_startlist_token, format_secs)
 from chrono.catalog import (_category_participants, _parse_duration, _tags_by_number)
@@ -150,7 +151,7 @@ def heat_create():
         new_num = conn.execute('SELECT COALESCE(MAX(heat_number), 0) FROM heats WHERE competition_id = ?', (cid,)).fetchone()[0] + 1
         active_count, dns_count, selected_set = 0, 0, set(participant_ids)
         with conn:
-            hid = conn.execute('INSERT INTO heats (competition_id, heat_number, name, status, finish_on_leader, min_lap_time, auto_enabled, format, start_order, start_dir) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (cid, new_num, heat_name, 'pending', finish_on_leader, min_lap_time, auto_enabled, heat_fmt, start_order, 'asc')).lastrowid
+            hid = conn.execute('INSERT INTO heats (competition_id, heat_number, name, status, finish_on_leader, min_lap_time, auto_enabled, format, start_order, start_dir) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (cid, new_num, heat_name, 'pending', finish_on_leader, min_lap_time, auto_enabled, heat_fmt, _format_sort_spec([(start_order, 'asc')] + [(m, 'asc') for m in SORT_MODES if m != start_order]), 'asc')).lastrowid
             for cat_id in category_ids: conn.execute('INSERT INTO heat_categories (heat_id, category_id) VALUES (?, ?)', (hid, cat_id))
             group_ids = list(category_ids) + ([0] if has_no_category else [])
             for cat_id in group_ids:
@@ -311,9 +312,9 @@ def heat_order_save(hid):
 
 
 def heat_order_reset(hid):
-    """Сортировка участников: по номеру, по группе или по ФИО.
+    """Сортировка по ключу: выбранный ключ становится главным (по возрастанию).
 
-    Повторное нажатие той же кнопки меняет направление сортировки.
+    Остальные ключи остаются в прежнем порядке как уточняющие.
     """
     conn = get_db()
     try:
@@ -321,21 +322,35 @@ def heat_order_reset(hid):
         if not h:
             return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
         mode = (request.form.get('mode') or 'number').strip()
-        if mode not in ('number', 'category', 'name'):
+        if mode not in SORT_MODES:
             mode = 'number'
-        current = (h['start_order'] if 'start_order' in h.keys() else 'number') or 'number'
-        current_dir = ((h['start_dir'] if 'start_dir' in h.keys() else 'asc') or 'asc')
-        manual_present = conn.execute(
-            'SELECT 1 FROM heat_participants WHERE heat_id = ? AND sort_order IS NOT NULL LIMIT 1',
-            (hid,)).fetchone() is not None
-        # повторное нажатие той же кнопки (когда список уже отсортирован) меняет направление
-        toggle = (not manual_present) and current == mode
-        direction = 'desc' if (toggle and current_dir == 'asc') else 'asc'
+        spec = _heat_sort_spec(h)
+        new_spec = [(mode, 'asc')] + [(m, d) for m, d in spec if m != mode]
         with conn:
             conn.execute('UPDATE heat_participants SET sort_order = NULL WHERE heat_id = ?', (hid,))
             conn.execute('UPDATE heats SET start_order = ?, start_dir = ? WHERE id = ?',
-                         (mode, direction, hid))
-        return jsonify({'ok': True, 'mode': mode, 'dir': direction})
+                         (_format_sort_spec(new_spec), 'asc', hid))
+        return jsonify({'ok': True, 'mode': mode, 'spec': _format_sort_spec(new_spec)})
+    finally:
+        conn.close()
+
+
+def heat_sort_save(hid):
+    """Ключи сортировки старта: порядок чипов и направления (автосохранение)."""
+    conn = get_db()
+    try:
+        h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
+        if not h:
+            return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
+        raw = request.form.get('spec')
+        if raw is None:
+            raw = (request.get_json(silent=True) or {}).get('spec')
+        spec = _parse_sort_spec(raw)
+        with conn:
+            conn.execute('UPDATE heat_participants SET sort_order = NULL WHERE heat_id = ?', (hid,))
+            conn.execute('UPDATE heats SET start_order = ? WHERE id = ?',
+                         (_format_sort_spec(spec), hid))
+        return jsonify({'ok': True, 'spec': _format_sort_spec(spec)})
     finally:
         conn.close()
 
@@ -593,6 +608,7 @@ RULES = [
     ('/heats/<int:hid>/edit_start', 'heat_edit_start', heat_edit_start, ['POST']),
     ('/heats/<int:hid>/order', 'heat_order_save', heat_order_save, ['POST']),
     ('/heats/<int:hid>/reset_order', 'heat_order_reset', heat_order_reset, ['POST']),
+    ('/heats/<int:hid>/sort', 'heat_sort_save', heat_sort_save, ['POST']),
     ('/heats/<int:hid>/start_at', 'heat_start_at_save', heat_start_at_save, ['POST']),
     ('/heats/<int:hid>/startlist', 'startlist_page', startlist_page, ['GET']),
     ('/heats/<int:hid>/startlist.pdf', 'startlist_pdf', startlist_pdf, ['GET']),

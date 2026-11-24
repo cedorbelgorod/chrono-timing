@@ -42,7 +42,7 @@ class OrderTest(ChronoTestCase):
         self.client.post(f'/heats/{hid}/order', data={'order': f'{p2},{p1}'})
         resp = self.client.post(f'/heats/{hid}/reset_order', data={'mode': 'number'})
         self.assertTrue(resp.get_json()['ok'])
-        self.assertEqual(self.heat(hid)['start_order'], 'number')
+        self.assertTrue(self.heat(hid)['start_order'].startswith('number:asc'))
         rows = self.conn.execute(
             'SELECT sort_order FROM heat_participants WHERE heat_id = ?', (hid,)).fetchall()
         self.assertTrue(all(r['sort_order'] is None for r in rows))

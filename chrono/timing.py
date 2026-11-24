@@ -10,6 +10,50 @@ from chrono.settings import _comp_format, _heat_format, _itt_interval, get_cache
 from chrono.utils import _fmt_eta_short, _fmt_start_at, format_secs, format_secs_short
 
 
+SORT_MODES = ('number', 'category', 'name')
+
+SORT_LABELS = {'number': 'По номеру', 'category': 'По группе', 'name': 'По ФИО'}
+
+
+def _parse_sort_spec(raw):
+    """«category:asc,name:desc» → [(mode, dir)]; недостающие ключи дописываются в конец."""
+    out = []
+    for token in str(raw or '').split(','):
+        token = token.strip().lower()
+        if not token:
+            continue
+        mode, _, direction = token.partition(':')
+        if mode not in SORT_MODES or any(m == mode for m, _ in out):
+            continue
+        out.append((mode, direction if direction in ('asc', 'desc') else 'asc'))
+    for mode in SORT_MODES:
+        if not any(m == mode for m, _ in out):
+            out.append((mode, 'asc'))
+    return out
+
+
+def _format_sort_spec(spec):
+    """[(mode, dir)] → «category:asc,name:asc,number:asc»."""
+    return ','.join(f'{mode}:{direction}' for mode, direction in spec)
+
+
+def _heat_sort_spec(heat):
+    """Спецификация сортировки старта (с поддержкой старых значений без «:»)."""
+    try:
+        raw = heat['start_order'] or ''
+    except (KeyError, IndexError, TypeError):
+        raw = ''
+    try:
+        legacy_dir = heat['start_dir'] or 'asc'
+    except (KeyError, IndexError, TypeError):
+        legacy_dir = 'asc'
+    if raw and ':' not in raw and raw in SORT_MODES:
+        spec = [(raw, legacy_dir if legacy_dir in ('asc', 'desc') else 'asc')]
+        spec += [(m, 'asc') for m in SORT_MODES if m != raw]
+        return spec
+    return _parse_sort_spec(raw)
+
+
 def _heat_participant_counts(conn, cid):
     """{heat_id: {'total': n, 'active': m}} — для списков стартов."""
     out = {}
@@ -368,27 +412,21 @@ def _running_itt_heat(conn, cid):
 def _manual_start_queue(conn, hid):
     """Участники старта, которые ещё не стартовали.
 
-    Порядок: ручная расстановка (sort_order), затем — по настройке старта:
-    «number» — по номеру, «category» — по ID группы, «name» — по ФИО.
-    Направление auto-сортировки задаётся start_dir (asc/desc).
+    Порядок: ручная расстановка (sort_order), затем — по спецификации сортировки
+    старта (см. _heat_sort_spec): ключи слева направо, каждый со своим направлением.
     """
-    heat = conn.execute('SELECT start_order, start_dir FROM heats WHERE id = ?', (hid,)).fetchone()
-    mode, direction = 'number', 'asc'
-    if heat is not None:
-        try:
-            mode = heat['start_order'] or 'number'
-            direction = heat['start_dir'] or 'asc'
-        except (KeyError, IndexError, TypeError):
-            mode, direction = 'number', 'asc'
-    desc = ' DESC' if direction == 'desc' else ''
-    if mode == 'category':
-        # порядок групп — по колонке «сортировка» категории (по умолчанию равна её ID)
-        order_by = (f'COALESCE(hp.sort_order, 1000000), (c.id IS NULL), '
-                    f'COALESCE(c.sort_order, c.id){desc}, p.number{desc}')
-    elif mode == 'name':
-        order_by = f'COALESCE(hp.sort_order, 1000000), p.full_name COLLATE NOCASE{desc}'
-    else:
-        order_by = f'COALESCE(hp.sort_order, 1000000), p.number{desc}'
+    heat = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
+    spec = _heat_sort_spec(heat) if heat is not None else _parse_sort_spec('')
+    parts = ['COALESCE(hp.sort_order, 1000000)']
+    for mode, direction in spec:
+        desc = ' DESC' if direction == 'desc' else ''
+        if mode == 'category':
+            parts += ['(c.id IS NULL)', f'COALESCE(c.sort_order, c.id){desc}', f'p.number{desc}']
+        elif mode == 'name':
+            parts.append(f'p.full_name COLLATE NOCASE{desc}')
+        else:
+            parts.append(f'p.number{desc}')
+    order_by = ', '.join(parts)
     return conn.execute(
         'SELECT hp.participant_id, hp.sort_order, p.number, p.full_name, '
         '       p.category_id, c.name AS category_name, COALESCE(c.laps_total, 1) AS laps_total '
@@ -493,13 +531,9 @@ def _heat_start_rows(conn, heat):
     """Участники старта в порядке старта: позиция, план/факт время, статус."""
     hid = heat['id']
     try:
-        mode = heat['start_order'] or 'number'
-    except (KeyError, IndexError):
-        mode = 'number'
-    try:
-        direction = heat['start_dir'] or 'asc'
-    except (KeyError, IndexError):
-        direction = 'asc'
+        spec = _heat_sort_spec(heat)
+    except Exception:
+        spec = _parse_sort_spec('')
     rows = conn.execute(
         'SELECT hp.participant_id, hp.status AS hp_status, hp.sort_order, '
         '       p.number, p.full_name, p.birth_year, p.city, p.team, '
@@ -512,13 +546,12 @@ def _heat_start_rows(conn, heat):
         'LEFT JOIN races r ON r.heat_id = hp.heat_id AND r.participant_id = hp.participant_id '
         'WHERE hp.heat_id = ?', (hid,)).fetchall()
 
-    def auto_key(r):
+    def auto_key(mode):
         if mode == 'category':
-            cat = r['cat_sort'] if r['cat_sort'] is not None else 1000000
-            return (cat, r['number'] or 0)
+            return lambda r: (r['cat_sort'] if r['cat_sort'] is not None else 1000000)
         if mode == 'name':
-            return ((r['full_name'] or '').lower(), r['number'] or 0)
-        return (r['number'] or 0,)
+            return lambda r: (r['full_name'] or '').lower()
+        return lambda r: (r['number'] or 0)
 
     started, manual, auto, dns = [], [], [], []
     for r in rows:
@@ -533,7 +566,8 @@ def _heat_start_rows(conn, heat):
             auto.append(r)
     started.sort(key=lambda r: r['start_time'] or '')
     manual.sort(key=lambda r: int(r['sort_order'] or 0))
-    auto.sort(key=auto_key, reverse=(direction == 'desc'))
+    for mode, direction in reversed(spec):
+        auto.sort(key=auto_key(mode), reverse=(direction == 'desc'))
     dns.sort(key=lambda r: r['number'] or 0)
     rows = started + manual + auto + dns
     interval = _itt_interval()
@@ -768,6 +802,10 @@ def _build_races_heats(conn, cid):
         hd['is_itt'] = _heat_format(h) == 'itt'
         hd['start_order'] = (hd.get('start_order') or 'number')
         hd['start_dir'] = (hd.get('start_dir') or 'asc')
+        hd['sort_spec'] = [
+            {'mode': mode, 'dir': direction, 'label': SORT_LABELS[mode],
+             'arrow': '↑' if direction == 'asc' else '↓'}
+            for mode, direction in _heat_sort_spec(h)]
         hd['start_at_local'] = (hd.get('start_at') or '')[:16]
         hd['start_at_display'] = _fmt_start_at(hd.get('start_at'))
         hd['interval'] = _itt_interval()

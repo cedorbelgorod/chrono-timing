@@ -361,16 +361,12 @@
 .heat-title { font-size: 18px; font-weight: 700; }
 .heat-title-input {
     font-size: 19px; font-weight: 700; font-family: inherit; color: #111827;
-    padding: 4px 8px; min-width: 200px; max-width: 420px;
-    border: 1px solid transparent; border-radius: 7px; background: transparent;
-    transition: border-color .12s, background .12s;
+    padding: 4px 0; min-width: 200px; max-width: 520px;
+    border: none; border-bottom: 1px solid transparent; background: transparent;
+    outline: none; transition: border-color .12s;
 }
-.heat-title-input:hover { border-color: #e5e7eb; background: #fff; }
-.heat-title-input:focus {
-    outline: none; border-color: #93c5fd; background: #fff;
-    box-shadow: 0 0 0 3px rgba(59,130,246,.15);
-}
-.heat-num { color: #9ca3af; font-size: 13px; font-weight: 600; }
+.heat-title-input:hover { border-bottom-color: #e5e7eb; }
+.heat-title-input:focus { border-bottom-color: #93c5fd; }
 .heat-save-status { font-size: 12px; font-weight: 600; }
 .heat-save-status.ok { color: #15803d; }
 .heat-save-status.err { color: #b91c1c; }
@@ -393,15 +389,25 @@
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     padding: 6px 2px 10px; font-size: 13px;
 }
+.so-sort { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.so-key {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 10px; font-size: 12px; font-weight: 600; font-family: inherit;
+    cursor: grab; user-select: none;
+    border: 1px solid #d1d5db; background: #fff; color: #374151; border-radius: 7px;
+    transition: background .12s, border-color .12s, color .12s;
+}
+.so-key:hover { background: #f3f4f6; }
+.so-key:active { cursor: grabbing; }
+.so-key-main { border-color: #93c5fd; background: #eff6ff; color: #1e40af; }
+.so-key.dragging { opacity: .45; }
+.so-key[disabled] { cursor: default; opacity: .75; }
+.so-dir { font-size: 13px; line-height: 1; color: #2563eb; }
+.so-manual { font-size: 11px; color: #b45309; font-weight: 600; }
 .so-badge {
     padding: 3px 9px; border-radius: 999px; background: #eef2ff; color: #3730a3;
     font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
 }
-.so-reset {
-    padding: 5px 10px; font-size: 12px; font-family: inherit; cursor: pointer;
-    border: 1px solid #d1d5db; background: #fff; color: #374151; border-radius: 7px;
-}
-.so-reset:hover { background: #f3f4f6; }
 .so-start-at { display: inline-flex; align-items: center; gap: 6px; color: #6b7280; }
 .so-start-at input {
     padding: 5px 8px; font-size: 13px; font-family: inherit;
@@ -962,10 +968,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function refresh() {
+    async function refresh(force) {
         if (busy || document.hidden) return;
-        if (window.__soBusy && Date.now() < window.__soBusy) return;
-        if (document.activeElement && document.activeElement.closest('#heats-list')) return;
+        if (!force && window.__soBusy && Date.now() < window.__soBusy) return;
+        if (!force && document.activeElement && document.activeElement.closest('#heats-list')) return;
         busy = true;
         try {
             const resp = await fetch('/races/data' + (cid ? '?cid=' + encodeURIComponent(cid) : ''), { cache: 'no-store' });
@@ -985,6 +991,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    window.__refreshHeats = function () { refresh(true); };
     setInterval(refresh, 4000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 })();
@@ -1113,15 +1120,64 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         body.addEventListener('drop', function (e) { e.preventDefault(); });
 
-        box.querySelectorAll('.so-reset').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                var fd = new FormData();
-                fd.append('mode', btn.dataset.mode);
-                fetch('/heats/' + box.dataset.hid + '/reset_order', {
-                    method: 'POST', body: fd, cache: 'no-store'
-                }).then(function () { location.reload(); });
+        function currentSpec() {
+            return [...box.querySelectorAll('.so-key')].map(function (b) {
+                return b.dataset.mode + ':' + (b.dataset.dir || 'asc');
+            }).join(',');
+        }
+
+        function saveSort() {
+            var fd = new FormData();
+            fd.append('spec', currentSpec());
+            setStatus('Сохраняем…', '');
+            fetch('/heats/' + box.dataset.hid + '/sort', {
+                method: 'POST', body: fd, cache: 'no-store',
+                headers: { 'X-Requested-With': 'fetch' }
+            }).then(function (r) { return r.json(); })
+              .then(function (data) {
+                  if (!data.ok) throw new Error(data.message || 'Ошибка');
+                  setStatus('Сортировка сохранена', 'ok');
+                  if (typeof window.__refreshHeats === 'function') window.__refreshHeats();
+              })
+              .catch(function (err) {
+                  setStatus('Не удалось сохранить: ' + (err.message || 'нет связи'), 'err');
+              });
+        }
+
+        var sortBox = box.querySelector('.so-sort');
+        if (sortBox) {
+            var dragKey = null;
+            sortBox.querySelectorAll('.so-key').forEach(function (btn) {
+                btn.addEventListener('dragstart', function (e) {
+                    if (btn.disabled) return;
+                    dragKey = btn;
+                    btn.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                    try { e.dataTransfer.setData('text/plain', btn.dataset.mode || ''); } catch (err) {}
+                });
+                btn.addEventListener('dragend', function () {
+                    if (!dragKey) return;
+                    dragKey.classList.remove('dragging');
+                    dragKey = null;
+                    saveSort();
+                });
+                btn.addEventListener('dragover', function (e) {
+                    if (!dragKey || dragKey === btn || btn.disabled) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    var rect = btn.getBoundingClientRect();
+                    var after = (e.clientX - rect.left) > rect.width / 2;
+                    sortBox.insertBefore(dragKey, after ? btn.nextSibling : btn);
+                });
+                btn.addEventListener('click', function () {
+                    if (btn.disabled) return;
+                    btn.dataset.dir = (btn.dataset.dir === 'asc' ? 'desc' : 'asc');
+                    var arrow = btn.querySelector('.so-dir');
+                    if (arrow) arrow.textContent = btn.dataset.dir === 'asc' ? '↑' : '↓';
+                    saveSort();
+                });
             });
-        });
+        }
 
         var saveAt = box.querySelector('.so-start-at-save');
         if (saveAt) {

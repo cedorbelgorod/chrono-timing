@@ -2,23 +2,18 @@
 <div class="so" data-hid="{{ h.id }}" data-interval="{{ h.interval }}" data-start-at="{{ h.start_at_local or '' }}"
      data-format="{{ 'itt' if h.is_itt else 'mass' }}">
     <div class="so-head">
-        {% set dir = '↓' if h.start_dir == 'desc' else '↑' %}
-        <span class="so-badge">
-            {% if h.is_itt %}
-                {% if h.order_manual %}порядок ручной{% elif h.start_order == 'category' %}по группе {{ dir }}{% elif h.start_order == 'name' %}по ФИО {{ dir }}{% else %}по номеру {{ dir }}{% endif %}
-            {% else %}
-                вызов {% if h.order_manual %}вручную{% elif h.start_order == 'category' %}по группе {{ dir }}{% elif h.start_order == 'name' %}по ФИО {{ dir }}{% else %}по номеру {{ dir }}{% endif %}
-            {% endif %}
+        {% set editable = h.status == 'pending' %}
+        <span class="so-sort" data-hid="{{ h.id }}">
+            {% for it in h.sort_spec %}
+                <button type="button" class="so-key {{ 'so-key-main' if loop.first }}"
+                        data-mode="{{ it.mode }}" data-dir="{{ it.dir }}"
+                        {% if editable %}draggable="true"{% else %}disabled{% endif %}
+                        title="{% if editable %}Перетащите, чтобы изменить приоритет; нажмите, чтобы сменить направление{% else %}Порядок зафиксирован: старт запущен{% endif %}">
+                    {{ it.label }} <span class="so-dir">{{ it.arrow }}</span>
+                </button>
+            {% endfor %}
+            {% if h.order_manual %}<span class="so-manual">порядок ручной</span>{% endif %}
         </span>
-        {% if h.status == 'pending' %}
-            {% set hint = 'Повторное нажатие меняет направление' %}
-            <button type="button" class="so-reset" data-mode="number" data-hid="{{ h.id }}"
-                    title="{{ hint }}">↺ По номеру</button>
-            <button type="button" class="so-reset" data-mode="category" data-hid="{{ h.id }}"
-                    title="{{ hint }}">↺ По группе</button>
-            <button type="button" class="so-reset" data-mode="name" data-hid="{{ h.id }}"
-                    title="{{ hint }}">↺ По ФИО</button>
-        {% endif %}
         <label class="so-start-at">
             <span>Старт в</span>
             <input type="datetime-local" class="so-start-at-input" value="{{ h.start_at_local or '' }}">
@@ -134,7 +129,6 @@
                            value="{{ h.name or '' }}"
                            placeholder="Старт №{{ h.heat_number }}"
                            title="Название старта — сохраняется автоматически">
-                    <span class="heat-num">№{{ h.heat_number }}</span>
                     <span class="heat-save-status"></span>
                     <span class="badge badge-{{ h.status }}">
                         {% if h.status == 'pending' %}готов
