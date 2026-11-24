@@ -162,6 +162,21 @@ class UiNumbersLiveSearchTest(ChronoTestCase):
         self.assertNotIn('Петров Пётр', filtered)
 
 
+class UiRacesParticipantMetaTest(ChronoTestCase):
+    def test_gender_is_russian_letter(self):
+        self.login_admin()
+        cid = self.comp['id']
+        cat = self.add_category('Девушки', 2, 1)
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender, birth_year, category_id) "
+                "VALUES (?, 13, 'Спиридонова Варвара', 'F', 2020, ?)", (cid, cat))
+        html = self.client.get('/races').get_data(as_text=True)
+        # в HTML JSON экранирует кириллицу: \u0416 — это «Ж»
+        self.assertIn('"gender": "\\u0416"', html)
+        self.assertNotIn('"gender": "F"', html)
+
+
 class UiTerminologyTest(ChronoTestCase):
     def test_participants_use_category_wording(self):
         self.login_admin()

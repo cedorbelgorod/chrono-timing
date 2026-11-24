@@ -70,7 +70,8 @@ def races_page():
                     'id': cd['id'], 'name': cd['name'], 'laps': cd['laps_total'],
                     'heat_number': cd['heat_number'],
                     'people': [{'id': p['id'], 'number': p['number'], 'name': p['full_name'],
-                                'year': p['birth_year'], 'gender': p['gender'],
+                                'year': p['birth_year'],
+                                'gender': {'M': 'М', 'F': 'Ж'}.get((p['gender'] or '').upper(), ''),
                                 'rfid': bool(tags_by_number.get(p['number']))} for p in cd['participants']],
                 } for cd in categories_data],
             }
