@@ -110,6 +110,7 @@ def heat_create():
     start_order = (request.form.get('start_order') or 'number').strip()
     if start_order not in ('number', 'category', 'name'):
         start_order = 'number'
+    heat_name = (request.form.get('name') or '').strip()[:120] or None
     start_now = request.form.get('start_now') == '1'
     if not cid or not participant_ids: flash('Выберите хотя бы одного участника', 'error'); return redirect(url_for('races_page', cid=cid))
     conn = get_db()
@@ -142,7 +143,7 @@ def heat_create():
         new_num = conn.execute('SELECT COALESCE(MAX(heat_number), 0) FROM heats WHERE competition_id = ?', (cid,)).fetchone()[0] + 1
         active_count, dns_count, selected_set = 0, 0, set(participant_ids)
         with conn:
-            hid = conn.execute('INSERT INTO heats (competition_id, heat_number, status, finish_on_leader, min_lap_time, auto_enabled, format, start_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (cid, new_num, 'pending', finish_on_leader, min_lap_time, auto_enabled, heat_fmt, start_order)).lastrowid
+            hid = conn.execute('INSERT INTO heats (competition_id, heat_number, name, status, finish_on_leader, min_lap_time, auto_enabled, format, start_order, start_dir) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (cid, new_num, heat_name, 'pending', finish_on_leader, min_lap_time, auto_enabled, heat_fmt, start_order, 'asc')).lastrowid
             for cat_id in category_ids: conn.execute('INSERT INTO heat_categories (heat_id, category_id) VALUES (?, ?)', (hid, cat_id))
             group_ids = list(category_ids) + ([0] if has_no_category else [])
             for cat_id in group_ids:
@@ -298,7 +299,10 @@ def heat_order_save(hid):
 
 
 def heat_order_reset(hid):
-    """Сброс ручного порядка: по номеру, по группе или по ФИО."""
+    """Сортировка участников: по номеру, по группе или по ФИО.
+
+    Повторное нажатие той же кнопки меняет направление сортировки.
+    """
     conn = get_db()
     try:
         h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
@@ -307,10 +311,19 @@ def heat_order_reset(hid):
         mode = (request.form.get('mode') or 'number').strip()
         if mode not in ('number', 'category', 'name'):
             mode = 'number'
+        current = (h['start_order'] if 'start_order' in h.keys() else 'number') or 'number'
+        current_dir = ((h['start_dir'] if 'start_dir' in h.keys() else 'asc') or 'asc')
+        manual_present = conn.execute(
+            'SELECT 1 FROM heat_participants WHERE heat_id = ? AND sort_order IS NOT NULL LIMIT 1',
+            (hid,)).fetchone() is not None
+        # повторное нажатие той же кнопки (когда список уже отсортирован) меняет направление
+        toggle = (not manual_present) and current == mode
+        direction = 'desc' if (toggle and current_dir == 'asc') else 'asc'
         with conn:
             conn.execute('UPDATE heat_participants SET sort_order = NULL WHERE heat_id = ?', (hid,))
-            conn.execute('UPDATE heats SET start_order = ? WHERE id = ?', (mode, hid))
-        return jsonify({'ok': True, 'mode': mode})
+            conn.execute('UPDATE heats SET start_order = ?, start_dir = ? WHERE id = ?',
+                         (mode, direction, hid))
+        return jsonify({'ok': True, 'mode': mode, 'dir': direction})
     finally:
         conn.close()
 

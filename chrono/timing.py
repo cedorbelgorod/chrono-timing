@@ -369,23 +369,26 @@ def _manual_start_queue(conn, hid):
     """Участники старта, которые ещё не стартовали.
 
     Порядок: ручная расстановка (sort_order), затем — по настройке старта:
-    «number» — по номеру, «category» — по ID группы, затем по номеру.
+    «number» — по номеру, «category» — по ID группы, «name» — по ФИО.
+    Направление auto-сортировки задаётся start_dir (asc/desc).
     """
-    heat = conn.execute('SELECT start_order FROM heats WHERE id = ?', (hid,)).fetchone()
-    mode = 'number'
+    heat = conn.execute('SELECT start_order, start_dir FROM heats WHERE id = ?', (hid,)).fetchone()
+    mode, direction = 'number', 'asc'
     if heat is not None:
         try:
             mode = heat['start_order'] or 'number'
+            direction = heat['start_dir'] or 'asc'
         except (KeyError, IndexError, TypeError):
-            mode = heat[0] or 'number'
+            mode, direction = 'number', 'asc'
+    desc = ' DESC' if direction == 'desc' else ''
     if mode == 'category':
         # порядок групп — по колонке «сортировка» категории (по умолчанию равна её ID)
-        order_by = ('COALESCE(hp.sort_order, 1000000), (c.id IS NULL), '
-                    'COALESCE(c.sort_order, c.id), p.number')
+        order_by = (f'COALESCE(hp.sort_order, 1000000), (c.id IS NULL), '
+                    f'COALESCE(c.sort_order, c.id){desc}, p.number{desc}')
     elif mode == 'name':
-        order_by = 'COALESCE(hp.sort_order, 1000000), p.full_name COLLATE NOCASE'
+        order_by = f'COALESCE(hp.sort_order, 1000000), p.full_name COLLATE NOCASE{desc}'
     else:
-        order_by = 'COALESCE(hp.sort_order, 1000000), p.number'
+        order_by = f'COALESCE(hp.sort_order, 1000000), p.number{desc}'
     return conn.execute(
         'SELECT hp.participant_id, hp.sort_order, p.number, p.full_name, '
         '       p.category_id, c.name AS category_name, COALESCE(c.laps_total, 1) AS laps_total '
@@ -493,6 +496,10 @@ def _heat_start_rows(conn, heat):
         mode = heat['start_order'] or 'number'
     except (KeyError, IndexError):
         mode = 'number'
+    try:
+        direction = heat['start_dir'] or 'asc'
+    except (KeyError, IndexError):
+        direction = 'asc'
     rows = conn.execute(
         'SELECT hp.participant_id, hp.status AS hp_status, hp.sort_order, '
         '       p.number, p.full_name, p.birth_year, p.city, p.team, '
@@ -505,23 +512,30 @@ def _heat_start_rows(conn, heat):
         'LEFT JOIN races r ON r.heat_id = hp.heat_id AND r.participant_id = hp.participant_id '
         'WHERE hp.heat_id = ?', (hid,)).fetchall()
 
-    def rank(r):
-        is_dns = (r['hp_status'] == 'dns') or ((r['race_status'] or '') == 'dns')
-        if is_dns:
-            return (2, 0, '', r['number'] or 0)
-        if r['race_id'] is not None:
-            return (0, 0, '', r['start_time'] or '')
-        manual = r['sort_order']
-        if manual is not None:
-            return (1, 0, f'{int(manual):06d}', r['number'] or 0)
+    def auto_key(r):
         if mode == 'category':
             cat = r['cat_sort'] if r['cat_sort'] is not None else 1000000
-            return (1, 1, f'{cat:06d}', r['number'] or 0)
+            return (cat, r['number'] or 0)
         if mode == 'name':
-            return (1, 1, (r['full_name'] or '').lower(), r['number'] or 0)
-        return (1, 1, '', r['number'] or 0)
+            return ((r['full_name'] or '').lower(), r['number'] or 0)
+        return (r['number'] or 0,)
 
-    rows = sorted(rows, key=rank)
+    started, manual, auto, dns = [], [], [], []
+    for r in rows:
+        is_dns = (r['hp_status'] == 'dns') or ((r['race_status'] or '') == 'dns')
+        if is_dns:
+            dns.append(r)
+        elif r['race_id'] is not None:
+            started.append(r)
+        elif r['sort_order'] is not None:
+            manual.append(r)
+        else:
+            auto.append(r)
+    started.sort(key=lambda r: r['start_time'] or '')
+    manual.sort(key=lambda r: int(r['sort_order'] or 0))
+    auto.sort(key=auto_key, reverse=(direction == 'desc'))
+    dns.sort(key=lambda r: r['number'] or 0)
+    rows = started + manual + auto + dns
     interval = _itt_interval()
     is_itt = _heat_format(heat) == 'itt'
     start_at = None
@@ -753,6 +767,7 @@ def _build_races_heats(conn, cid):
 
         hd['is_itt'] = _heat_format(h) == 'itt'
         hd['start_order'] = (hd.get('start_order') or 'number')
+        hd['start_dir'] = (hd.get('start_dir') or 'asc')
         hd['start_at_local'] = (hd.get('start_at') or '')[:16]
         hd['start_at_display'] = _fmt_start_at(hd.get('start_at'))
         hd['interval'] = _itt_interval()

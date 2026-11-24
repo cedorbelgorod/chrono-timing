@@ -59,6 +59,12 @@
             </div>
 
             <div class="ch-params" id="ch-params" hidden>
+                <label class="ch-switch">
+                    <span>Название старта</span>
+                    <input type="text" class="ch-num" name="name" maxlength="120"
+                           placeholder="необязательно" autocomplete="off"
+                           title="Например: «Заезд 1 · юноши» — попадёт в заголовок протокола">
+                </label>
                 {% if race_format != 'itt' %}
                 <label class="ch-switch">
                     <input type="checkbox" name="finish_on_leader" value="1" {% if heat_defaults.finish_on_leader %}checked{% endif %}>
@@ -77,10 +83,11 @@
                 <label class="ch-switch">
                     <span>Порядок старта</span>
                     <select name="start_order" class="ch-num" style="width:auto">
-                        <option value="number" {{ 'selected' if heat_defaults.start_order != 'category' }}>По номеру</option>
+                        <option value="number" {{ 'selected' if heat_defaults.start_order != 'category' and heat_defaults.start_order != 'name' }}>По номеру</option>
                         <option value="category" {{ 'selected' if heat_defaults.start_order == 'category' }}>По группе, затем номер</option>
+                        <option value="name" {{ 'selected' if heat_defaults.start_order == 'name' }}>По ФИО</option>
                     </select>
-                    <small>для разделки</small>
+                    <small>по возрастанию</small>
                 </label>
             </div>
 

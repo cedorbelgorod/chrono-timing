@@ -163,6 +163,9 @@ def _migrate_schema(conn):
     cat_cols = {r['name'] for r in conn.execute('PRAGMA table_info(categories)').fetchall()}
     if 'age_range' not in cat_cols:
         conn.execute('ALTER TABLE categories ADD COLUMN age_range TEXT')
+    heat_cols = {r['name'] for r in conn.execute('PRAGMA table_info(heats)').fetchall()}
+    if 'start_dir' not in heat_cols:
+        conn.execute("ALTER TABLE heats ADD COLUMN start_dir TEXT NOT NULL DEFAULT 'asc'")
 
 
 def _migrate_age_ranges(conn):

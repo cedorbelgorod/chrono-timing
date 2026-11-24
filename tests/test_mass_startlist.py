@@ -56,3 +56,35 @@ class MassStartlistTest(ChronoTestCase):
         self.assertIn('порядок вызова', page)
         self.assertIn('10:00:00', page)
         self.assertIn('групповой старт', page)
+
+    def test_sort_direction_toggles(self):
+        hid, pids = self._mass_heat()
+        resp = self.client.post(f'/heats/{hid}/reset_order', data={'mode': 'number'})
+        self.assertEqual(resp.get_json()['dir'], 'desc')
+        self.assertEqual(self._numbers(hid), [5, 3, 1])
+        resp = self.client.post(f'/heats/{hid}/reset_order', data={'mode': 'number'})
+        self.assertEqual(resp.get_json()['dir'], 'asc')
+        self.assertEqual(self._numbers(hid), [1, 3, 5])
+
+    def test_sort_direction_by_name(self):
+        hid, pids = self._mass_heat()
+        self.client.post(f'/heats/{hid}/reset_order', data={'mode': 'name'})
+        self.assertEqual(self._numbers(hid), [1, 3, 5])  # Абрамов, Сидоров, Яковлев
+        self.client.post(f'/heats/{hid}/reset_order', data={'mode': 'name'})
+        self.assertEqual(self._numbers(hid), [5, 3, 1])
+
+    def test_create_heat_with_name(self):
+        self.login_admin()
+        self.set_format('mass')
+        cat = self.add_category('Массовая', 1, 1)
+        p1 = self.add_participant(1, 'Один', cat)
+        resp = self.client.post('/races/create_heat', data={
+            'competition_id': str(self.comp['id']),
+            'participant_ids': [str(p1)],
+            'name': 'Заезд 1 · юноши',
+            'start_order': 'number',
+            'min_lap_time': '5',
+        })
+        self.assertEqual(resp.status_code, 302)
+        h = self.conn.execute('SELECT * FROM heats ORDER BY id DESC LIMIT 1').fetchone()
+        self.assertEqual(h['name'], 'Заезд 1 · юноши')
