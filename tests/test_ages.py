@@ -94,7 +94,24 @@ class ParticipantMismatchTest(ChronoTestCase):
         self.add_with_year(1, 'Вне возраста', 2010)
         html = self.client.get('/competitions/%s' % self.comp['id']).get_data(as_text=True)
         self.assertIn('class="part-row row-mismatch"', html)
-        self.assertIn('не по возрасту', html)
+        self.assertIn('>⚠ не по возрасту</span>', html)
+
+    def test_gender_mismatch_label(self):
+        # мальчик подходящего возраста в категории только для девочек
+        with self.conn:
+            self.conn.execute("UPDATE categories SET gender = 'F' WHERE id = ?", (self.cat['id'],))
+        self.add_with_year(3, 'Мальчик Не Туда', 2016)
+        html = self.client.get('/competitions/%s' % self.comp['id']).get_data(as_text=True)
+        self.assertIn('row-mismatch', html)
+        self.assertIn('>⚠ не тот пол</span>', html)
+        self.assertNotIn('>⚠ не по возрасту</span>', html)
+
+    def test_both_mismatch_label(self):
+        with self.conn:
+            self.conn.execute("UPDATE categories SET gender = 'F' WHERE id = ?", (self.cat['id'],))
+        self.add_with_year(4, 'Мальчик Не Туда', 2010)
+        html = self.client.get('/competitions/%s' % self.comp['id']).get_data(as_text=True)
+        self.assertIn('>⚠ не по возрасту и полу</span>', html)
 
     def test_matching_participant_not_highlighted(self):
         self.add_with_year(2, 'По возрасту', 2016)
@@ -245,6 +262,7 @@ class RowAutosaveTest(ChronoTestCase):
             'city': '', 'team': ''}).get_json()
         self.assertTrue(data['ok'])
         self.assertTrue(data['mismatch'])
+        self.assertEqual(data['mismatch_reason'], 'age')
         person = self.conn.execute('SELECT birth_year FROM participants WHERE id = ?', (pid,)).fetchone()
         self.assertEqual(person['birth_year'], 2010)
 

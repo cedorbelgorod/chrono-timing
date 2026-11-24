@@ -94,7 +94,7 @@ class CategoriesMergeTest(ChronoTestCase):
         self._merge(a, [a, b])
         html = self.client.get(f'/competitions/{self.comp["id"]}').get_data(as_text=True)
         self.assertIn('row-mismatch', html)
-        self.assertIn('не по возрасту', html)
+        self.assertIn('не тот пол', html)
 
     def test_forbidden_when_used_in_finished_heat(self):
         self.login_admin()

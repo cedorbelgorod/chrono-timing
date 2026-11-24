@@ -244,9 +244,40 @@ def _category_age_hint(cat, start_year):
     age_min, age_max, _err = _parse_age_range(cat['age_range'])
     return _age_range_hint(start_year, age_min, age_max)
 
+MISMATCH_LABELS = {
+    'gender': '⚠ не тот пол',
+    'age': '⚠ не по возрасту',
+    'both': '⚠ не по возрасту и полу',
+}
+
+def _category_mismatch_reason(cat, gender, birth_year):
+    """Почему участник не подходит: 'gender', 'age', 'both' или None."""
+    allowed = _cat_genders(cat['gender'])
+    if gender:
+        gender_bad = gender.upper() not in allowed
+    else:
+        gender_bad = allowed != {'M', 'F'}
+    yf, yt = cat['year_from'], cat['year_to']
+    age_bad = False
+    if yf is not None or yt is not None:
+        if birth_year is None:
+            age_bad = True
+        else:
+            if yf is not None and birth_year < yf:
+                age_bad = True
+            if yt is not None and birth_year > yt:
+                age_bad = True
+    if gender_bad and age_bad:
+        return 'both'
+    if gender_bad:
+        return 'gender'
+    if age_bad:
+        return 'age'
+    return None
+
 def _category_mismatch(cat, gender, birth_year):
     """Участник не попадает в условия категории (пол + возраст)."""
-    return not _category_matches(cat, gender, birth_year)
+    return _category_mismatch_reason(cat, gender, birth_year) is not None
 
 def _category_overlaps(categories):
     """{id: [названия пересекающихся]} — только для подсветки, ввод не запрещаем."""

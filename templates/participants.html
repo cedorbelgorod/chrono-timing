@@ -184,7 +184,7 @@
         </thead>
         <tbody>
         {% for p in participants %}
-            <tr class="part-row {{ 'row-mismatch' if p.id in mismatch_ids }}" data-pid="{{ p.id }}">
+            <tr class="part-row {{ 'row-mismatch' if p.id in mismatch_reasons }}" data-pid="{{ p.id }}">
                 <td data-label="">
                     <input type="checkbox" name="pid" value="{{ p.id }}" form="bulk-form" class="row-check">
                 </td>
@@ -219,8 +219,9 @@
                             </option>
                         {% endfor %}
                     </select>
-                    {% if p.id in mismatch_ids %}
-                        <span class="mismatch-note" title="Участник не попадает в условия этой категории по возрасту или полу">⚠ не по возрасту</span>
+                    {% if p.id in mismatch_reasons %}
+                        <span class="mismatch-note"
+                              title="Участник не попадает в условия этой категории">{% if mismatch_reasons[p.id] == 'gender' %}⚠ не тот пол{% elif mismatch_reasons[p.id] == 'age' %}⚠ не по возрасту{% else %}⚠ не по возрасту и полу{% endif %}</span>
                     {% endif %}
                 </td>
                 <td data-label="Пол">
@@ -628,18 +629,26 @@ tr.row-selected td { background: #eff6ff; }
         statusEl.className = 'cats-status ' + (kind || '');
     }
 
-    function setMismatch(row, on) {
+    const MISMATCH_LABELS = {
+        'gender': '⚠ не тот пол',
+        'age': '⚠ не по возрасту',
+        'both': '⚠ не по возрасту и полу'
+    };
+
+    function setMismatch(row, on, reason) {
         row.classList.toggle('row-mismatch', !!on);
         const cell = row.querySelector('td[data-label="Категория"]');
         if (!cell) return;
         let note = cell.querySelector('.mismatch-note');
-        if (on && !note) {
-            note = document.createElement('span');
-            note.className = 'mismatch-note';
-            note.textContent = '⚠ не по возрасту';
-            note.title = 'Участник не попадает в условия этой категории по возрасту или полу';
-            cell.appendChild(note);
-        } else if (!on && note) {
+        if (on) {
+            if (!note) {
+                note = document.createElement('span');
+                note.className = 'mismatch-note';
+                note.title = 'Участник не попадает в условия этой категории';
+                cell.appendChild(note);
+            }
+            note.textContent = MISMATCH_LABELS[reason] || '⚠ не подходит под условия';
+        } else if (note) {
             note.remove();
         }
     }
@@ -656,7 +665,7 @@ tr.row-selected td { background: #eff6ff; }
                     return;
                 }
                 row.classList.remove('row-error');
-                setMismatch(row, data.mismatch);
+                setMismatch(row, data.mismatch, data.mismatch_reason);
                 setStatus('Сохранено', 'ok');
             })
             .catch(() => setStatus('⚠ Нет связи с сервером', 'err'));

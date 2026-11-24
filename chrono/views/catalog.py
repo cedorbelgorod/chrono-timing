@@ -21,7 +21,8 @@ from chrono.utils import (_age_range_hint, _age_range_years, _format_age_range,
 from chrono.catalog import (
     CATEGORY_HEADER_ALIASES, HEADER_ALIASES, MAX_TAGS_PER_NUMBER, PARTICIPANT_SORTS,
     TAGS_HEADER_ALIASES, _apply_age_range, _auto_category, _category_age_hint,
-    _cat_genders, _category_mismatch, _category_overlaps, _cell_text, _find_header_col,
+    _cat_genders, _category_mismatch, _category_mismatch_reason, _category_overlaps,
+    _cell_text, _find_header_col,
     _invalidate_competition_meta, _issue_number, _join_genders, _next_number, _norm_header,
     _norm_name, _parse_gender_cell, _participants_redirect, _plabel, _save_bib_tags, _scalar,
     _tags_by_number,
@@ -834,14 +835,19 @@ def participants_list(cid):
         filters = {'q': q, 'cat': cat, 'city': city, 'team': team, 'gender': gender,
                    'year_op': year_op, 'year1': year1_raw, 'year2': year2_raw, 'order': order}
         cats_by_id = {c['id']: c for c in categories}
-        mismatch_ids = {p['id'] for p in parts
-                        if p['category_id'] in cats_by_id
-                        and _category_mismatch(cats_by_id[p['category_id']], p['gender'], p['birth_year'])}
+        mismatch_reasons = {}
+        for p in parts:
+            cat = cats_by_id.get(p['category_id'])
+            if not cat:
+                continue
+            reason = _category_mismatch_reason(cat, p['gender'], p['birth_year'])
+            if reason:
+                mismatch_reasons[p['id']] = reason
         return render_template('participants.html', competition=comp, participants=parts,
                                categories=categories, q=q, total=total_all, shown=len(parts),
                                filters=filters, sort_urls=sort_urls,
                                has_none_category=has_none_category,
-                               mismatch_ids=mismatch_ids,
+                               mismatch_reasons=mismatch_reasons,
                                tags_by_number=_tags_by_number(conn, cid),
                                qs=request.query_string.decode('utf-8', 'ignore'),
                                next_default=_next_reg_number(conn, cid))
@@ -1175,8 +1181,9 @@ def participant_row_save(cid):
             return jsonify({'ok': False, 'error': f'Номер {number_int} занят'})
         cat = conn.execute('SELECT * FROM categories WHERE id = ?',
                            (category_id,)).fetchone() if category_id else None
-        mismatch = bool(cat and _category_mismatch(cat, gender, year_int))
-        return jsonify({'ok': True, 'mismatch': mismatch, 'number': number_int,
+        reason = _category_mismatch_reason(cat, gender, year_int) if cat else None
+        return jsonify({'ok': True, 'mismatch': bool(reason), 'mismatch_reason': reason,
+                        'number': number_int,
                         'birth_year': year_int, 'category_id': category_id})
     finally:
         conn.close()
