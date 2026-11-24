@@ -1,16 +1,37 @@
 # -*- coding: utf-8 -*-
-"""Объединение категорий: переезд участников, условия, запреты."""
+"""Объединение категорий: переезд участников, неизменные условия, запреты."""
+from datetime import datetime
+
 from tests.support import ChronoTestCase
 
 
 class CategoriesMergeTest(ChronoTestCase):
-    def _add(self, name, gender=None, age_range='', laps=1, sort=0,
-             year_from=None, year_to=None):
+    def _years(self, age_range):
+        """Годы рождения из строки возраста для текущего года старта."""
+        if not age_range:
+            return None, None
+        start = datetime.now().year
+        left, _, right = age_range.partition('-')
+        age_min = int(left) if left.strip() else None
+        age_max = int(right) if right.strip() else None
+        return (start - age_max) if age_max is not None else None, \
+               (start - age_min) if age_min is not None else None
+
+    def _add(self, name, gender=None, age_range='', laps=1, sort=0):
+        year_from, year_to = self._years(age_range)
         with self.conn:
             cur = self.conn.execute(
                 'INSERT INTO categories (competition_id, name, laps_total, gender, age_range, '
                 'sort_order, year_from, year_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 (self.comp['id'], name, laps, gender, age_range, sort, year_from, year_to))
+        return cur.lastrowid
+
+    def _participant(self, number, name, cat, gender='M', birth_year=None):
+        with self.conn:
+            cur = self.conn.execute(
+                'INSERT INTO participants (competition_id, number, full_name, gender, birth_year, '
+                'category_id) VALUES (?, ?, ?, ?, ?, ?)',
+                (self.comp['id'], number, name, gender, birth_year, cat))
         return cur.lastrowid
 
     def _merge(self, target, ids, ajax=True):
@@ -30,40 +51,50 @@ class CategoriesMergeTest(ChronoTestCase):
         self.login_admin()
         a = self._add('Юноши 12-14', 'M', '12-14', laps=3, sort=5)
         b = self._add('Юноши 15-17', 'M', '15-17', laps=1, sort=9)
-        p1 = self.add_participant(1, 'Первый', a)
-        p2 = self.add_participant(2, 'Второй', b)
+        p1 = self._participant(1, 'Первый', a, 'M', 2012)   # 14 лет — подходит
+        p2 = self._participant(2, 'Второй', b, 'M', 2008)   # 18 лет — не подходит
         resp = self._merge(a, [a, b])
-        self.assertTrue(resp.get_json()['ok'])
-        self.assertEqual(resp.get_json()['moved'], 1)
+        data = resp.get_json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['moved'], 1)
+        self.assertEqual(data['mismatch'], 1)
         self.assertIsNone(self._cat(b))
         target = self._cat(a)
         self.assertEqual(target['name'], 'Юноши 12-14')
         self.assertEqual(target['laps_total'], 3)
         self.assertEqual(target['sort_order'], 5)
-        self.assertEqual(target['age_range'], '12-17')
+        # условия целевой не меняются
+        self.assertEqual(target['gender'], 'M')
+        self.assertEqual(target['age_range'], '12-14')
         for pid in (p1, p2):
-            row = self.conn.execute('SELECT category_id FROM participants WHERE id = ?', (pid,)).fetchone()
+            row = self.conn.execute(
+                'SELECT category_id FROM participants WHERE id = ?', (pid,)).fetchone()
             self.assertEqual(row['category_id'], a)
 
-    def test_merge_genders_union(self):
+    def test_target_conditions_unchanged_when_merging_other_gender(self):
         self.login_admin()
-        a = self._add('Мужчины', 'M', '18-')
-        b = self._add('Женщины', 'F', '18-')
-        self._merge(a, [a, b])
-        self.assertEqual(self._cat(a)['gender'], 'MF')
+        a = self._add('Мужчины 18+', 'M', '18-')
+        b = self._add('Женщины 18+', 'F', '18-')
+        p = self._participant(1, 'Женщина', b, 'F', 2000)
+        data = self._merge(a, [a, b]).get_json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['mismatch'], 1)
+        target = self._cat(a)
+        self.assertEqual(target['gender'], 'M')
+        self.assertEqual(target['age_range'], '18-')
+        row = self.conn.execute(
+            'SELECT category_id FROM participants WHERE id = ?', (p,)).fetchone()
+        self.assertEqual(row['category_id'], a)
 
-    def test_merge_age_ranges(self):
+    def test_mismatch_is_highlighted_on_participants_page(self):
         self.login_admin()
-        cases = [('12-14', '15-17', '12-17'),
-                 ('-8', '9-10', '-10'),
-                 ('18-', '40-', '18-'),
-                 ('12-14', '', '')]
-        for i, (left, right, expected) in enumerate(cases):
-            a = self._add(f'A{i}', 'M', left)
-            b = self._add(f'B{i}', 'M', right)
-            resp = self._merge(a, [a, b])
-            self.assertTrue(resp.get_json()['ok'], (left, right))
-            self.assertEqual(self._cat(a)['age_range'], expected, (left, right))
+        a = self._add('Юноши 12-14', 'M', '12-14')
+        b = self._add('Девушки 12-14', 'F', '12-14')
+        self._participant(1, 'Девочка Не Туда', b, 'F', 2013)
+        self._merge(a, [a, b])
+        html = self.client.get(f'/competitions/{self.comp["id"]}').get_data(as_text=True)
+        self.assertIn('row-mismatch', html)
+        self.assertIn('не по возрасту', html)
 
     def test_forbidden_when_used_in_finished_heat(self):
         self.login_admin()
@@ -98,19 +129,16 @@ class CategoriesMergeTest(ChronoTestCase):
         self.login_admin()
         a = self._add('Одна', 'M', '')
         b = self._add('Две', 'M', '')
-        r = self._merge(a, [a])
-        self.assertFalse(r.get_json()['ok'])
-        r = self._merge(a, [b, b])
-        self.assertFalse(r.get_json()['ok'])
-        r = self._merge(a, [b, 999999])
-        self.assertFalse(r.get_json()['ok'])
+        self.assertFalse(self._merge(a, [a]).get_json()['ok'])
+        self.assertFalse(self._merge(a, [b, b]).get_json()['ok'])
+        self.assertFalse(self._merge(a, [b, 999999]).get_json()['ok'])
         self.assertEqual(len(self._ids()), 2)
 
     def test_counts_after_merge_on_page(self):
         self.login_admin()
         a = self._add('Цель', 'M', '')
         b = self._add('Источник', 'M', '')
-        self.add_participant(1, 'Первый', b)
+        self._participant(1, 'Первый', b)
         self._merge(a, [a, b])
         html = self.client.get(f'/competitions/{self.comp["id"]}/categories').get_data(as_text=True)
         self.assertIn('class="cat-cnt', html)
