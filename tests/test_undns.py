@@ -52,11 +52,47 @@ class HeatUndnsTest(ChronoTestCase):
                                 headers={'X-Requested-With': 'fetch'})
         self.assertFalse(resp.get_json()['ok'])
 
+
+    def test_mark_dns_before_start(self):
+        hid, p1, p2 = self._setup()
+        # p1 активен — отмечаем его DNS до старта
+        resp = self.client.post(f'/heats/{hid}/set_dns', data={'pid': p1},
+                                headers={'X-Requested-With': 'fetch'})
+        self.assertTrue(resp.get_json()['ok'])
+        self.assertEqual(self._hp(hid, p1)['status'], 'dns')
+
+    def test_mark_dns_forbidden_when_running(self):
+        hid, p1, p2 = self._setup()
+        with self.conn:
+            self.conn.execute("UPDATE heats SET status = 'running' WHERE id = ?", (hid,))
+        resp = self.client.post(f'/heats/{hid}/set_dns', data={'pid': p1},
+                                headers={'X-Requested-With': 'fetch'})
+        self.assertFalse(resp.get_json()['ok'])
+        self.assertEqual(self._hp(hid, p1)['status'], 'active')
+
+    def test_dns_then_return_roundtrip(self):
+        hid, p1, p2 = self._setup()
+        self.client.post(f'/heats/{hid}/set_dns', data={'pid': p1},
+                         headers={'X-Requested-With': 'fetch'})
+        self.assertEqual(self._hp(hid, p1)['status'], 'dns')
+        self.client.post(f'/heats/{hid}/undns', data={'pid': p1},
+                         headers={'X-Requested-With': 'fetch'})
+        self.assertEqual(self._hp(hid, p1)['status'], 'active')
+
+    def test_dns_button_shown_for_pending_heat(self):
+        hid, p1, p2 = self._setup()
+        html = self.client.get('/races').get_data(as_text=True)
+        self.assertIn('class="so-dns"', html)
+        with self.conn:
+            self.conn.execute("UPDATE heats SET status = 'running' WHERE id = ?", (hid,))
+        html = self.client.get('/races').get_data(as_text=True)
+        self.assertNotIn('class="so-dns"', html)
+
     def test_button_shown_only_for_pending_heat(self):
         hid, p1, p2 = self._setup()
         html = self.client.get('/races').get_data(as_text=True)
         self.assertIn('so-undns', html)
-        self.assertIn('/undns', html)
+        self.assertIn('postRowAction', html)
         with self.conn:
             self.conn.execute("UPDATE heats SET status = 'running' WHERE id = ?", (hid,))
         html = self.client.get('/races').get_data(as_text=True)

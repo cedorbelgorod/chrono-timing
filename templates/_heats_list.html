@@ -52,7 +52,13 @@
                             <button type="button" class="so-undns" data-pid="{{ r.participant_id }}"
                                     title="Участник успел — вернуть его в старт">↩ Вернуть</button>
                         {% endif %}
-                    {% else %}<span class="muted">ждёт старта</span>{% endif %}
+                    {% else %}
+                        <span class="muted">ждёт старта</span>
+                        {% if editable %}
+                            <button type="button" class="so-dns" data-pid="{{ r.participant_id }}"
+                                    title="Отметить DNS: участник не вышел">DNS</button>
+                        {% endif %}
+                    {% endif %}
                 </td>
             </tr>
         {% endfor %}

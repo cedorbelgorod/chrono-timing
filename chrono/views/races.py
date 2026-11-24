@@ -235,6 +235,40 @@ def heat_force_finish_and_next(hid):
     finally: conn.close()
 
 
+def heat_set_dns(hid):
+    """Отметить участника DNS в ещё не запущенном старте."""
+    pid = request.form.get('pid', type=int)
+    if not pid:
+        return jsonify({'ok': False, 'message': 'Не выбран участник'}), 400
+    conn = get_db()
+    try:
+        heat = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
+        if not heat:
+            return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
+        if heat['status'] != 'pending':
+            return jsonify({'ok': False, 'message': 'Старт уже запущен — отметку не поставить'}), 400
+        row = conn.execute(
+            'SELECT status FROM heat_participants WHERE heat_id = ? AND participant_id = ?',
+            (hid, pid)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'message': 'Участник не в этом старте'}), 404
+        with conn:
+            conn.execute(
+                "UPDATE heat_participants SET status = 'dns' "
+                'WHERE heat_id = ? AND participant_id = ?', (hid, pid))
+            conn.execute(
+                'DELETE FROM races WHERE heat_id = ? AND participant_id = ?', (hid, pid))
+        _log_timing(conn, 'races', 'dns', True, competition_id=heat['competition_id'], heat_id=hid,
+                    participant_id=pid, user_login=session.get('user'),
+                    detail='DNS до старта (старт не запущен)')
+        person = conn.execute('SELECT full_name, number FROM participants WHERE id = ?',
+                              (pid,)).fetchone()
+        flash(f'Отмечен DNS: №{person["number"]} {person["full_name"]}', 'success')
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
 def heat_undns(hid):
     """Вернуть участника в ещё не запущенный старт (был DNS, но успел)."""
     pid = request.form.get('pid', type=int)
@@ -660,6 +694,7 @@ RULES = [
     ('/heats/<int:hid>/start', 'heat_start', heat_start, ['POST']),
     ('/heats/<int:hid>/force_finish', 'heat_force_finish', heat_force_finish, ['POST']),
     ('/heats/<int:hid>/force_finish_and_next', 'heat_force_finish_and_next', heat_force_finish_and_next, ['POST']),
+    ('/heats/<int:hid>/set_dns', 'heat_set_dns', heat_set_dns, ['POST']),
     ('/heats/<int:hid>/undns', 'heat_undns', heat_undns, ['POST']),
     ('/heats/<int:hid>/mark_dnf', 'heat_mark_dnf', heat_mark_dnf, ['POST']),
     ('/heats/<int:hid>/delete', 'heat_delete', heat_delete, ['POST']),

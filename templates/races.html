@@ -384,6 +384,13 @@
 }
 .so-undns:hover { background: #dbeafe; }
 .so-undns[disabled] { opacity: .6; cursor: default; }
+.so-dns {
+    margin-left: 6px; padding: 1px 8px; font-size: 11px; font-family: inherit;
+    border: 1px solid #e5e7eb; border-radius: 6px; background: #f3f4f6;
+    color: #4b5563; cursor: pointer; white-space: nowrap;
+}
+.so-dns:hover { background: #e5e7eb; color: #b91c1c; }
+.so-dns[disabled] { opacity: .6; cursor: default; }
 .so-dir { font-size: 13px; line-height: 1; color: #2563eb; }
 .so-manual { font-size: 11px; color: #b45309; font-weight: 600; }
 .so-badge {
@@ -1015,31 +1022,49 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Вернуть DNS-участника в незапущенный старт
-        box.addEventListener('click', function (e) {
-            var btn = e.target && e.target.closest ? e.target.closest('.so-undns') : null;
-            if (!btn) return;
-            e.preventDefault();
+        // DNS: вернуть участника в старт или отметить его до старта
+        function postRowAction(btn, action, okText) {
             var fd = new FormData();
             fd.append('pid', btn.dataset.pid);
             btn.disabled = true;
-            fetch('/heats/' + box.dataset.hid + '/undns', {
+            fetch('/heats/' + box.dataset.hid + '/' + action, {
                 method: 'POST', body: fd, cache: 'no-store',
                 headers: { 'X-Requested-With': 'fetch' }
             }).then(function (r) { return r.json(); })
               .then(function (data) {
                   if (!data.ok) {
-                      setStatus('⚠ ' + (data.message || 'Не удалось вернуть'), 'err');
+                      setStatus('⚠ ' + (data.message || 'Не удалось'), 'err');
                       btn.disabled = false;
                       return;
                   }
-                  setStatus('Возвращён в старт', 'ok');
+                  setStatus(okText, 'ok');
                   if (typeof window.__refreshHeats === 'function') window.__refreshHeats();
               })
               .catch(function () {
                   setStatus('⚠ Нет связи с сервером', 'err');
                   btn.disabled = false;
               });
+        }
+
+        box.addEventListener('click', async function (e) {
+            var target = e.target && e.target.closest ? e.target : null;
+            if (!target) return;
+            var undnsBtn = target.closest('.so-undns');
+            if (undnsBtn) {
+                e.preventDefault();
+                postRowAction(undnsBtn, 'undns', 'Возвращён в старт');
+                return;
+            }
+            var dnsBtn = target.closest('.so-dns');
+            if (dnsBtn) {
+                e.preventDefault();
+                if (typeof window.uiConfirm === 'function') {
+                    var ok = await window.uiConfirm('Отметить участника как DNS? Он не выйдет на старт.',
+                                                    { okText: 'DNS', danger: true });
+                    if (!ok) return;
+                }
+                postRowAction(dnsBtn, 'set_dns', 'Отмечен DNS');
+            }
         });
 
         function waitingRows() {
