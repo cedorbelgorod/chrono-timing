@@ -116,7 +116,9 @@
             box-shadow: 0 12px 34px rgba(0,0,0,.25), 0 0 0 1px rgba(0,0,0,.04);
         }
         .nav-menu.right { left: auto; right: 0; }
-        .nav-group.open .nav-menu, .nav-group:focus-within .nav-menu { display: block; }
+        /* меню открыто только по клику/наведению; :focus-within не используем —
+           иначе после клика меню не закрывается при переходе к другой группе */
+        .nav-group.open .nav-menu { display: block; }
         @media (hover: hover) {
             .nav-group:hover .nav-menu { display: block; }
         }

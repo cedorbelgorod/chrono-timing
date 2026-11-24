@@ -66,6 +66,8 @@ class UiTerminologyTest(ChronoTestCase):
         html = self.client.get('/competitions').get_data(as_text=True)
         self.assertIn("group.addEventListener('mouseenter'", html)
         self.assertIn("menu.classList.add('right')", html)
+        # :focus-within держал бы первое меню открытым после клика
+        self.assertNotIn('.nav-group:focus-within .nav-menu', html)
 
     def test_heading_without_emoji(self):
         self.login_admin()
