@@ -298,6 +298,28 @@ class DeleteButtonSafetyTest(ChronoTestCase):
         self.assertIn("e.key === 'Enter'", html)
 
 
+class ParticipantsLayoutTest(ChronoTestCase):
+    """Компактная таблица участников: без ID, город/команда — в окошке."""
+
+    def test_compact_table_and_modal(self):
+        self.login_admin()
+        cid = self.comp['id']
+        cat = self.add_category('Юноши', 2, 1)
+        with self.conn:
+            pid = self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender, category_id, city, team) "
+                "VALUES (?, 7, 'Лопин Антон', 'M', ?, 'Белгород', 'Лично')", (cid, cat)).lastrowid
+        html = self.client.get(f'/competitions/{cid}').get_data(as_text=True)
+        self.assertNotIn('data-label="ID"', html)
+        self.assertNotIn('data-label="Город"', html)
+        self.assertNotIn('data-label="Команда"', html)
+        self.assertNotIn('>Метки номера</th>', html)
+        self.assertIn(f'id="part-modal-{pid}"', html)
+        self.assertIn(f'name="city_{pid}"', html)
+        self.assertIn(f'name="team_{pid}"', html)
+        self.assertIn('cat-select', html)
+
+
 class AgeMigrationTest(ChronoTestCase):
     def test_old_years_get_age_range(self):
         self.login_admin()

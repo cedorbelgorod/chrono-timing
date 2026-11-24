@@ -172,16 +172,12 @@
         <thead>
             <tr>
                 <th style="width:34px"><input type="checkbox" id="sel-all" form="bulk-form" title="Выбрать все"></th>
-                <th style="width:56px" title="ID участника — постоянный, не меняется">ID</th>
                 {{ sort_th('number', 'Номер', 'width:70px') }}
                 {{ sort_th('name', 'ФИО', '', 'fio-cell') }}
-                {{ sort_th('year', 'Год', 'width:70px') }}
-                {{ sort_th('category', 'Категория', 'width:130px') }}
-                {{ sort_th('gender', 'Пол', 'width:55px') }}
-                {{ sort_th('city', 'Город', 'width:100px') }}
-                {{ sort_th('team', 'Команда', 'width:120px') }}
-                <th style="width:180px">Метки номера</th>
-                <th style="width:100px">Действия</th>
+                {{ sort_th('year', 'Год', 'width:80px') }}
+                {{ sort_th('category', 'Категория', 'width:250px') }}
+                {{ sort_th('gender', 'Пол', 'width:60px') }}
+                <th style="width:96px">Действия</th>
             </tr>
         </thead>
         <tbody>
@@ -190,7 +186,6 @@
                 <td data-label="">
                     <input type="checkbox" name="pid" value="{{ p.id }}" form="bulk-form" class="row-check">
                 </td>
-                <td data-label="ID"><span class="pid">{{ p.id }}</span></td>
                 <td data-label="Номер">
                     <input type="number" name="number_{{ p.id }}"
                            value="{{ p.number or '' }}" min="1"
@@ -213,7 +208,7 @@
                 </td>
                 <td data-label="Категория">
                     <select name="category_id_{{ p.id }}"
-                            class="row-input" style="width:100%">
+                            class="row-input cat-select" style="width:100%">
                         <option value="">— без группы —</option>
                         {% for cat in categories %}
                             <option value="{{ cat.id }}"
@@ -233,39 +228,60 @@
                         <option value="F" {% if p.gender == 'F' %}selected{% endif %}>Ж</option>
                     </select>
                 </td>
-                <td data-label="Город">
-                    <input type="text" name="city_{{ p.id }}"
-                           value="{{ p.city or '' }}"
-                           class="row-input" style="width:100%">
-                </td>
-                <td data-label="Команда">
-                    <input type="text" name="team_{{ p.id }}"
-                           value="{{ p.team or '' }}"
-                           class="row-input" style="width:100%">
-                </td>
-                <td data-label="Метки">
-                    {% set tags = tags_by_number.get(p.number) if p.number else None %}
-                    {% if tags %}
-                        {% for t in tags %}
-                            <span class="tag-chip {{ 'tag-main' if loop.first else 'tag-spare' }}"
-                                  title="{{ 'основная' if loop.first else 'резервная' }} метка">{{ t }}</span>
-                        {% endfor %}
-                    {% else %}
-                        <span class="muted">—</span>
-                    {% endif %}
-                </td>
                 <td data-label="">
-                    <button type="button" class="danger del-btn"
-                            data-del-url="{{ url_for('participant_delete', pid=p.id) }}"
-                            data-confirm="Удалить участника {{ p.full_name }}?">
-                        Удалить
-                    </button>
+                    <span class="part-actions">
+                        <button type="button" class="part-icon" data-part-modal="part-modal-{{ p.id }}"
+                                title="Город, команда и метки участника">⚙</button>
+                        <button type="button" class="part-icon trash del-btn"
+                                data-del-url="{{ url_for('participant_delete', pid=p.id) }}"
+                                data-confirm="Удалить участника {{ p.full_name }}?"
+                                title="Удалить участника">🗑</button>
+                    </span>
                 </td>
             </tr>
         {% endfor %}
         </tbody>
     </table>
     </div>
+
+    {# город, команда и метки — в окошке, чтобы таблица была компактной #}
+    {% for p in participants %}
+        <div class="part-modal" id="part-modal-{{ p.id }}" data-for="{{ p.id }}" hidden>
+            <div class="part-modal-box" role="dialog" aria-modal="true"
+                 aria-labelledby="part-modal-title-{{ p.id }}">
+                <div class="part-modal-head">
+                    <b id="part-modal-title-{{ p.id }}">{{ p.full_name }}</b>
+                    <button type="button" class="part-icon" data-part-close title="Закрыть">✕</button>
+                </div>
+                <div class="part-modal-body">
+                    <label class="fld"><span>Город</span>
+                        <input type="text" name="city_{{ p.id }}" value="{{ p.city or '' }}" autocomplete="off">
+                    </label>
+                    <label class="fld"><span>Команда</span>
+                        <input type="text" name="team_{{ p.id }}" value="{{ p.team or '' }}" autocomplete="off">
+                    </label>
+                    <div class="fld"><span>Метки номера</span>
+                        <div class="part-tags">
+                            {% set tags = tags_by_number.get(p.number) if p.number else None %}
+                            {% if tags %}
+                                {% for t in tags %}
+                                    <span class="tag-chip {{ 'tag-main' if loop.first else 'tag-spare' }}"
+                                          title="{{ 'основная' if loop.first else 'резервная' }} метка">{{ t }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="muted">— меток нет</span>
+                            {% endif %}
+                            <a class="link" href="{{ url_for('bib_tags_page', cid=competition.id) }}">настроить метки →</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="part-modal-foot">
+                    <span class="muted">Изменения сохраняются автоматически.</span>
+                    <button type="button" class="part-done" data-part-close>Готово</button>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
 
     <div class="save-bar">
         <span class="autosave-note">💾 Изменения сохраняются автоматически</span>
@@ -344,6 +360,53 @@
 .part-row.row-mismatch td { background: #fef9c3; }
 .part-row.row-mismatch td:first-child { box-shadow: inset 3px 0 0 #eab308; }
 .mismatch-note { display: block; margin-top: 2px; font-size: 11px; color: #a16207; }
+
+/* действия в строке и окошко «город, команда, метки» */
+.part-actions { display: inline-flex; gap: 4px; justify-content: flex-end; width: 100%; }
+.part-icon {
+    width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center;
+    justify-content: center; border: 1px solid transparent; background: transparent;
+    color: #94a3b8; border-radius: 8px; cursor: pointer; font-size: 15px; line-height: 1;
+    font-family: inherit; transition: background .12s, color .12s;
+}
+.part-icon:hover { background: #eef2f7; color: #334155; }
+.part-icon.trash:hover { background: #fee2e2; color: #dc2626; }
+.cat-select { min-width: 200px; }
+
+body.modal-open { overflow: hidden; }
+.part-modal {
+    position: fixed; inset: 0; z-index: 60; padding: 16px;
+    background: rgba(15, 23, 42, .45);
+    display: flex; align-items: center; justify-content: center;
+}
+.part-modal[hidden] { display: none; }
+.part-modal-box {
+    background: #fff; border-radius: 12px; width: 100%; max-width: 470px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, .25); max-height: 90vh; overflow: auto;
+}
+.part-modal-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 14px 16px; border-bottom: 1px solid #eef0f3;
+}
+.part-modal-head b { font-size: 16px; }
+.part-modal-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.part-modal-body .fld { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #6b7280; }
+.part-modal-body input {
+    padding: 8px 10px; font-size: 14px; border: 1px solid #d1d5db;
+    border-radius: 8px; font-family: inherit;
+}
+.part-modal-body input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.part-tags { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.part-modal-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 12px 16px; border-top: 1px solid #eef0f3; background: #fafbfc;
+    border-radius: 0 0 12px 12px;
+}
+.part-done {
+    padding: 8px 16px; font-size: 14px; font-weight: 600; border: none; border-radius: 8px;
+    background: #2563eb; color: #fff; cursor: pointer; font-family: inherit;
+}
+.part-done:hover { background: #1d4ed8; }
 
 .save-bar {
     display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
@@ -537,11 +600,19 @@ tr.row-selected td { background: #eff6ff; }
 
     function pidOf(row) { return row.dataset.pid; }
 
+    // поля строки + поля её окошка (город, команда)
+    function rowInputs(row) {
+        const list = [...row.querySelectorAll('input, select')];
+        const modal = document.querySelector('.part-modal[data-for="' + pidOf(row) + '"]');
+        if (modal) list.push(...modal.querySelectorAll('input, select'));
+        return list;
+    }
+
     function bodyFor(row) {
         const body = new FormData();
         const pid = pidOf(row);
         body.append('pid', pid);
-        row.querySelectorAll('input, select').forEach(el => {
+        rowInputs(row).forEach(el => {
             if (!el.name) return;
             const m = el.name.match(/^(?:number|full_name|birth_year|category_id|gender|city|team)_(\d+)$/);
             if (!m || m[1] !== pid) return;
@@ -598,10 +669,40 @@ tr.row-selected td { background: #eff6ff; }
     }
 
     [...form.querySelectorAll('tr.part-row')].forEach(row => {
-        row.querySelectorAll('input, select').forEach(el => {
+        rowInputs(row).forEach(el => {
             el.addEventListener('change', () => schedule(row, 0));
             el.addEventListener('input', () => schedule(row, 500));
         });
+    });
+
+    // окошко «город, команда, метки»
+    function closeModals(except) {
+        document.querySelectorAll('.part-modal').forEach(m => {
+            if (m !== except) m.hidden = true;
+        });
+        if (!except) document.body.classList.remove('modal-open');
+    }
+
+    document.querySelectorAll('[data-part-modal]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const modal = document.getElementById(btn.dataset.partModal);
+            if (!modal) return;
+            closeModals(modal);
+            modal.hidden = false;
+            document.body.classList.add('modal-open');
+            const first = modal.querySelector('.part-modal-body input');
+            if (first) first.focus();
+        });
+    });
+
+    document.querySelectorAll('.part-modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal || e.target.closest('[data-part-close]')) closeModals(null);
+        });
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModals(null);
     });
 
     form.querySelectorAll('.del-btn').forEach(btn => {
