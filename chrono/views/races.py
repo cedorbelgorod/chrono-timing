@@ -108,7 +108,7 @@ def heat_create():
     min_lap_time = request.form.get('min_lap_time', type=float)
     if min_lap_time is None or min_lap_time < 0: min_lap_time = 5.0
     start_order = (request.form.get('start_order') or 'number').strip()
-    if start_order not in ('number', 'category'):
+    if start_order not in ('number', 'category', 'name'):
         start_order = 'number'
     start_now = request.form.get('start_now') == '1'
     if not cid or not participant_ids: flash('Выберите хотя бы одного участника', 'error'); return redirect(url_for('races_page', cid=cid))
@@ -260,14 +260,16 @@ def heat_edit_start(hid):
 
 
 def heat_order_save(hid):
-    """Порядок ожидающих участников разделки (перетаскивание в карточке старта)."""
+    """Порядок участников старта (перетаскивание в карточке старта).
+
+    Работает и для разделки, и для группового старта: в групповом это порядок
+    вызова участников на старт.
+    """
     conn = get_db()
     try:
         h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
         if not h:
             return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
-        if _heat_format(h) != 'itt':
-            return jsonify({'ok': False, 'message': 'Порядок задаётся только в разделке'}), 400
         raw = request.form.get('order')
         if raw is None:
             raw = (request.get_json(silent=True) or {}).get('order')
@@ -296,16 +298,14 @@ def heat_order_save(hid):
 
 
 def heat_order_reset(hid):
-    """Сброс ручного порядка: по номеру или по группе."""
+    """Сброс ручного порядка: по номеру, по группе или по ФИО."""
     conn = get_db()
     try:
         h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
         if not h:
             return jsonify({'ok': False, 'message': 'Старт не найден'}), 404
-        if _heat_format(h) != 'itt':
-            return jsonify({'ok': False, 'message': 'Порядок задаётся только в разделке'}), 400
         mode = (request.form.get('mode') or 'number').strip()
-        if mode not in ('number', 'category'):
+        if mode not in ('number', 'category', 'name'):
             mode = 'number'
         with conn:
             conn.execute('UPDATE heat_participants SET sort_order = NULL WHERE heat_id = ?', (hid,))
@@ -391,6 +391,9 @@ def startlist_xlsx(hid):
                 meta.append(f'первый старт {data["heat"]["start_at"]}')
         else:
             meta.append('групповой старт')
+            if data['heat']['start_at']:
+                meta.append(f'старт {data["heat"]["start_at"]}')
+            meta.append('№ — порядок вызова')
         meta.append(f'участников {data["total"]}')
         ws.append([' · '.join(meta)])
         ws.append([])

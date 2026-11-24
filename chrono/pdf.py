@@ -71,6 +71,9 @@ def _render_startlist_pdf(comp, data):
             head_bits.append(f'первый старт {data["heat"]["start_at"]}')
     else:
         head_bits.append('групповой старт')
+        if data['heat']['start_at']:
+            head_bits.append(f'старт {data["heat"]["start_at"]}')
+        head_bits.append('№ — порядок вызова')
     story.append(Paragraph(esc(' · '.join(head_bits)), st(9, None, TA_CENTER)))
     story.append(Paragraph(esc(f'Участников: {data["total"]} · стартовали: {data["started"]} · финишировали: {data["finished"]}'),
                            st(8.5, None, TA_CENTER)))

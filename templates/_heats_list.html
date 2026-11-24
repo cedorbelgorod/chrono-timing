@@ -1,12 +1,18 @@
 {% macro render_start_order(h) %}
-<div class="so" data-hid="{{ h.id }}" data-interval="{{ h.interval }}" data-start-at="{{ h.start_at_local or '' }}">
+<div class="so" data-hid="{{ h.id }}" data-interval="{{ h.interval }}" data-start-at="{{ h.start_at_local or '' }}"
+     data-format="{{ 'itt' if h.is_itt else 'mass' }}">
     <div class="so-head">
         <span class="so-badge">
-            {% if h.order_manual %}порядок ручной{% elif h.start_order == 'category' %}по группе{% else %}по номеру{% endif %}
+            {% if h.is_itt %}
+                {% if h.order_manual %}порядок ручной{% elif h.start_order == 'category' %}по группе{% elif h.start_order == 'name' %}по ФИО{% else %}по номеру{% endif %}
+            {% else %}
+                вызов {% if h.order_manual %}вручную{% elif h.start_order == 'category' %}по группе{% elif h.start_order == 'name' %}по ФИО{% else %}по номеру{% endif %}
+            {% endif %}
         </span>
         {% if h.status == 'pending' %}
             <button type="button" class="so-reset" data-mode="number" data-hid="{{ h.id }}">↺ По номеру</button>
             <button type="button" class="so-reset" data-mode="category" data-hid="{{ h.id }}">↺ По группе</button>
+            <button type="button" class="so-reset" data-mode="name" data-hid="{{ h.id }}">↺ По ФИО</button>
         {% endif %}
         <label class="so-start-at">
             <span>Старт в</span>
@@ -190,32 +196,7 @@
                                 </small>
                             </div>
                         {% elif h.scheduled_participants %}
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th style="width:110px">Рег. №</th>
-                                        <th>ФИО</th>
-                                        <th style="width:170px">Категория</th>
-                                        <th style="width:100px">Статус</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                {% for p in h.scheduled_participants %}
-                                    <tr class="{% if p.status == 'dns' %}row-dns{% endif %}">
-                                        <td class="mono">{{ p.number or "—" }}</td>
-                                        <td>{{ p.full_name }}</td>
-                                        <td>{{ p.category_name }}</td>
-                                        <td>
-                                            {% if p.status == 'dns' %}
-                                                <span class="tag tag-dns">DNS</span>
-                                            {% else %}
-                                                <span class="tag tag-active">участник</span>
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                                </tbody>
-                            </table>
+                            {{ render_start_order(h) }}
                             <div class="heat-actions">
                                 <form method="post" action="{{ url_for('heat_start', hid=h.id) }}" style="display:inline">
                                     <button type="submit" class="btn-start">▶ СТАРТ</button>

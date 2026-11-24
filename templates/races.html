@@ -974,6 +974,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!body) return;
         var status = box.querySelector('.so-status');
         var interval = parseInt(box.dataset.interval, 10) || 30;
+        var isItt = box.dataset.format !== 'mass';
         var dragRow = null;
         var orderBefore = '';
 
@@ -1019,7 +1020,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 var timeCell = r.querySelector('.so-time');
                 if (timeCell) {
                     timeCell.textContent = box.dataset.startAt
-                        ? fmtTime(box.dataset.startAt, interval * (pos - 1))
+                        ? fmtTime(box.dataset.startAt, isItt ? interval * (pos - 1) : 0)
                         : '—';
                 }
             });

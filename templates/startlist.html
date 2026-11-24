@@ -24,7 +24,8 @@
         · раздельный старт · интервал {{ data.heat.interval }} с
         {% if data.heat.start_at %} · первый старт {{ data.heat.start_at }}{% endif %}
     {% else %}
-        · групповой старт
+        · групповой старт{% if data.heat.start_at %} · старт {{ data.heat.start_at }}{% endif %}
+        · № в протоколе — порядок вызова
     {% endif %}
     · участников {{ data.total }}
     {% if data.started %} · стартовали {{ data.started }}{% endif %}

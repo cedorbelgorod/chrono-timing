@@ -382,6 +382,8 @@ def _manual_start_queue(conn, hid):
         # порядок групп — по колонке «сортировка» категории (по умолчанию равна её ID)
         order_by = ('COALESCE(hp.sort_order, 1000000), (c.id IS NULL), '
                     'COALESCE(c.sort_order, c.id), p.number')
+    elif mode == 'name':
+        order_by = 'COALESCE(hp.sort_order, 1000000), p.full_name COLLATE NOCASE'
     else:
         order_by = 'COALESCE(hp.sort_order, 1000000), p.number'
     return conn.execute(
@@ -506,17 +508,22 @@ def _heat_start_rows(conn, heat):
     def rank(r):
         is_dns = (r['hp_status'] == 'dns') or ((r['race_status'] or '') == 'dns')
         if is_dns:
-            return (2, 0, 0, r['number'] or 0)
+            return (2, 0, '', r['number'] or 0)
         if r['race_id'] is not None:
-            return (0, 0, 0, r['start_time'] or '')
+            return (0, 0, '', r['start_time'] or '')
         manual = r['sort_order']
         if manual is not None:
-            return (1, 0, manual, r['number'] or 0)
-        cat = r['cat_sort'] if r['cat_sort'] is not None else 1000000
-        return (1, 1, cat if mode == 'category' else 0, r['number'] or 0)
+            return (1, 0, f'{int(manual):06d}', r['number'] or 0)
+        if mode == 'category':
+            cat = r['cat_sort'] if r['cat_sort'] is not None else 1000000
+            return (1, 1, f'{cat:06d}', r['number'] or 0)
+        if mode == 'name':
+            return (1, 1, (r['full_name'] or '').lower(), r['number'] or 0)
+        return (1, 1, '', r['number'] or 0)
 
     rows = sorted(rows, key=rank)
     interval = _itt_interval()
+    is_itt = _heat_format(heat) == 'itt'
     start_at = None
     try:
         if heat['start_at']:
@@ -540,7 +547,10 @@ def _heat_start_rows(conn, heat):
         if not is_dns:
             position += 1
             if start_at is not None:
-                planned = (start_at + timedelta(seconds=interval * (position - 1))).strftime('%H:%M:%S')
+                if is_itt:
+                    planned = (start_at + timedelta(seconds=interval * (position - 1))).strftime('%H:%M:%S')
+                else:
+                    planned = start_at.strftime('%H:%M:%S')
         actual = (r['start_time'] or '')[11:19] if r['race_id'] is not None and not is_dns else ''
         out.append({
             'participant_id': r['participant_id'],
@@ -746,9 +756,8 @@ def _build_races_heats(conn, cid):
         hd['start_at_local'] = (hd.get('start_at') or '')[:16]
         hd['start_at_display'] = _fmt_start_at(hd.get('start_at'))
         hd['interval'] = _itt_interval()
-        if hd['is_itt']:
-            hd['start_rows'] = _heat_start_rows(conn, h)
-            hd['order_manual'] = any(r['manual'] for r in hd['start_rows'])
+        hd['start_rows'] = _heat_start_rows(conn, h)
+        hd['order_manual'] = any(r['manual'] for r in hd['start_rows'])
         heats_data.append(hd)
     return heats_data
 

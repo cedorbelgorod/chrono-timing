@@ -47,13 +47,19 @@ class OrderTest(ChronoTestCase):
             'SELECT sort_order FROM heat_participants WHERE heat_id = ?', (hid,)).fetchall()
         self.assertTrue(all(r['sort_order'] is None for r in rows))
 
-    def test_mass_heat_rejects_order(self):
+    def test_mass_heat_accepts_order(self):
+        """В групповом старте порядок — это порядок вызова участников."""
         self.login_admin()
         self.set_format('mass')
         cat = self.add_category('Массовая', 1)
         p1 = self.add_participant(1, 'Один', cat)
+        p2 = self.add_participant(2, 'Два', cat)
         hid = self.add_heat(1, 'mass')
-        self.add_to_heat(hid, [p1])
-        resp = self.client.post(f'/heats/{hid}/order', data={'order': str(p1)})
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn('только в разделке', resp.get_json()['message'])
+        self.add_to_heat(hid, [p1, p2])
+        resp = self.client.post(f'/heats/{hid}/order', data={'order': f'{p2},{p1}'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()['ok'])
+        rows = self.conn.execute(
+            'SELECT participant_id FROM heat_participants WHERE heat_id = ? ORDER BY sort_order',
+            (hid,)).fetchall()
+        self.assertEqual([r['participant_id'] for r in rows], [p2, p1])
