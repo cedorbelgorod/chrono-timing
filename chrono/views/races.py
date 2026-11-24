@@ -16,11 +16,12 @@ from chrono.settings import (
     _comp_format, _heat_format, _itt_interval, get_cached_setting, set_cached_setting,
 )
 from chrono.timing import (
-    _build_races_heats, _find_heat_by_token, _force_finish_heat, _format_sort_spec,
+    _build_races_heats, _default_dir, _find_heat_by_token, _force_finish_heat, _format_sort_spec,
     _heat_sort_spec, _heat_startlist_data, _parse_sort_spec, _race_lap_counts, _start_heat,
     SORT_MODES,
 )
 from chrono.utils import (_fmt_start_at, _new_startlist_token, format_secs)
+from chrono.ratings import (_rating_for, _ratings_index)
 from chrono.catalog import (_category_participants, _parse_duration, _tags_by_number)
 from chrono.manual_helpers import (_log_timing)
 from chrono.results_helpers import (_base_url)
@@ -65,15 +66,21 @@ def races_page():
             # участники без группы в стартах не показываются — сначала назначьте им группу
             next_heat_number = conn.execute('SELECT COALESCE(MAX(heat_number), 0) FROM heats WHERE competition_id = ?', (selected_cid,)).fetchone()[0] + 1
             has_available_categories = any(not c['heat_number'] and c['participants'] for c in categories_data)
+            rating_column = (get_cached_setting('rating_column', '') or '').strip()
+            rating_index = _ratings_index() if rating_column else None
             heat_data = {
                 'next_number': next_heat_number,
+                'rating_column': rating_column,
                 'categories': [{
                     'id': cd['id'], 'name': cd['name'], 'laps': cd['laps_total'],
                     'heat_number': cd['heat_number'],
                     'people': [{'id': p['id'], 'number': p['number'], 'name': p['full_name'],
                                 'year': p['birth_year'],
                                 'gender': {'M': 'М', 'F': 'Ж'}.get((p['gender'] or '').upper(), ''),
-                                'rfid': bool(tags_by_number.get(p['number']))} for p in cd['participants']],
+                                'rating': _rating_for(rating_index, p['full_name'],
+                                                      p['birth_year'], rating_column),
+                                'rfid': bool(tags_by_number.get(p['number']))}
+                               for p in cd['participants']],
                 } for cd in categories_data],
             }
             heats_data = _build_races_heats(conn, selected_cid)
@@ -170,13 +177,21 @@ def heat_create():
         new_num = conn.execute('SELECT COALESCE(MAX(heat_number), 0) FROM heats WHERE competition_id = ?', (cid,)).fetchone()[0] + 1
         active_count, dns_count, selected_set = 0, 0, set(participant_ids)
         with conn:
-            hid = conn.execute('INSERT INTO heats (competition_id, heat_number, name, status, finish_on_leader, min_lap_time, auto_enabled, format, start_order, start_dir) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (cid, new_num, heat_name, 'pending', finish_on_leader, min_lap_time, auto_enabled, heat_fmt, _format_sort_spec([(start_order, 'asc')] + [(m, 'asc') for m in SORT_MODES if m != start_order]), 'asc')).lastrowid
+            spec = [(start_order, _default_dir(start_order))] + [
+                (m, _default_dir(m)) for m in SORT_MODES if m != start_order]
+            hid = conn.execute('INSERT INTO heats (competition_id, heat_number, name, status, finish_on_leader, min_lap_time, auto_enabled, format, start_order, start_dir) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (cid, new_num, heat_name, 'pending', finish_on_leader, min_lap_time, auto_enabled, heat_fmt, _format_sort_spec(spec), 'asc')).lastrowid
             for cat_id in category_ids: conn.execute('INSERT INTO heat_categories (heat_id, category_id) VALUES (?, ?)', (hid, cat_id))
             group_ids = list(category_ids) + ([0] if has_no_category else [])
+            rating_column = (get_cached_setting('rating_column', '') or '').strip()
+            rating_index = _ratings_index() if rating_column else None
             for cat_id in group_ids:
                 for p in _category_participants(conn, cat_id):
                     st = 'active' if p['id'] in selected_set else 'dns'
-                    conn.execute('INSERT INTO heat_participants (heat_id, participant_id, status) VALUES (?, ?, ?)', (hid, p['id'], st))
+                    rating = _rating_for(rating_index, p['full_name'], p['birth_year'],
+                                         rating_column)
+                    conn.execute(
+                        'INSERT INTO heat_participants (heat_id, participant_id, status, rating) '
+                        'VALUES (?, ?, ?, ?)', (hid, p['id'], st, rating))
                     if st == 'active': active_count += 1
                     else: dns_count += 1
             # запоминаем параметры для следующего старта

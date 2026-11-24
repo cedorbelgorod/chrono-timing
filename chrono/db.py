@@ -166,6 +166,9 @@ def _migrate_schema(conn):
     heat_cols = {r['name'] for r in conn.execute('PRAGMA table_info(heats)').fetchall()}
     if 'start_dir' not in heat_cols:
         conn.execute("ALTER TABLE heats ADD COLUMN start_dir TEXT NOT NULL DEFAULT 'asc'")
+    hp_cols = {r['name'] for r in conn.execute('PRAGMA table_info(heat_participants)').fetchall()}
+    if 'rating' not in hp_cols:
+        conn.execute('ALTER TABLE heat_participants ADD COLUMN rating REAL NOT NULL DEFAULT 0')
 
 
 def _migrate_age_ranges(conn):
@@ -453,3 +456,5 @@ def _get_competition(conn):
     return conn.execute('SELECT * FROM competitions WHERE id = ?', (cid,)).fetchone()
 
 PEOPLE_DB = os.path.join(DATA_DIR, 'people.db')
+
+RATINGS_DB = os.path.join(DATA_DIR, 'ratings.db')

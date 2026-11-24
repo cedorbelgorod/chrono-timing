@@ -177,6 +177,7 @@
                 {{ sort_th('number', 'Номер', 'width:70px') }}
                 {{ sort_th('name', 'ФИО', '', 'fio-cell') }}
                 {{ sort_th('year', 'Год', 'width:80px') }}
+                {% if rating_column %}<th style="width:90px" title="Рейтинг: {{ rating_column }}">Рейтинг</th>{% endif %}
                 {{ sort_th('category', 'Категория', 'width:250px') }}
                 {{ sort_th('gender', 'Пол', 'width:60px') }}
                 <th style="width:96px">Действия</th>
@@ -208,6 +209,14 @@
                            class="row-input" style="width:80px"
                            title="Год рождения четырьмя цифрами: 2016">
                 </td>
+                {% if rating_column %}
+                <td data-label="Рейтинг">
+                    {% set rv = ratings.get(p.id, 0) %}
+                    <span class="part-rating {{ 'muted' if not rv }}" title="{{ rating_column }}">
+                        {{ rv|int if rv == rv|int else rv }}
+                    </span>
+                </td>
+                {% endif %}
                 <td data-label="Категория">
                     <select name="category_id_{{ p.id }}"
                             class="row-input cat-select" style="width:100%">

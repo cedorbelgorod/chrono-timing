@@ -13,7 +13,7 @@ from openpyxl.styles import Font
 from chrono.db import (_get_competition, _registry_find, get_db)
 from chrono.settings import (
     PROTOCOL_DEFAULTS, RACE_FORMATS, _comp_format, _competition_start_year,
-    _reload_settings_cache_from_db, get_cached_setting,
+    _reload_settings_cache_from_db, get_cached_setting, set_cached_setting,
 )
 from chrono.timing import (_heat_participant_counts)
 from chrono.utils import (_age_range_hint, _age_range_years, _format_age_range,
@@ -28,6 +28,10 @@ from chrono.catalog import (
     _tags_by_number,
 )
 from chrono.logging_setup import (_app_logger)
+from chrono.ratings import (
+    DEFAULT_RATING_COLUMN, _rating_for, _ratings_columns, _ratings_index, _ratings_refresh,
+    _ratings_stats,
+)
 from chrono.registration_helpers import (_next_reg_number)
 from chrono.results_helpers import (_base_url)
 
@@ -56,10 +60,19 @@ def competitions_list():
         settings['itt_start_interval'] = get_cached_setting('itt_start_interval', '30')
         settings['itt_countdown_sound'] = get_cached_setting('itt_countdown_sound', '1')
         settings['start_date'] = get_cached_setting('start_date', '')
+        settings['rating_column'] = get_cached_setting('rating_column', '') or ''
         protocol_filled = bool((settings.get('proto_title') or '').strip())
+        rating_count, rating_updated, rating_columns = _ratings_stats()
+        if (not settings['rating_column'] and DEFAULT_RATING_COLUMN in rating_columns):
+            with conn:
+                set_cached_setting(conn, 'rating_column', DEFAULT_RATING_COLUMN)
+            settings['rating_column'] = DEFAULT_RATING_COLUMN
         return render_template('competitions.html', competition=comp, stats=stats,
                                settings=settings, race_format=_comp_format(comp),
-                               formats=RACE_FORMATS, protocol_filled=protocol_filled)
+                               formats=RACE_FORMATS, protocol_filled=protocol_filled,
+                               rating_columns=rating_columns, rating_count=rating_count,
+                               rating_updated=rating_updated,
+                               default_rating_column=DEFAULT_RATING_COLUMN)
     finally: conn.close()
 
 
@@ -87,6 +100,43 @@ def competition_format_save():
         flash(f'Параметры разделки сохранены: интервал {interval} с', 'success')
     finally:
         conn.close()
+    return redirect(url_for('competitions_list'))
+
+
+def competition_rating_save():
+    """Какой рейтинг (столбец из ratings-all.csv) использовать для сортировки."""
+    conn = get_db()
+    try:
+        _get_competition(conn)
+        column = (request.form.get('rating_column') or '').strip()
+        allowed = _ratings_columns()
+        if column and column not in allowed:
+            flash('Такого рейтинга нет в загруженном файле', 'error')
+            return redirect(url_for('competitions_list'))
+        with conn:
+            set_cached_setting(conn, 'rating_column', column)
+        flash('Рейтинг для сортировки сохранён: ' + column if column else 'Рейтинг отключён',
+              'success')
+    finally:
+        conn.close()
+    return redirect(url_for('competitions_list'))
+
+
+def competition_rating_refresh():
+    """Обновить кэш рейтингов bike.cedor.ru."""
+    count, columns, error = _ratings_refresh()
+    if error:
+        flash(error, 'error')
+    else:
+        current = (get_cached_setting('rating_column', '') or '').strip()
+        if (not current or current not in columns) and DEFAULT_RATING_COLUMN in columns:
+            conn = get_db()
+            try:
+                with conn:
+                    set_cached_setting(conn, 'rating_column', DEFAULT_RATING_COLUMN)
+            finally:
+                conn.close()
+        flash(f'Рейтинги обновлены: {count} спортсменов, столбцов: {len(columns)}', 'success')
     return redirect(url_for('competitions_list'))
 
 
@@ -834,6 +884,13 @@ def participants_list(cid):
 
         filters = {'q': q, 'cat': cat, 'city': city, 'team': team, 'gender': gender,
                    'year_op': year_op, 'year1': year1_raw, 'year2': year2_raw, 'order': order}
+        rating_column = (get_cached_setting('rating_column', '') or '').strip()
+        ratings = {}
+        if rating_column:
+            rating_index = _ratings_index()
+            for p in parts:
+                ratings[p['id']] = _rating_for(rating_index, p['full_name'],
+                                               p['birth_year'], rating_column)
         cats_by_id = {c['id']: c for c in categories}
         mismatch_reasons = {}
         for p in parts:
@@ -848,6 +905,7 @@ def participants_list(cid):
                                filters=filters, sort_urls=sort_urls,
                                has_none_category=has_none_category,
                                mismatch_reasons=mismatch_reasons,
+                               rating_column=rating_column, ratings=ratings,
                                tags_by_number=_tags_by_number(conn, cid),
                                qs=request.query_string.decode('utf-8', 'ignore'),
                                next_default=_next_reg_number(conn, cid))
@@ -1497,6 +1555,8 @@ def participants_import_confirm(cid):
 RULES = [
     ('/competitions', 'competitions_list', competitions_list, ['GET']),
     ('/competition/format', 'competition_format_save', competition_format_save, ['POST']),
+    ('/competition/rating', 'competition_rating_save', competition_rating_save, ['POST']),
+    ('/competition/rating/refresh', 'competition_rating_refresh', competition_rating_refresh, ['POST']),
     ('/competition/start-date', 'competition_start_date_save', competition_start_date_save, ['POST']),
     ('/competitions/<int:cid>/edit', 'competition_edit', competition_edit, ['POST']),
     ('/competitions/<int:cid>/links', 'competition_links', competition_links, ['GET']),

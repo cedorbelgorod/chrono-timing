@@ -23,6 +23,7 @@ RFID_DEFAULTS = {
 
 COMPETITION_DEFAULTS = {
     'start_date': '',
+    'rating_column': '',
 }
 
 PROTOCOL_DEFAULTS = {

@@ -6,6 +6,7 @@ import time
 
 from chrono.db import CERT_DIR, _ensure_registry, _migrate_competitions, init_db
 from chrono.people import _people_auto_refresh
+from chrono.ratings import _ratings_auto_refresh
 from chrono.rfid import start_swrfid_listener
 
 
@@ -14,6 +15,7 @@ def run(flask_app):
     _ensure_registry()
     _migrate_competitions()
     _people_auto_refresh()
+    _ratings_auto_refresh()
     start_swrfid_listener()
 
     CERT_PATH = os.path.join(CERT_DIR, 'shumilova.cedor.ru-crt.pem')

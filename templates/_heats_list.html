@@ -27,6 +27,7 @@
                 <th style="width:26px"></th>
                 <th style="width:44px">№</th>
                 <th style="width:76px">Номер</th>
+                <th style="width:86px">Рейтинг</th>
                 <th>ФИО</th>
                 <th style="width:170px">Категория</th>
                 <th style="width:96px">Старт</th>
@@ -40,6 +41,7 @@
                         role="button" tabindex="-1" title="Перетащите, чтобы изменить порядок">⋮⋮</span>{% endif %}</td>
                 <td class="so-pos mono">{{ r.position if r.position else '—' }}</td>
                 <td class="mono" style="font-weight:700">{{ r.number if r.number is not none else '—' }}</td>
+                <td class="mono so-rating">{{ r.rating|int if r.rating == r.rating|int else r.rating }}</td>
                 <td class="so-name">{{ r.full_name }}{% if r.birth_year %} <small>({{ r.birth_year }})</small>{% endif %}</td>
                 <td class="muted">{{ r.category or '—' }}</td>
                 <td class="mono so-time">{{ r.actual_display or r.planned_display or '—' }}</td>

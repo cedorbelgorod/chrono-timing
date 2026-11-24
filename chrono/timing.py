@@ -10,9 +10,15 @@ from chrono.settings import _comp_format, _heat_format, _itt_interval, get_cache
 from chrono.utils import _fmt_eta_short, _fmt_start_at, format_secs, format_secs_short
 
 
-SORT_MODES = ('number', 'category', 'name')
+SORT_MODES = ('number', 'category', 'name', 'rating')
 
-SORT_LABELS = {'number': 'По номеру', 'category': 'По категории', 'name': 'По ФИО'}
+SORT_LABELS = {'number': 'По номеру', 'category': 'По категории', 'name': 'По ФИО',
+               'rating': 'По рейтингу'}
+
+
+def _default_dir(mode):
+    """Направление по умолчанию: рейтинг — по убыванию (лучшие выше)."""
+    return 'desc' if mode == 'rating' else 'asc'
 
 
 def _parse_sort_spec(raw):
@@ -25,10 +31,10 @@ def _parse_sort_spec(raw):
         mode, _, direction = token.partition(':')
         if mode not in SORT_MODES or any(m == mode for m, _ in out):
             continue
-        out.append((mode, direction if direction in ('asc', 'desc') else 'asc'))
+        out.append((mode, direction if direction in ('asc', 'desc') else _default_dir(mode)))
     for mode in SORT_MODES:
         if not any(m == mode for m, _ in out):
-            out.append((mode, 'asc'))
+            out.append((mode, _default_dir(mode)))
     return out
 
 
@@ -49,7 +55,7 @@ def _heat_sort_spec(heat):
         legacy_dir = 'asc'
     if raw and ':' not in raw and raw in SORT_MODES:
         spec = [(raw, legacy_dir if legacy_dir in ('asc', 'desc') else 'asc')]
-        spec += [(m, 'asc') for m in SORT_MODES if m != raw]
+        spec += [(m, _default_dir(m)) for m in SORT_MODES if m != raw]
         return spec
     return _parse_sort_spec(raw)
 
@@ -424,6 +430,8 @@ def _manual_start_queue(conn, hid):
             parts += ['(c.id IS NULL)', f'COALESCE(c.sort_order, c.id){desc}', f'p.number{desc}']
         elif mode == 'name':
             parts.append(f'p.full_name COLLATE NOCASE{desc}')
+        elif mode == 'rating':
+            parts.append(f'COALESCE(hp.rating, 0){desc}')
         else:
             parts.append(f'p.number{desc}')
     order_by = ', '.join(parts)
@@ -535,7 +543,7 @@ def _heat_start_rows(conn, heat):
     except Exception:
         spec = _parse_sort_spec('')
     rows = conn.execute(
-        'SELECT hp.participant_id, hp.status AS hp_status, hp.sort_order, '
+        'SELECT hp.participant_id, hp.status AS hp_status, hp.sort_order, hp.rating, '
         '       p.number, p.full_name, p.birth_year, p.city, p.team, '
         "       COALESCE(c.name, '') AS category_name, COALESCE(c.laps_total, 1) AS category_laps, "
         '       c.sort_order AS cat_sort, '
@@ -551,6 +559,8 @@ def _heat_start_rows(conn, heat):
             return lambda r: (r['cat_sort'] if r['cat_sort'] is not None else 1000000)
         if mode == 'name':
             return lambda r: (r['full_name'] or '').lower()
+        if mode == 'rating':
+            return lambda r: (r['rating'] or 0)
         return lambda r: (r['number'] or 0)
 
     started, manual, auto, dns = [], [], [], []
@@ -604,6 +614,7 @@ def _heat_start_rows(conn, heat):
             'participant_id': r['participant_id'],
             'position': position if not is_dns else None,
             'number': r['number'],
+            'rating': r['rating'] or 0,
             'full_name': r['full_name'],
             'birth_year': r['birth_year'],
             'category': r['category_name'] or '',

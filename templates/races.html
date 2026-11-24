@@ -76,9 +76,10 @@
                 <label class="ch-switch">
                     <span>Порядок старта</span>
                     <select name="start_order" class="ch-num" style="width:auto">
-                        <option value="number" {{ 'selected' if heat_defaults.start_order != 'category' and heat_defaults.start_order != 'name' }}>По номеру</option>
+                        <option value="number" {{ 'selected' if heat_defaults.start_order not in ('category', 'name', 'rating') }}>По номеру</option>
                         <option value="category" {{ 'selected' if heat_defaults.start_order == 'category' }}>По категории, затем номер</option>
                         <option value="name" {{ 'selected' if heat_defaults.start_order == 'name' }}>По ФИО</option>
+                        <option value="rating" {{ 'selected' if heat_defaults.start_order == 'rating' }}>По рейтингу (лучшие выше)</option>
                     </select>
                     <small>по возрастанию</small>
                 </label>
@@ -826,7 +827,9 @@ function initCreateHeat() {
                 const name = document.createElement('span');
                 name.className = 'name';
                 name.textContent = p.name;
-                const extra = [p.year || '', p.gender || ''].filter(Boolean).join(' · ');
+                const bits = [p.year || '', p.gender || ''];
+                if (DATA.rating_column) bits.push('рейтинг ' + (p.rating || 0));
+                const extra = bits.filter(Boolean).join(' · ');
                 if (extra) {
                     const meta = document.createElement('small');
                     meta.textContent = ' ' + extra;
