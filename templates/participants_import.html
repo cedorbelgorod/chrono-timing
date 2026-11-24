@@ -32,7 +32,7 @@
     {% set dup_count = parsed | selectattr('dup_kind') | list | length %}
     <form method="post" action="{{ url_for('participants_import_confirm', cid=competition.id) }}">
         <p style="color:#374151">
-            Проверьте данные. Номера предзаполнены по порядку — отредактируйте или очистите
+            Проверьте данные. Номер можно оставить пустым — его выдадите на старте; при необходимости впишите номера вручную
             тех, кого не нужно импортировать.
         </p>
         {% if dup_count %}

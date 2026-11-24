@@ -111,6 +111,30 @@ def _word_matches(word, alias):
     if word == alias: return True
     return len(alias) >= 4 and word.startswith(alias[:-1])
 
+CONTACT_HEADER_RE = re.compile(
+    r'контакт|телефон|мобил|тел\b|whatsapp|ватсап|viber|смс')
+
+
+def _find_number_col(header):
+    """Колонка стартового номера: телефоны («Контактный номер») номером не считаем."""
+    exact = ('номер', 'номер на старте', 'стартовый номер', 'bib', 'number')
+    candidates = []
+    for i, h in enumerate(header):
+        if CONTACT_HEADER_RE.search(h):
+            continue
+        if any(_word_matches(w, a) for w in h.split() for a in HEADER_ALIASES['number']):
+            candidates.append((i, h))
+    if not candidates:
+        return None
+    for i, h in candidates:
+        if h.strip() in exact:
+            return i
+    for i, h in candidates:
+        if 'стартов' in h:
+            return i
+    return candidates[0][0]
+
+
 def _find_header_col(header, aliases):
     """Ищет колонку: точное имя, затем отдельное слово, затем вхождение в слово.
 

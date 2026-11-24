@@ -22,7 +22,7 @@ from chrono.catalog import (
     CATEGORY_HEADER_ALIASES, HEADER_ALIASES, MAX_TAGS_PER_NUMBER, PARTICIPANT_SORTS,
     TAGS_HEADER_ALIASES, _apply_age_range, _auto_category, _category_age_hint,
     _cat_genders, _category_mismatch, _category_mismatch_reason, _category_overlaps,
-    _cell_text, _find_header_col,
+    _cell_text, _find_header_col, _find_number_col,
     _invalidate_competition_meta, _issue_number, _join_genders, _next_number, _norm_header,
     _norm_name, _parse_gender_cell, _participants_redirect, _plabel, _save_bib_tags, _scalar,
     _tags_by_number,
@@ -1344,7 +1344,7 @@ def participants_import(cid):
         col_rfid = _find_header_col(header, HEADER_ALIASES['rfid'])
         col_city = _find_header_col(header, HEADER_ALIASES['city'])
         col_team = _find_header_col(header, HEADER_ALIASES['team'])
-        col_number = _find_header_col(header, HEADER_ALIASES['number'])
+        col_number = _find_number_col(header)
         if col_fio is None or col_gender is None:
             flash('В файле нет обязательных колонок (ФИО, Пол)', 'error'); return redirect(url_for('participants_import', cid=cid))
         existing_keys = {(_norm_name(ep['full_name']), ep['birth_year']) for ep in conn.execute('SELECT full_name, birth_year FROM participants WHERE competition_id = ?', (cid,)).fetchall()}
@@ -1371,7 +1371,8 @@ def participants_import(cid):
                     row_number = int(float(str(raw_number).strip().replace(',', '.')))
                 except (TypeError, ValueError):
                     row_number = None
-                if row_number is not None and row_number < 1:
+                if row_number is not None and (row_number < 1 or row_number > 99999):
+                    # заведомо не номер старта (например, телефон из формы)
                     row_number = None
 
             tag_conflict = ''
