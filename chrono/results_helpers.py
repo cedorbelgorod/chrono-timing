@@ -407,4 +407,6 @@ def _hub_data(conn, entry):
         'date_display': date_display,
         'heats': heats,
         'registration': get_cached_setting('reg_enabled', '0') == '1',
+        'participants': conn.execute(
+            'SELECT COUNT(*) FROM participants WHERE competition_id = ?', (cid,)).fetchone()[0],
     }

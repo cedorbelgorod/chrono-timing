@@ -62,6 +62,9 @@
         {% if data.registration %}
             <a class="btn primary" href="{{ url_for('reg_intro', slug=data.slug) }}">Зарегистрироваться</a>
         {% endif %}
+        <a class="btn" href="{{ url_for('reg_list', slug=data.slug) }}">
+            Зарегистрированные{% if data.participants %} ({{ data.participants }}){% endif %}
+        </a>
         <a class="btn" href="{{ url_for('public_results', slug=data.slug) }}">Результаты</a>
         <a class="btn" href="{{ url_for('public_live', slug=data.slug) }}">Табло</a>
     </div>

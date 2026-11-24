@@ -35,6 +35,15 @@ class PublicHubTest(ChronoTestCase):
             chrono._settings_cache.clear()
         self.assertIn('Зарегистрироваться', anon.get(f'/p/{slug}').get_data(as_text=True))
 
+    def test_hub_links_to_registered_list(self):
+        self.itt_heat(laps=(2, 3))
+        slug = self.comp['slug']
+        anon = self.public_client()
+        html = anon.get(f'/p/{slug}').get_data(as_text=True)
+        self.assertIn(f'/reg/{slug}/list', html)
+        self.assertIn('Зарегистрированные (2)', html)
+        self.assertEqual(anon.get(f'/reg/{slug}/list').status_code, 200)
+
     def test_hidden_and_archived_are_404(self):
         self._add_competition('Скрытое', 'hidden-one', hidden=True)
         self._add_competition('Архивное', 'archive-one', archived=True)
