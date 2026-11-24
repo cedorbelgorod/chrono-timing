@@ -6,17 +6,6 @@
 
 {% if competition %}
 
-    {# ==================== ССЫЛКА НА ХРОНОМЕТРАЖ ==================== #}
-    <div class="manual-block">
-        <h3 style="margin:0 0 8px 0">📱 Хронометраж</h3>
-        <p style="margin:0 0 12px 0;color:#4b5563">
-            Отдельная мобильная страница для фиксации кругов и финиша.
-        </p>
-        <a href="{{ url_for('manual_page', cid=competition.id) }}" class="btn btn-sm btn-ghost">
-            📱 Открыть ручной хронометраж →
-        </a>
-    </div>
-
     {# ==================== СОЗДАНИЕ СТАРТА ==================== #}
         {# ==================== СОЗДАНИЕ СТАРТА ==================== #}
     <div class="create-heat" id="create-heat">
@@ -169,20 +158,6 @@
 </div>
 
 <style>
-.manual-block {
-    background: #fff; padding: 16px 20px; border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 16px;
-    border-left: 4px solid #2563eb;
-}
-.btn-manual-link {
-    display: inline-block;
-    background: #2563eb; color: #fff;
-    padding: 10px 20px; border-radius: 8px;
-    font-weight: 600; font-size: 15px;
-    text-decoration: none;
-}
-.btn-manual-link:hover { background: #1d4ed8; }
-
 .create-heat {
     background: #fff; border-radius: 12px;
     box-shadow: 0 1px 3px rgba(0,0,0,.07);
