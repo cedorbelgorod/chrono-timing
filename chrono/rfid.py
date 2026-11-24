@@ -9,7 +9,7 @@ except ImportError:
     RFIDReader = None
     SWRFID_AVAILABLE = False
 from chrono.catalog import (_participant_by_tag)
-from chrono.db import (get_db)
+from chrono.db import (_db_key, get_db)
 from chrono.logging_setup import (_swrfid_logger)
 from chrono.manual_helpers import (AUTO_LOG_SIZE, _log_timing)
 from chrono.settings import (_reload_settings_cache_from_db, _settings_cache, _settings_lock)
@@ -27,10 +27,19 @@ _auto_log_lock = threading.Lock()
 
 _auto_log = []
 
-def _push_auto_log(entry):
+def _push_auto_log(entry, key=''):
+    """Журнал автохронометража: записи помечаются базой соревнования."""
+    entry = dict(entry)
+    entry['key'] = key
     with _auto_log_lock:
         _auto_log.insert(0, entry)
         del _auto_log[AUTO_LOG_SIZE:]
+
+
+def _auto_log_for(key):
+    """Записи авто-журнала только для указанной базы."""
+    with _auto_log_lock:
+        return [e for e in _auto_log if e.get('key') == key]
 
 def _process_tag_scan(conn, tag, scan_time=None):
     if scan_time is None: scan_time = datetime.now()
@@ -40,9 +49,14 @@ def _process_tag_scan(conn, tag, scan_time=None):
         _log_timing(conn, 'auto', 'scan', False, reason='Пустая метка')
         return {'ok': False, 'error': 'Пустая метка'}
 
+    log_key = _db_key(conn)
+
+    def alog(entry):
+        _push_auto_log(entry, log_key)
+
     p = _participant_by_tag(conn, tag)
     if not p:
-        _push_auto_log({'ok': False, 'tag': tag, 'message': 'Метка не привязана к номеру', 'time': now_ts})
+        alog({'ok': False, 'tag': tag, 'message': 'Метка не привязана к номеру', 'time': now_ts})
         _log_timing(conn, 'auto', 'scan', False, reason='Метка не привязана к номеру', detail=f'EPC {tag}')
         return {'ok': False, 'error': 'Метка не привязана к номеру'}
 
@@ -62,28 +76,28 @@ def _process_tag_scan(conn, tag, scan_time=None):
     ''', (p['id'],)).fetchone()
 
     if not race:
-        _push_auto_log({'ok': False, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': 'Не в стартах', 'time': now_ts})
+        alog({'ok': False, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': 'Не в стартах', 'time': now_ts})
         log(False, 'scan', reason='Участник не в стартах', detail=f'EPC {tag}')
         return {'ok': False, 'error': f'Участник №{p["number"]} не на дистанции'}
 
     if race['status'] != 'running':
-        _push_auto_log({'ok': False, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': 'Заезд завершён', 'time': now_ts})
+        alog({'ok': False, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': 'Заезд завершён', 'time': now_ts})
         log(False, 'scan', reason='Заезд уже завершён', race=race, detail=f'Старт №{race["heat_number"]}')
         return {'ok': False, 'error': 'Заезд завершён'}
 
     if race['heat_status'] != 'running':
-        _push_auto_log({'ok': False, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': 'Старт завершён', 'time': now_ts})
+        alog({'ok': False, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': 'Старт завершён', 'time': now_ts})
         log(False, 'scan', reason='Старт завершён', race=race)
         return {'ok': False, 'error': 'Старт завершён'}
 
     if not race['auto_enabled']:
-        _push_auto_log({'ok': False, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': 'Авто выключен', 'time': now_ts})
+        alog({'ok': False, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': 'Авто выключен', 'time': now_ts})
         log(False, 'scan', reason='Автохронометраж выключен', race=race, detail=f'Старт №{race["heat_number"]}')
         return {'ok': False, 'error': f'Автохронометраж выключен (старт №{race["heat_number"]})'}
 
     laps_done = conn.execute('SELECT COUNT(*) FROM auto_laps WHERE race_id = ?', (race['id'],)).fetchone()[0]
     if laps_done >= race['laps_total']:
-        _push_auto_log({'ok': False, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': 'Уже финишировал (авто)', 'time': now_ts})
+        alog({'ok': False, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': 'Уже финишировал (авто)', 'time': now_ts})
         log(False, 'scan', reason='Уже финишировал', race=race)
         return {'ok': False, 'error': f'Участник №{p["number"]} уже финишировал (авто)'}
 
@@ -94,7 +108,7 @@ def _process_tag_scan(conn, tag, scan_time=None):
 
     if elapsed < min_lap:
         msg = f'Рано ({elapsed:.1f} < {min_lap} с)'
-        _push_auto_log({'ok': False, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': msg, 'time': now_ts})
+        alog({'ok': False, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': msg, 'time': now_ts})
         log(False, 'scan', reason='Слишком рано', race=race, detail=f'{elapsed:.1f} с < {min_lap} с')
         return {'ok': False, 'error': msg}
 
@@ -107,7 +121,7 @@ def _process_tag_scan(conn, tag, scan_time=None):
         _process_race_finish(conn, race, scan_time.isoformat(), force=False)
 
     msg = 'ФИНИШ (авто) 🏁' if is_finish else f'Круг {lap_num}/{race["laps_total"]} (авто)'
-    _push_auto_log({'ok': True, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': msg, 'time': now_ts})
+    alog({'ok': True, 'tag': tag, 'participant': p['full_name'], 'number': p['number'], 'message': msg, 'time': now_ts})
     log(True, 'finish' if is_finish else 'lap', race=race,
         detail=f'Круг {lap_num}/{race["laps_total"]} · EPC {tag}')
 

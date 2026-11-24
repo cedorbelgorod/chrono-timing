@@ -5,7 +5,7 @@ from datetime import datetime
 
 from flask import flash, jsonify, redirect, render_template, request, session, url_for
 
-from chrono.db import (_get_competition, get_db)
+from chrono.db import (_db_key, _get_competition, get_db)
 from chrono.settings import (_comp_format)
 from chrono.timing import (
     _build_merged_laps, _manual_start_queue, _manual_start_state, _process_race_finish,
@@ -24,9 +24,21 @@ def manual_page():
             state = _manual_start_state(conn, selected_cid)
             return render_template('manual_start.html', competition=comp, state=state)
         competition, active_races = _get_manual_data(conn, selected_cid)
+        # id соревнований в разных базах одинаковые — разделяем по слагу/пути базы
+        comp_key = session.get('comp') or _db_key(conn)
         if competition:
-            if session.get('manual_cid') != selected_cid: session.pop('manual_log', None); session.pop('manual_last', None); session.pop('last_action', None); session['manual_cid'] = selected_cid
-        else: session.pop('manual_log', None); session.pop('manual_last', None); session.pop('last_action', None); session.pop('manual_cid', None)
+            if session.get('manual_key') != comp_key:
+                session.pop('manual_log', None)
+                session.pop('manual_last', None)
+                session.pop('last_action', None)
+                session['manual_key'] = comp_key
+            session.pop('manual_cid', None)
+        else:
+            session.pop('manual_log', None)
+            session.pop('manual_last', None)
+            session.pop('last_action', None)
+            session.pop('manual_key', None)
+            session.pop('manual_cid', None)
         return render_template('manual.html', competition=competition, active_races=active_races,
                                last=session.get('manual_last'), log=session.get('manual_log', []),
                                race_format=race_fmt)
@@ -164,6 +176,12 @@ def manual_active():
     try:
         competition, active_races = _get_manual_data(conn, cid)
         if not competition: return '', 404
+        comp_key = session.get('comp') or _db_key(conn)
+        if session.get('manual_key') != comp_key:
+            session.pop('manual_log', None)
+            session.pop('manual_last', None)
+            session.pop('last_action', None)
+            session['manual_key'] = comp_key
         return render_template('_manual_active.html', competition=competition, active_races=active_races, last=session.get('manual_last'), log=session.get('manual_log', []))
     finally: conn.close()
 

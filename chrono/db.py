@@ -219,6 +219,17 @@ def _connect(path):
     conn.execute('PRAGMA foreign_keys = ON')
     return conn
 
+def _db_key(conn):
+    """Ключ базы соревнования (путь файла): id соревнований в разных базах совпадают."""
+    try:
+        for row in conn.execute('PRAGMA database_list').fetchall():
+            if row[1] == 'main':
+                return row[2] or ''
+    except Exception:
+        pass
+    return ''
+
+
 def get_db():
     """Соединение с базой текущего соревнования."""
     return _connect(_active_db_path())

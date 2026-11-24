@@ -10,12 +10,12 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
-from chrono.db import (LOG_DIR, _get_competition, get_db)
+from chrono.db import (LOG_DIR, _db_key, _get_competition, get_db)
 from chrono.settings import (RFID_DEFAULTS, get_cached_setting)
 from chrono.utils import (format_secs_short)
 from chrono.results_helpers import (_auto_redirect, _get_auto_rows, _read_log_tail, _save_setting)
 from chrono.rfid import (
-    SWRFID_AVAILABLE, _auto_log, _auto_log_lock, _swrfid_status, _swrfid_status_lock,
+    SWRFID_AVAILABLE, _auto_log_for, _swrfid_status, _swrfid_status_lock,
 )
 
 
@@ -47,7 +47,7 @@ def auto_page():
                 rows = _get_auto_rows(conn, hid)
         settings = {k: get_cached_setting(k, RFID_DEFAULTS[k]) for k in RFID_DEFAULTS}
         with _swrfid_status_lock: swrfid_snapshot = dict(_swrfid_status)
-        with _auto_log_lock: auto_log_snapshot = list(_auto_log)
+        auto_log_snapshot = _auto_log_for(_db_key(conn))
         return render_template('auto.html', competition=competition, heats=heats, rows=rows,
                                selected_heat_id=selected_heat_id, selected_heat=selected_heat, settings=settings,
                                swrfid_status=swrfid_snapshot, auto_log=auto_log_snapshot)
@@ -70,8 +70,12 @@ def auto_device_page():
 
 
 def auto_log():
-    with _auto_log_lock:
-        return render_template('_auto_log.html', auto_log=list(_auto_log))
+    conn = get_db()
+    try:
+        key = _db_key(conn)
+    finally:
+        conn.close()
+    return render_template('_auto_log.html', auto_log=_auto_log_for(key))
 
 
 def auto_detail_rows():

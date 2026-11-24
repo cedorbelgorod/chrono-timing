@@ -10,7 +10,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
-from chrono.db import (_get_competition, get_db)
+from chrono.db import (_db_key, _get_competition, get_db)
 from chrono.pdf import (_render_startlist_pdf)
 from chrono.settings import (
     _comp_format, _heat_format, _itt_interval, get_cached_setting, set_cached_setting,
@@ -42,7 +42,11 @@ def races_page():
             'start_order': get_cached_setting('heat_start_order', 'number') or 'number',
         }
         if competition:
-            if session.get('last_cid') != selected_cid: session.pop('last_action', None); session['last_cid'] = selected_cid
+            comp_key = session.get('comp') or _db_key(conn)
+            if session.get('last_comp_key') != comp_key:
+                session.pop('last_action', None)
+                session['last_comp_key'] = comp_key
+            session.pop('last_cid', None)
             used_map = {r['category_id']: r['heat_number'] for r in conn.execute(
                 'SELECT hc.category_id, h.heat_number FROM heat_categories hc JOIN heats h ON h.id = hc.heat_id WHERE h.competition_id = ?',
                 (selected_cid,)).fetchall()}
