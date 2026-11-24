@@ -115,6 +115,31 @@ class UiSettingsAutosaveTest(ChronoTestCase):
         self.assertTrue(resp.get_json()['ok'])
 
 
+class UiCategoryCountsTest(ChronoTestCase):
+    def test_counts_and_highlighting(self):
+        self.login_admin()
+        cid = self.comp['id']
+        with self.conn:
+            ids = []
+            for name in ('Пустая', 'Мало', 'Много'):
+                ids.append(self.conn.execute(
+                    "INSERT INTO categories (competition_id, name, laps_total, gender, sort_order) "
+                    "VALUES (?, ?, 1, 'M', 1)", (cid, name)).lastrowid)
+            self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender, category_id) "
+                "VALUES (?, 1, 'Мало Участник', 'M', ?)", (cid, ids[1]))
+            for n in range(3):
+                self.conn.execute(
+                    "INSERT INTO participants (competition_id, number, full_name, gender, category_id) "
+                    "VALUES (?, ?, 'Много Участник', 'M', ?)", (cid, 10 + n, ids[2]))
+        html = self.client.get(f'/competitions/{cid}/categories').get_data(as_text=True)
+        self.assertIn('Участники', html)
+        self.assertIn('cat-cnt-empty', html)
+        self.assertIn('cat-cnt-few', html)
+        self.assertIn('cat-row', html)
+        self.assertIn('cats-legend', html)
+
+
 class UiTerminologyTest(ChronoTestCase):
     def test_participants_use_category_wording(self):
         self.login_admin()

@@ -252,8 +252,12 @@ def categories_list(cid):
         categories = conn.execute(
             'SELECT * FROM categories WHERE competition_id = ? '
             'ORDER BY COALESCE(sort_order, id), id', (cid,)).fetchall()
+        counts = {row['category_id']: row['n'] for row in conn.execute(
+            'SELECT category_id, COUNT(*) AS n FROM participants '
+            'WHERE competition_id = ? AND category_id IS NOT NULL '
+            'GROUP BY category_id', (cid,))}
         return render_template('categories.html', competition=comp, categories=categories,
-                               overlaps=_category_overlaps(categories),
+                               overlaps=_category_overlaps(categories), counts=counts,
                                start_year=start_year,
                                age_hints={c['id']: _category_age_hint(c, start_year) for c in categories},
                                form=form, form_error=form_error, error_field=error_field,
@@ -533,8 +537,12 @@ def categories_save_all(cid):
             categories = conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY COALESCE(sort_order, id), id', (cid,)).fetchall()
             for e in errors[:8]: flash(e, 'error')
             if len(errors) > 8: flash(f'… и ещё {len(errors) - 8} ошибок', 'error')
+            counts = {row['category_id']: row['n'] for row in conn.execute(
+                'SELECT category_id, COUNT(*) AS n FROM participants '
+                'WHERE competition_id = ? AND category_id IS NOT NULL '
+                'GROUP BY category_id', (cid,))}
             return render_template('categories.html', competition=comp, categories=categories,
-                                   overlaps=_category_overlaps(categories),
+                                   overlaps=_category_overlaps(categories), counts=counts,
                                    start_year=start_year,
                                    age_hints={c['id']: _category_age_hint(c, start_year) for c in categories},
                                    form={'name': '', 'laps_total': '1', 'gender': [], 'age_range': ''},

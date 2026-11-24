@@ -57,13 +57,14 @@
     <table id="cats-table" class="cats-table is-compact"
            data-reorder-url="{{ url_for('categories_reorder', cid=competition.id) }}">
         <colgroup>
-            <col class="c-sort"><col class="c-name"><col class="c-laps"><col class="c-act">
+            <col class="c-sort"><col class="c-name"><col class="c-laps"><col class="c-cnt"><col class="c-act">
         </colgroup>
         <thead>
             <tr>
                 <th class="th-sort">Сортировка</th>
                 <th class="th-name">Название</th>
                 <th class="th-laps">Кругов</th>
+                <th class="th-cnt" title="Сколько участников в категории. Пустая — красная, меньше 3 — жёлтая">Участники</th>
                 <th class="th-act" aria-label="Действия"></th>
             </tr>
         </thead>
@@ -72,11 +73,13 @@
             {% set ov = overlaps.get(cat.id) %}
             {% set s = submitted.get(cat.id) if submitted else none %}
             {% set err = row_errors.get(cat.id) if row_errors else none %}
+            {% set cnt = counts.get(cat.id, 0) %}
             {% set g = (s.gender if s else cat.gender) or '' %}
             {% set has_cond = g or (s.age_range if s else cat.age_range)
                               or (s.lap_length if s else cat.lap_length) or (s.hd if s else cat.hd)
                               or (s.ms if s else cat.ms) or (s.ts if s else cat.ts) %}
-            <tr class="cat-row {{ 'row-overlap' if ov }} {{ 'row-error' if err }}" data-id="{{ cat.id }}">
+            <tr class="cat-row {{ 'row-overlap' if ov }} {{ 'row-error' if err }} {{ 'cat-empty' if not cnt }} {{ 'cat-few' if cnt and cnt < 3 }}"
+                data-id="{{ cat.id }}">
                 <td class="td-sort" data-label="Порядок">
                     <span class="drag-handle" draggable="true" role="button" tabindex="-1"
                           title="Перетащите строку, чтобы изменить порядок">⋮⋮</span>
@@ -112,6 +115,12 @@
                                 aria-label="Больше кругов">+</button>
                     </span>
                 </td>
+                <td class="td-cnt" data-label="Участники">
+                    <span class="cat-cnt {{ 'cat-cnt-empty' if not cnt }} {{ 'cat-cnt-few' if cnt and cnt < 3 }}"
+                          title="{{ 'Ни одного участника' if not cnt else ('Участников: ' ~ cnt) if cnt >= 3 else ('Мало участников: ' ~ cnt) }}">
+                        {{ cnt }}
+                    </span>
+                </td>
                 <td class="td-act" data-label="">
                     <button type="button" class="icon-btn gear {{ 'active' if has_cond }}"
                             data-modal="cat-modal-{{ cat.id }}"
@@ -125,6 +134,11 @@
         {% endfor %}
         </tbody>
     </table>
+    </div>
+    <div class="cats-legend">
+        <span><span class="cat-cnt cat-cnt-empty">0</span> нет участников</span>
+        <span><span class="cat-cnt cat-cnt-few">1–2</span> мало участников</span>
+        <span class="muted">Счётчик обновляется при сохранении списка участников.</span>
     </div>
 
     {# условия категорий — в модалке, поля остаются в этой же форме #}
@@ -212,6 +226,25 @@
 }
 #cats-table td { padding: 4px 10px; vertical-align: middle; border-bottom: 1px solid #eef0f3; }
 #cats-table tbody tr:nth-child(even) { background: #fafbfc; }
+
+/* подсветка: пустая категория — слабо-красная, меньше 3 участников — слабо-жёлтая */
+#cats-table tbody tr.cat-empty:not(.row-error):not(.row-overlap) { background: #fef2f2; }
+#cats-table tbody tr.cat-empty:not(.row-error):not(.row-overlap):hover { background: #fee2e2; }
+#cats-table tbody tr.cat-few:not(.row-error):not(.row-overlap) { background: #fffbeb; }
+#cats-table tbody tr.cat-few:not(.row-error):not(.row-overlap):hover { background: #fef3c7; }
+
+.cat-cnt {
+    display: inline-block; min-width: 26px; padding: 2px 8px; border-radius: 999px;
+    background: #f3f4f6; color: #374151; font-size: 12px; font-weight: 700;
+    text-align: center; font-variant-numeric: tabular-nums;
+}
+.cat-cnt-empty { background: #fee2e2; color: #991b1b; }
+.cat-cnt-few { background: #fef3c7; color: #92400e; }
+.cats-legend {
+    display: flex; gap: 6px 14px; align-items: center; flex-wrap: wrap;
+    margin-top: 8px; font-size: 12px; color: #6b7280;
+}
+.cats-legend .cat-cnt { margin-right: 4px; }
 #cats-table tbody tr:hover { background: #f3f6fb; }
 #cats-table tbody tr.row-changed { background: #fffbeb; }
 #cats-table tbody tr.row-changed:hover { background: #fff7e0; }
@@ -221,7 +254,9 @@
 
 #cats-table .th-sort, #cats-table .td-sort,
 #cats-table .th-laps, #cats-table .td-laps,
+#cats-table .th-cnt, #cats-table .td-cnt,
 #cats-table .th-act,  #cats-table .td-act { width: 1px; white-space: nowrap; }
+#cats-table .td-cnt { text-align: right; }
 #cats-table .th-name, #cats-table .td-name { width: 100%; }
 
 #cats-table .row-input {
