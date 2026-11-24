@@ -79,6 +79,7 @@ def index():
         if c.get('archived') or c.get('hidden'):
             continue
         item = dict(c)
+        item['format'] = c.get('format') or 'mass'
         item['authorized'] = c.get('slug') in auth
         item['current'] = (c.get('slug') == current)
         items.append(item)

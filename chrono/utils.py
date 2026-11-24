@@ -87,6 +87,68 @@ def _parse_year(raw):
     if 1000 <= num <= 2100: return num
     return None
 
+def _parse_age_range(raw):
+    """Строка возраста → (age_min, age_max); пусто → (None, None).
+
+    Форматы: «9-10», «-6» (6 и младше), «9-» (9 и старше), «9» (= 9–9).
+    Возвращает (age_min, age_max, ошибка) — ошибка None, если всё разобрано.
+    """
+    s = str(raw or '').strip().replace('–', '-').replace('—', '-')
+    if not s:
+        return None, None, None
+    if '-' in s:
+        left, right = s.split('-', 1)
+        left, right = left.strip(), right.strip()
+        if not left and not right:
+            return None, None, 'Укажите возраст: например 9-10, -6 или 9-'
+        try:
+            age_min = int(left) if left else None
+            age_max = int(right) if right else None
+        except ValueError:
+            return None, None, 'Возраст должен быть числом или диапазоном: 9-10, -6, 9-'
+    else:
+        try:
+            age_min = age_max = int(s)
+        except ValueError:
+            return None, None, 'Возраст должен быть числом или диапазоном: 9-10, -6, 9-'
+    for value in (age_min, age_max):
+        if value is not None and (value < 0 or value > 120):
+            return None, None, 'Возраст должен быть от 0 до 120'
+    if age_min is not None and age_max is not None and age_min > age_max:
+        return None, None, 'Возраст «от» не может быть больше возраста «до»'
+    return age_min, age_max, None
+
+def _format_age_range(age_min, age_max):
+    """(age_min, age_max) → строка возраста («9-10», «-6», «9-», «9», '')."""
+    if age_min is None and age_max is None:
+        return ''
+    if age_min is None:
+        return f'-{age_max}'
+    if age_max is None:
+        return f'{age_min}-'
+    if age_min == age_max:
+        return str(age_min)
+    return f'{age_min}-{age_max}'
+
+def _age_range_years(start_year, age_min, age_max):
+    """Окно годов рождения для возраста на 31 декабря года старта."""
+    year_from = (start_year - age_max) if age_max is not None else None
+    year_to = (start_year - age_min) if age_min is not None else None
+    return year_from, year_to
+
+def _age_range_hint(start_year, age_min, age_max):
+    """Подсказка «2016–2017 г.р.» для категории."""
+    year_from, year_to = _age_range_years(start_year, age_min, age_max)
+    if year_from is None and year_to is None:
+        return ''
+    if year_from is not None and year_to is not None:
+        if year_from == year_to:
+            return f'{year_from} г.р.'
+        return f'{year_from}–{year_to} г.р.'
+    if year_from is not None:
+        return f'{year_from} г.р. и младше'
+    return f'{year_to} г.р. и старше'
+
 def _qr_svg(data, box=6, border=2):
     """QR-код как inline-SVG. Возвращает None, если библиотеки нет."""
     try:
@@ -113,6 +175,15 @@ def _speed_kmh(sec, km):
     if not km or not sec:
         return ''
     return f'{km / (sec / 3600):.1f}'.replace('.', ',')
+
+def _fmt_date(value):
+    """ISO-дата «2026-11-23» → «23.11.2026» (или пусто)."""
+    if not value:
+        return ''
+    try:
+        return datetime.strptime(str(value)[:10], '%Y-%m-%d').strftime('%d.%m.%Y')
+    except (TypeError, ValueError):
+        return ''
 
 def _fmt_start_at(value):
     """Плановое время старта: ISO → «23.11.2026 12:00» (или пусто)."""

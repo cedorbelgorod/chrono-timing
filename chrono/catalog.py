@@ -4,6 +4,8 @@ from datetime import datetime
 import re
 from flask import redirect, url_for, session
 
+from chrono.utils import _age_range_hint, _age_range_years, _parse_age_range
+
 MAX_TAGS_PER_NUMBER = 2
 
 def _tags_by_number(conn, cid):
@@ -220,6 +222,32 @@ def _cats_overlap(a, b):
 def _cat_has_conditions(cat):
     return bool(cat['gender']) or cat['year_from'] is not None or cat['year_to'] is not None
 
+def _apply_age_range(conn, cid, start_year):
+    """Пересчитывает годы рождения категорий из строки возраста и года старта.
+
+    Возраст участника считается на 31 декабря года старта: age = год − год рождения.
+    """
+    updated = 0
+    for cat in conn.execute(
+            'SELECT id, age_range, year_from, year_to FROM categories WHERE competition_id = ?',
+            (cid,)).fetchall():
+        age_min, age_max, _err = _parse_age_range(cat['age_range'])
+        year_from, year_to = _age_range_years(start_year, age_min, age_max)
+        if (year_from, year_to) != (cat['year_from'], cat['year_to']):
+            conn.execute('UPDATE categories SET year_from = ?, year_to = ? WHERE id = ?',
+                         (year_from, year_to, cat['id']))
+            updated += 1
+    return updated
+
+def _category_age_hint(cat, start_year):
+    """Подсказка «2016–2017 г.р.» для категории (по строке возраста)."""
+    age_min, age_max, _err = _parse_age_range(cat['age_range'])
+    return _age_range_hint(start_year, age_min, age_max)
+
+def _category_mismatch(cat, gender, birth_year):
+    """Участник не попадает в условия категории (пол + возраст)."""
+    return not _category_matches(cat, gender, birth_year)
+
 def _category_overlaps(categories):
     """{id: [названия пересекающихся]} — только для подсветки, ввод не запрещаем."""
     result = {}
@@ -247,6 +275,7 @@ CATEGORY_HEADER_ALIASES = {
     'name': ['название', 'категория', 'группа', 'name', 'category'],
     'laps': ['кругов', 'круги', 'круг', 'количество кругов', 'кол во кругов', 'laps', 'laps total'],
     'gender': ['пол', 'gender', 'sex'],
+    'age': ['возраст', 'возраст участника', 'возраст от до', 'age', 'ages'],
     'year_from': ['год с', 'год от', 'с года', 'год рождения с', 'year from'],
     'year_to': ['год по', 'по год', 'до года', 'год рождения по', 'year to'],
 }

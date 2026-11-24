@@ -2,6 +2,7 @@
 """Настройки соревнований: кэш по базам, форматы, интервалы."""
 import os
 import threading
+from datetime import datetime
 
 from chrono.db import _active_db_path, _connect
 
@@ -18,6 +19,10 @@ RFID_DEFAULTS = {
     'swrfid_enabled': '0',
     'swrfid_port': 'COM3',
     'swrfid_baud': '115200',
+}
+
+COMPETITION_DEFAULTS = {
+    'start_date': '',
 }
 
 PROTOCOL_DEFAULTS = {
@@ -61,6 +66,13 @@ def _comp_format(comp):
     except (KeyError, IndexError):
         return 'mass'
     return value if value in RACE_FORMATS else 'mass'
+
+def _competition_start_year():
+    """Год плановой даты старта; если дата не задана — текущий год."""
+    value = (get_cached_setting('start_date', '') or '').strip()
+    if len(value) >= 4 and value[:4].isdigit():
+        return int(value[:4])
+    return datetime.now().year
 
 def _itt_interval():
     """Интервал старта в разделке, секунды (минимум 5)."""

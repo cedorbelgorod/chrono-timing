@@ -76,7 +76,9 @@
 </div>
 
 <div class="wrap">
-    <div class="count">Всего участников: <b>{{ total }}</b></div>
+    <div class="count">
+        Всего участников: <b>{{ total }}</b>{% if start_date %} · 📅 Старт: <b>{{ start_date }}</b>{% endif %}
+    </div>
 
     {% if rows %}
         <div class="card">

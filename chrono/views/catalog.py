@@ -4,6 +4,7 @@
 import io
 import re
 import sqlite3
+from datetime import datetime
 
 from flask import flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from openpyxl import Workbook, load_workbook
@@ -11,14 +12,16 @@ from openpyxl.styles import Font
 
 from chrono.db import (_get_competition, _registry_find, get_db)
 from chrono.settings import (
-    PROTOCOL_DEFAULTS, RACE_FORMATS, _comp_format, _reload_settings_cache_from_db,
-    get_cached_setting,
+    PROTOCOL_DEFAULTS, RACE_FORMATS, _comp_format, _competition_start_year,
+    _reload_settings_cache_from_db, get_cached_setting,
 )
 from chrono.timing import (_heat_participant_counts)
-from chrono.utils import (_normalize_gender, _parse_year)
+from chrono.utils import (_age_range_hint, _age_range_years, _format_age_range,
+                          _normalize_gender, _parse_age_range, _parse_year)
 from chrono.catalog import (
     CATEGORY_HEADER_ALIASES, HEADER_ALIASES, MAX_TAGS_PER_NUMBER, PARTICIPANT_SORTS,
-    TAGS_HEADER_ALIASES, _auto_category, _category_overlaps, _cell_text, _find_header_col,
+    TAGS_HEADER_ALIASES, _apply_age_range, _auto_category, _category_age_hint,
+    _category_mismatch, _category_overlaps, _cell_text, _find_header_col,
     _invalidate_competition_meta, _issue_number, _join_genders, _next_number, _norm_header,
     _norm_name, _parse_gender_cell, _participants_redirect, _plabel, _save_bib_tags, _scalar,
     _tags_by_number,
@@ -51,6 +54,7 @@ def competitions_list():
         settings = {k: get_cached_setting(k, '') for k in PROTOCOL_DEFAULTS}
         settings['itt_start_interval'] = get_cached_setting('itt_start_interval', '30')
         settings['itt_countdown_sound'] = get_cached_setting('itt_countdown_sound', '1')
+        settings['start_date'] = get_cached_setting('start_date', '')
         protocol_filled = bool((settings.get('proto_title') or '').strip())
         return render_template('competitions.html', competition=comp, stats=stats,
                                settings=settings, race_format=_comp_format(comp),
@@ -59,13 +63,10 @@ def competitions_list():
 
 
 def competition_format_save():
-    """Формат соревнования (один на все старты) и параметры разделки."""
+    """Параметры разделки (интервал, звук). Тип старта задаётся при создании."""
     conn = get_db()
     try:
-        comp = _get_competition(conn)
-        fmt = (request.form.get('format') or 'mass').strip()
-        if fmt not in RACE_FORMATS:
-            fmt = 'mass'
+        _get_competition(conn)
         interval = request.form.get('itt_start_interval', type=int)
         if interval is None:
             try:
@@ -75,18 +76,68 @@ def competition_format_save():
         interval = max(5, min(600, interval))
         sound = '1' if request.form.get('itt_countdown_sound') else '0'
         with conn:
-            conn.execute('UPDATE competitions SET format = ? WHERE id = ?', (fmt, comp['id']))
             conn.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
                          ('itt_start_interval', str(interval)))
             conn.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
                          ('itt_countdown_sound', sound))
         _reload_settings_cache_from_db(conn)
         _invalidate_competition_meta()
-        _app_logger.info('Competition format set: %s interval=%s sound=%s', fmt, interval, sound)
-        flash(f'Формат стартов: «{RACE_FORMATS[fmt]}»' + (f', интервал {interval} с' if fmt == 'itt' else ''), 'success')
+        _app_logger.info('ITT settings: interval=%s sound=%s', interval, sound)
+        flash(f'Параметры разделки сохранены: интервал {interval} с', 'success')
     finally:
         conn.close()
     return redirect(url_for('competitions_list'))
+
+
+def competition_start_date_save():
+    """Плановая дата старта. При смене года — вопрос о пересчёте категорий."""
+    conn = get_db()
+    try:
+        comp = _get_competition(conn)
+        cid = comp['id']
+        raw = (request.form.get('start_date') or '').strip()
+        if raw:
+            try:
+                normalized = datetime.strptime(raw, '%Y-%m-%d').strftime('%Y-%m-%d')
+            except ValueError:
+                flash('Дата должна быть в формате ГГГГ-ММ-ДД', 'error')
+                return redirect(url_for('competitions_list'))
+        else:
+            normalized = ''
+        old = (get_cached_setting('start_date', '') or '').strip()
+        old_year = int(old[:4]) if old[:4].isdigit() else None
+        new_year = int(normalized[:4]) if normalized[:4].isdigit() else None
+        year_changed = old_year != new_year
+        confirm = request.form.get('confirm') == '1'
+        participants = conn.execute(
+            'SELECT COUNT(*) FROM participants WHERE competition_id = ?', (cid,)).fetchone()[0]
+        if year_changed and participants and not confirm:
+            return render_template('start_date_confirm.html', competition=comp,
+                                   start_date=normalized, old_year=old_year,
+                                   new_year=new_year, participants=participants)
+        with conn:
+            conn.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+                         ('start_date', normalized))
+            _reload_settings_cache_from_db(conn)
+            recalc = 0
+            if new_year:
+                _apply_age_range(conn, cid, new_year)
+                if confirm:
+                    for p in conn.execute(
+                            'SELECT id, gender, birth_year, category_id FROM participants '
+                            'WHERE competition_id = ?', (cid,)).fetchall():
+                        cat = _auto_category(conn, cid, p['gender'], p['birth_year'])
+                        if cat and cat != p['category_id']:
+                            conn.execute('UPDATE participants SET category_id = ? WHERE id = ?',
+                                         (cat, p['id']))
+                            recalc += 1
+        if confirm and recalc:
+            flash(f'Дата старта сохранена, категории пересчитаны: {recalc}', 'success')
+        else:
+            flash('Дата старта сохранена', 'success')
+        return redirect(url_for('competitions_list'))
+    finally:
+        conn.close()
 
 
 def competition_edit(cid):
@@ -135,7 +186,8 @@ def categories_list(cid):
     try:
         comp = conn.execute('SELECT * FROM competitions WHERE id = ?', (cid,)).fetchone()
         if not comp: return 'Не найдено', 404
-        form = {'name': '', 'laps_total': '1', 'gender': [], 'year_from': '', 'year_to': ''}
+        start_year = _competition_start_year()
+        form = {'name': '', 'laps_total': '1', 'gender': [], 'age_range': ''}
         form_error = None
         error_field = None
         if request.method == 'POST':
@@ -143,8 +195,7 @@ def categories_list(cid):
                 'name': (request.form.get('name') or '').strip(),
                 'laps_total': (request.form.get('laps_total') or '').strip() or '1',
                 'gender': request.form.getlist('gender'),
-                'year_from': (request.form.get('year_from') or '').strip(),
-                'year_to': (request.form.get('year_to') or '').strip(),
+                'age_range': (request.form.get('age_range') or '').strip(),
             }
             name = form['name']
             try:
@@ -152,19 +203,21 @@ def categories_list(cid):
             except ValueError:
                 laps = 0
             gender = _join_genders(form['gender'])
-            year_from = int(form['year_from']) if form['year_from'].isdigit() else None
-            year_to = int(form['year_to']) if form['year_to'].isdigit() else None
+            age_min, age_max, age_err = _parse_age_range(form['age_range'])
             if not name:
                 form_error, error_field = 'Введите название категории', 'name'
             elif laps < 1:
                 form_error, error_field = 'Кругов должно быть не меньше 1', 'laps_total'
-            elif year_from and year_to and year_from > year_to:
-                form_error, error_field = 'Год «с» не может быть больше года «по»', 'year_to'
+            elif age_err:
+                form_error, error_field = age_err, 'age_range'
             else:
+                year_from, year_to = _age_range_years(start_year, age_min, age_max)
                 try:
                     with conn:
-                        cur = conn.execute('INSERT INTO categories (competition_id, name, laps_total, gender, year_from, year_to) '
-                                           'VALUES (?, ?, ?, ?, ?, ?)', (cid, name, laps, gender, year_from, year_to))
+                        cur = conn.execute(
+                            'INSERT INTO categories (competition_id, name, laps_total, gender, age_range, '
+                            'year_from, year_to) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                            (cid, name, laps, gender, form['age_range'], year_from, year_to))
                         # порядок сортировки по умолчанию = ID категории
                         conn.execute('UPDATE categories SET sort_order = id WHERE id = ?', (cur.lastrowid,))
                     flash('Добавлено', 'success')
@@ -177,6 +230,8 @@ def categories_list(cid):
             'ORDER BY COALESCE(sort_order, id), id', (cid,)).fetchall()
         return render_template('categories.html', competition=comp, categories=categories,
                                overlaps=_category_overlaps(categories),
+                               start_year=start_year,
+                               age_hints={c['id']: _category_age_hint(c, start_year) for c in categories},
                                form=form, form_error=form_error, error_field=error_field,
                                submitted={}, row_errors={})
     finally: conn.close()
@@ -193,14 +248,14 @@ def categories_template(cid):
     wb = Workbook()
     ws = wb.active
     ws.title = 'Категории'
-    ws.append(['Название', 'Кругов', 'Пол', 'Год с', 'Год по'])
-    ws.append(['Мужчины 18+', 5, 'М', 1900, 2008])
-    ws.append(['Женщины 18+', 4, 'Ж', 1900, 2008])
-    ws.append(['Мальчики 8 лет и младше', 2, 'М', 2018, 2026])
-    ws.append(['Юноши 12–14', 3, 'М', 2012, 2014])
+    ws.append(['Название', 'Кругов', 'Пол', 'Возраст'])
+    ws.append(['Мужчины 18+', 5, 'М', '18-'])
+    ws.append(['Женщины 18+', 4, 'Ж', '18-'])
+    ws.append(['Мальчики 8 лет и младше', 2, 'М', '-8'])
+    ws.append(['Юноши 12–14', 3, 'М', '12-14'])
     for cell in ws[1]:
         cell.font = Font(bold=True)
-    for i, w in enumerate([32, 10, 8, 10, 10], start=1):
+    for i, w in enumerate([32, 10, 8, 14], start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
     ws.freeze_panes = 'A2'
     buf = io.BytesIO()
@@ -236,6 +291,7 @@ def categories_import(cid):
         if cols['name'] is None:
             flash('В файле нет колонки «Название»', 'error')
             return redirect(url_for('categories_list', cid=cid))
+        start_year = _competition_start_year()
 
         existing = {}
         for c in conn.execute('SELECT name FROM categories WHERE competition_id = ?', (cid,)).fetchall():
@@ -258,8 +314,20 @@ def categories_import(cid):
             except (TypeError, ValueError):
                 laps = 0
             gender = _parse_gender_cell(cell(cols['gender']))
-            y1 = _parse_year(cell(cols['year_from']))
-            y2 = _parse_year(cell(cols['year_to']))
+            age_raw = _cell_text(cell(cols['age'])) if cols.get('age') is not None else ''
+            age_min, age_max, age_err = _parse_age_range(age_raw)
+            if not age_raw and cols.get('age') is None:
+                # старый формат: годы рождения → возраст
+                y1 = _parse_year(cell(cols['year_from']))
+                y2 = _parse_year(cell(cols['year_to']))
+                if y1 is not None or y2 is not None:
+                    age_min = (start_year - y2) if y2 is not None else None
+                    age_max = (start_year - y1) if y1 is not None else None
+                    if age_min is not None:
+                        age_min = max(0, age_min)
+                    if age_max is not None:
+                        age_max = max(0, age_max)
+            age_range = _format_age_range(age_min, age_max)
 
             status, message = 'new', ''
             key = _norm_name(name)
@@ -269,14 +337,16 @@ def categories_import(cid):
                 status, message = 'dup', f'Повтор строки {seen[key]}'
             elif laps < 1:
                 status, message = 'error', 'Кругов должно быть не меньше 1'
-            elif y1 and y2 and y1 > y2:
-                status, message = 'error', 'Год «с» больше года «по»'
+            elif age_err:
+                status, message = 'error', age_err
             else:
                 seen[key] = i
             if status == 'new':
                 ok += 1
+            year_from, year_to = _age_range_years(start_year, age_min, age_max)
             parsed.append({'row': i, 'name': name, 'laps': laps or 1, 'gender': gender,
-                           'year_from': y1, 'year_to': y2, 'status': status, 'message': message})
+                           'age_range': age_range, 'year_from': year_from, 'year_to': year_to,
+                           'status': status, 'message': message})
 
         if not parsed:
             flash('В файле нет строк с категориями', 'error')
@@ -292,6 +362,7 @@ def categories_import_confirm(cid):
     try:
         comp = conn.execute('SELECT * FROM competitions WHERE id = ?', (cid,)).fetchone()
         if not comp: return 'Не найдено', 404
+        start_year = _competition_start_year()
         indices = {int(m.group(1)) for k in request.form if (m := re.match(r'row_(\d+)_name$', k))}
         added, skipped = 0, 0
         with conn:
@@ -305,11 +376,14 @@ def categories_import_confirm(cid):
                 except (TypeError, ValueError):
                     laps = 1
                 gender = (request.form.get(prefix + 'gender') or '').strip() or None
-                y1 = request.form.get(prefix + 'year_from', type=int)
-                y2 = request.form.get(prefix + 'year_to', type=int)
+                age_range = (request.form.get(prefix + 'age_range') or '').strip()
+                age_min, age_max, _age_err = _parse_age_range(age_range)
+                year_from, year_to = _age_range_years(start_year, age_min, age_max)
                 try:
-                    cur = conn.execute('INSERT INTO categories (competition_id, name, laps_total, gender, year_from, year_to) '
-                                       'VALUES (?, ?, ?, ?, ?, ?)', (cid, name, max(1, laps), gender, y1, y2))
+                    cur = conn.execute(
+                        'INSERT INTO categories (competition_id, name, laps_total, gender, age_range, '
+                        'year_from, year_to) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        (cid, name, max(1, laps), gender, age_range, year_from, year_to))
                     conn.execute('UPDATE categories SET sort_order = id WHERE id = ?', (cur.lastrowid,))
                     added += 1
                 except sqlite3.IntegrityError:
@@ -325,6 +399,7 @@ def categories_save_all(cid):
     try:
         comp = conn.execute('SELECT * FROM competitions WHERE id = ?', (cid,)).fetchone()
         if not comp: return 'Не найдено', 404
+        start_year = _competition_start_year()
         ids = sorted({int(m.group(1)) for k in request.form if (m := re.match(r'^cat_(\d+)_name$', k))})
         updated, errors = 0, []
         submitted, row_errors = {}, {}
@@ -341,8 +416,7 @@ def categories_save_all(cid):
                     'ms': (request.form.get(f'cat_{cat_id}_ms') or '').strip(),
                     'ts': (request.form.get(f'cat_{cat_id}_ts') or '').strip(),
                     'gender': _join_genders(request.form.getlist(f'cat_{cat_id}_gender')),
-                    'year_from': (request.form.get(f'cat_{cat_id}_year_from') or '').strip(),
-                    'year_to': (request.form.get(f'cat_{cat_id}_year_to') or '').strip(),
+                    'age_range': (request.form.get(f'cat_{cat_id}_age_range') or '').strip(),
                 }
                 submitted[cat_id] = raw
                 name = raw['name']
@@ -354,13 +428,13 @@ def categories_save_all(cid):
                 ms = raw['ms'] or None
                 ts = raw['ts'] or None
                 gender = raw['gender']
-                year_from = int(raw['year_from']) if raw['year_from'].isdigit() else None
-                year_to = int(raw['year_to']) if raw['year_to'].isdigit() else None
+                age_min, age_max, age_err = _parse_age_range(raw['age_range'])
+                year_from, year_to = _age_range_years(start_year, age_min, age_max)
                 if (name == cat['name'] and sort_order == (cat['sort_order'] if cat['sort_order'] is not None else cat['id'])
                         and laps == cat['laps_total'] and lap_length == cat['lap_length']
                         and hd == cat['hd'] and ms == cat['ms'] and ts == cat['ts']
-                        and gender == cat['gender'] and year_from == cat['year_from']
-                        and year_to == cat['year_to']): continue
+                        and gender == cat['gender'] and raw['age_range'] == (cat['age_range'] or '')
+                        and year_from == cat['year_from'] and year_to == cat['year_to']): continue
 
                 def _fail(msg, field):
                     errors.append(msg)
@@ -370,14 +444,14 @@ def categories_save_all(cid):
                     _fail(f'«{cat["name"]}»: пустое название', 'name'); continue
                 if laps is None or laps < 1:
                     _fail(f'«{name}»: кругов должно быть не меньше 1', 'laps'); continue
-                if year_from and year_to and year_from > year_to:
-                    _fail(f'«{name}»: год «с» больше года «по»', 'year_to'); continue
+                if age_err:
+                    _fail(f'«{name}»: {age_err.lower()}', 'age_range'); continue
                 try:
                     conn.execute('UPDATE categories SET name = ?, laps_total = ?, lap_length = ?, '
-                                 'hd = ?, ms = ?, ts = ?, gender = ?, year_from = ?, year_to = ?, '
-                                 'sort_order = ? WHERE id = ?',
-                                 (name, laps, lap_length, hd, ms, ts, gender, year_from, year_to,
-                                  sort_order, cat_id))
+                                 'hd = ?, ms = ?, ts = ?, gender = ?, age_range = ?, '
+                                 'year_from = ?, year_to = ?, sort_order = ? WHERE id = ?',
+                                 (name, laps, lap_length, hd, ms, ts, gender, raw['age_range'],
+                                  year_from, year_to, sort_order, cat_id))
                     updated += 1
                 except sqlite3.IntegrityError:
                     _fail(f'«{name}» уже есть', 'name')
@@ -388,7 +462,9 @@ def categories_save_all(cid):
             if len(errors) > 8: flash(f'… и ещё {len(errors) - 8} ошибок', 'error')
             return render_template('categories.html', competition=comp, categories=categories,
                                    overlaps=_category_overlaps(categories),
-                                   form={'name': '', 'laps_total': '1', 'gender': [], 'year_from': '', 'year_to': ''},
+                                   start_year=start_year,
+                                   age_hints={c['id']: _category_age_hint(c, start_year) for c in categories},
+                                   form={'name': '', 'laps_total': '1', 'gender': [], 'age_range': ''},
                                    form_error=None, error_field=None,
                                    submitted=submitted, row_errors=row_errors)
         if updated: flash(f'Сохранено: {updated}', 'success')
@@ -502,10 +578,15 @@ def participants_list(cid):
 
         filters = {'q': q, 'cat': cat, 'city': city, 'team': team, 'gender': gender,
                    'year_op': year_op, 'year1': year1_raw, 'year2': year2_raw, 'order': order}
+        cats_by_id = {c['id']: c for c in categories}
+        mismatch_ids = {p['id'] for p in parts
+                        if p['category_id'] in cats_by_id
+                        and _category_mismatch(cats_by_id[p['category_id']], p['gender'], p['birth_year'])}
         return render_template('participants.html', competition=comp, participants=parts,
                                categories=categories, q=q, total=total_all, shown=len(parts),
                                filters=filters, sort_urls=sort_urls,
                                has_none_category=has_none_category,
+                               mismatch_ids=mismatch_ids,
                                tags_by_number=_tags_by_number(conn, cid),
                                qs=request.query_string.decode('utf-8', 'ignore'),
                                next_default=_next_reg_number(conn, cid))
@@ -1075,6 +1156,7 @@ def participants_import_confirm(cid):
 RULES = [
     ('/competitions', 'competitions_list', competitions_list, ['GET']),
     ('/competition/format', 'competition_format_save', competition_format_save, ['POST']),
+    ('/competition/start-date', 'competition_start_date_save', competition_start_date_save, ['POST']),
     ('/competitions/<int:cid>/edit', 'competition_edit', competition_edit, ['POST']),
     ('/competitions/<int:cid>/links', 'competition_links', competition_links, ['GET']),
     ('/competitions/<int:cid>/categories', 'categories_list', categories_list, ['GET', 'POST']),

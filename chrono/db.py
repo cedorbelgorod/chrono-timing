@@ -10,7 +10,7 @@ from datetime import datetime
 from flask import has_request_context, session
 from werkzeug.security import generate_password_hash
 
-from chrono.utils import _slugify, _unique_slug
+from chrono.utils import _format_age_range, _parse_age_range, _slugify, _unique_slug
 
 log = logging.getLogger('chrono')
 
@@ -115,8 +115,8 @@ def _active_db_path():
             return _comp_db_path(entry)
     return DB_PATH
 
-def _create_competition_db(path, name, admin_login, admin_password):
-    """Создаёт пустую базу соревнования с заданным администратором."""
+def _create_competition_db(path, name, admin_login, admin_password, fmt='mass'):
+    """Создаёт пустую базу соревнования с заданным администратором и форматом."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     init_db(path)
     conn = _connect(path)
@@ -124,9 +124,10 @@ def _create_competition_db(path, name, admin_login, admin_password):
         with conn:
             row = conn.execute('SELECT id FROM competitions ORDER BY id LIMIT 1').fetchone()
             if row:
-                conn.execute('UPDATE competitions SET name = ? WHERE id = ?', (name, row['id']))
+                conn.execute('UPDATE competitions SET name = ?, format = ? WHERE id = ?',
+                             (name, fmt, row['id']))
             else:
-                conn.execute('INSERT INTO competitions (name) VALUES (?)', (name,))
+                conn.execute('INSERT INTO competitions (name, format) VALUES (?, ?)', (name, fmt))
             conn.execute('DELETE FROM users')
             conn.execute(
                 'INSERT INTO users (username, password_hash, is_admin, role, created_at) VALUES (?, ?, 1, ?, ?)',
@@ -154,6 +155,61 @@ def _create_timing_log(conn):
     conn.execute('CREATE INDEX IF NOT EXISTS idx_timing_log_created ON timing_log (created_at)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_timing_log_comp ON timing_log (competition_id)')
 
+def _migrate_schema(conn):
+    """Добавляет колонки, появившиеся в новых версиях схемы."""
+    comp_cols = {r['name'] for r in conn.execute('PRAGMA table_info(competitions)').fetchall()}
+    if 'format' not in comp_cols:
+        conn.execute("ALTER TABLE competitions ADD COLUMN format TEXT NOT NULL DEFAULT 'mass'")
+    cat_cols = {r['name'] for r in conn.execute('PRAGMA table_info(categories)').fetchall()}
+    if 'age_range' not in cat_cols:
+        conn.execute('ALTER TABLE categories ADD COLUMN age_range TEXT')
+
+
+def _migrate_age_ranges(conn):
+    """Заполняет/исправляет age_range у категорий и подставляет дату старта."""
+    rows = conn.execute(
+        'SELECT id, year_from, year_to, age_range FROM categories').fetchall()
+    todo = []
+    for r in rows:
+        _age_min, _age_max, err = _parse_age_range(r['age_range'])
+        if (r['age_range'] or '').strip() and not err:
+            continue
+        if r['year_from'] is None and r['year_to'] is None:
+            continue
+        todo.append(r)
+    if not todo:
+        return
+    row = conn.execute("SELECT value FROM settings WHERE key = 'start_date'").fetchone()
+    start = ((row['value'] if row else '') or '').strip()
+    if not start:
+        start = datetime.now().strftime('%Y-%m-%d')
+        conn.execute("INSERT INTO settings (key, value) VALUES ('start_date', ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (start,))
+    start_year = int(start[:4]) if start[:4].isdigit() else datetime.now().year
+    for r in todo:
+        if r['year_from'] is None and r['year_to'] is None:
+            # некорректная строка без годов — сбрасываем (условий по возрасту не остаётся)
+            conn.execute('UPDATE categories SET age_range = ? WHERE id = ?', ('', r['id']))
+            continue
+        age_min = (start_year - r['year_to']) if r['year_to'] is not None else None
+        age_max = (start_year - r['year_from']) if r['year_from'] is not None else None
+        # 1900 у старых категорий означал «без верхней границы»
+        if r['year_from'] is not None and r['year_from'] <= 1900:
+            age_max = None
+        if r['year_to'] is not None and r['year_to'] >= start_year + 1:
+            age_min = None
+        if age_min is not None:
+            age_min = max(0, age_min)
+        if age_max is not None and age_max > 120:
+            age_max = None
+        if age_min is not None and age_min > 120:
+            age_min = 0
+        if age_min is not None and age_max is not None and age_min > age_max:
+            age_min, age_max = age_max, age_min
+        conn.execute('UPDATE categories SET age_range = ? WHERE id = ?',
+                     (_format_age_range(age_min, age_max), r['id']))
+
+
 def _connect(path):
     conn = sqlite3.connect(path, timeout=10.0)
     conn.row_factory = sqlite3.Row
@@ -165,8 +221,8 @@ def get_db():
     return _connect(_active_db_path())
 
 def init_db(path=None):
-    from chrono.settings import (AUTH_PASSWORD, AUTH_USERNAME, ITT_DEFAULTS,
-                                 PROTOCOL_DEFAULTS, RFID_DEFAULTS,
+    from chrono.settings import (AUTH_PASSWORD, AUTH_USERNAME, COMPETITION_DEFAULTS,
+                                 ITT_DEFAULTS, PROTOCOL_DEFAULTS, RFID_DEFAULTS,
                                  _reload_settings_cache_from_db)
     conn = _connect(path or DB_PATH)
     try:
@@ -278,12 +334,18 @@ def init_db(path=None):
         ''')
         _create_timing_log(conn)
 
+        _migrate_schema(conn)
+
         for k, v in ITT_DEFAULTS.items():
             conn.execute('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', (k, v))
         for k, v in RFID_DEFAULTS.items():
             conn.execute('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', (k, v))
         for k, v in PROTOCOL_DEFAULTS.items():
             conn.execute('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', (k, v))
+        for k, v in COMPETITION_DEFAULTS.items():
+            conn.execute('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', (k, v))
+
+        _migrate_age_ranges(conn)
 
         if not conn.execute('SELECT 1 FROM users LIMIT 1').fetchone():
             conn.execute(
@@ -315,6 +377,24 @@ def init_db(path=None):
 
 _competitions_migrated = False
 
+def _sync_registry_format(entry, path):
+    """Пишет формат соревнования в реестр (для бейджа на странице входа)."""
+    try:
+        conn = _connect(path)
+        try:
+            row = conn.execute('SELECT format FROM competitions ORDER BY id LIMIT 1').fetchone()
+        finally:
+            conn.close()
+    except Exception:
+        return False
+    if not row:
+        return False
+    fmt = row['format'] if row['format'] in ('mass', 'itt') else 'mass'
+    if entry.get('format') != fmt:
+        entry['format'] = fmt
+        return True
+    return False
+
 def _migrate_competitions():
     """Обновляет схему во всех базах соревнований (один раз за процесс)."""
     global _competitions_migrated
@@ -325,15 +405,26 @@ def _migrate_competitions():
         reg = _registry_load()
     except Exception:
         return
+    changed = False
     for c in reg.get('competitions', []):
         path = _comp_db_path(c)
         if not os.path.exists(path):
             continue
         try:
             init_db(path)
+            if _sync_registry_format(c, path):
+                changed = True
         except Exception:
             try:
                 log.exception('Миграция базы не удалась: %s', path)
+            except Exception:
+                pass
+    if changed:
+        try:
+            _registry_save(reg)
+        except Exception:
+            try:
+                log.exception('Не удалось сохранить реестр после миграции')
             except Exception:
                 pass
 

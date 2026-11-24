@@ -80,6 +80,7 @@
         <div class="stepno">Шаг {{ step }} из {{ total }}</div>
     </div>
     <div class="progress"><i style="width: {{ (step * 100 // total) }}%"></i></div>
+    {% if start_date %}<div class="stepno" style="margin-top:6px">📅 Старт: {{ start_date }}</div>{% endif %}
 </div>
 
 <div class="wrap">

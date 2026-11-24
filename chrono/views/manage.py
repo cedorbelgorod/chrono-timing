@@ -39,6 +39,8 @@ def manage_page():
             conn = _connect(path)
             row = conn.execute('SELECT name FROM competitions ORDER BY id LIMIT 1').fetchone()
             item['db_name'] = (row['name'] if row else '') or ''
+            crow = conn.execute('SELECT format FROM competitions ORDER BY id LIMIT 1').fetchone()
+            item['format'] = (crow['format'] if crow and crow['format'] in ('mass', 'itt') else 'mass')
             item['participants'] = conn.execute('SELECT COUNT(*) FROM participants').fetchone()[0]
             item['heats'] = conn.execute('SELECT COUNT(*) FROM heats').fetchone()[0]
             item['unfinished'] = conn.execute(
@@ -155,6 +157,9 @@ def manage_create():
     name = (request.form.get('name') or '').strip()
     admin_login = (request.form.get('admin_login') or '').strip()
     admin_password = request.form.get('admin_password') or ''
+    fmt = (request.form.get('format') or 'mass').strip()
+    if fmt not in ('mass', 'itt'):
+        fmt = 'mass'
     if not name or not admin_login or not admin_password:
         flash('Заполните название, логин и пароль администратора', 'error')
         return redirect(url_for('manage_page'))
@@ -162,7 +167,7 @@ def manage_create():
     slug = _unique_slug(_slugify(name), reg)
     path = os.path.join(COMPS_DIR, slug + '.db')
     try:
-        _create_competition_db(path, name, admin_login, admin_password)
+        _create_competition_db(path, name, admin_login, admin_password, fmt)
     except Exception as ex:
         _app_logger.exception('create competition failed')
         flash(f'Не удалось создать базу: {ex}', 'error')
@@ -173,9 +178,10 @@ def manage_create():
         'db': _rel_db_path(path),
         'created': datetime.now().isoformat(timespec='seconds'),
         'read_only': False,
+        'format': fmt,
     })
     _registry_save(reg)
-    _app_logger.info('Competition created: %s (%s)', name, slug)
+    _app_logger.info('Competition created: %s (%s) format=%s', name, slug, fmt)
     flash(f'Соревнование «{name}» создано. Ссылка: /c/{slug}', 'success')
     return redirect(url_for('manage_page'))
 
@@ -430,6 +436,8 @@ def manage_import():
         conn = _connect(dest)
         with conn:
             conn.execute('UPDATE competitions SET name = ?', (name,))
+        row = conn.execute('SELECT format FROM competitions ORDER BY id LIMIT 1').fetchone()
+        fmt = row['format'] if row and row['format'] in ('mass', 'itt') else 'mass'
         conn.close()
     except Exception as ex:
         _app_logger.exception('import failed')
@@ -439,7 +447,7 @@ def manage_import():
     reg['competitions'].append({
         'slug': slug, 'name': name, 'db': _rel_db_path(dest),
         'created': datetime.now().isoformat(timespec='seconds'),
-        'read_only': False, 'archived': False, 'hidden': False,
+        'read_only': False, 'archived': False, 'hidden': False, 'format': fmt,
     })
     _registry_save(reg)
     _app_logger.info('Competition imported: %s (%s)', name, slug)
@@ -476,6 +484,10 @@ def manage_copy():
         s.close()
         init_db(dest)
         _clear_competition(dest, name, clear)
+        conn = _connect(dest)
+        row = conn.execute('SELECT format FROM competitions ORDER BY id LIMIT 1').fetchone()
+        fmt = row['format'] if row and row['format'] in ('mass', 'itt') else 'mass'
+        conn.close()
     except Exception as ex:
         _app_logger.exception('copy failed')
         try:
@@ -488,7 +500,7 @@ def manage_copy():
     reg['competitions'].append({
         'slug': new_slug, 'name': name, 'db': _rel_db_path(dest),
         'created': datetime.now().isoformat(timespec='seconds'),
-        'read_only': False, 'archived': False, 'hidden': False,
+        'read_only': False, 'archived': False, 'hidden': False, 'format': fmt,
     })
     _registry_save(reg)
     _app_logger.info('Competition copied: %s -> %s (cleared: %s)', slug, new_slug, ','.join(sorted(clear)) or '—')

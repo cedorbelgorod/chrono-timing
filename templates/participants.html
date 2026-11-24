@@ -177,7 +177,7 @@
         </thead>
         <tbody>
         {% for p in participants %}
-            <tr class="part-row" data-pid="{{ p.id }}">
+            <tr class="part-row {{ 'row-mismatch' if p.id in mismatch_ids }}" data-pid="{{ p.id }}">
                 <td data-label="">
                     <input type="checkbox" name="pid" value="{{ p.id }}" form="bulk-form" class="row-check">
                 </td>
@@ -213,6 +213,9 @@
                             </option>
                         {% endfor %}
                     </select>
+                    {% if p.id in mismatch_ids %}
+                        <span class="mismatch-note" title="Участник не попадает в условия этой категории по возрасту или полу">⚠ не по возрасту</span>
+                    {% endif %}
                 </td>
                 <td data-label="Пол">
                     <select name="gender_{{ p.id }}" required
@@ -332,6 +335,9 @@
 .part-row.row-changed { background: #fffbeb; }
 .part-row.row-changed td { border-bottom-color: #fcd34d; }
 .part-row.row-changed td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
+.part-row.row-mismatch td { background: #fef9c3; }
+.part-row.row-mismatch td:first-child { box-shadow: inset 3px 0 0 #eab308; }
+.mismatch-note { display: block; margin-top: 2px; font-size: 11px; color: #a16207; }
 
 .save-bar {
     display: flex; gap: 14px; align-items: center; flex-wrap: wrap;

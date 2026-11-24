@@ -21,8 +21,8 @@
             <th>Название</th>
             <th style="width:80px">Кругов</th>
             <th style="width:70px">Пол</th>
-            <th style="width:80px">Год с</th>
-            <th style="width:80px">Год по</th>
+            <th style="width:100px">Возраст</th>
+            <th style="width:150px">Годы рожд.</th>
             <th style="width:150px">Статус</th>
         </tr>
     </thead>
@@ -35,8 +35,14 @@
             <td class="center">
                 {% if r.gender == 'M' %}М{% elif r.gender == 'F' %}Ж{% else %}<span class="muted">оба</span>{% endif %}
             </td>
-            <td class="center">{{ r.year_from or '—' }}</td>
-            <td class="center">{{ r.year_to or '—' }}</td>
+            <td class="center">{{ r.age_range or '—' }}</td>
+            <td class="center">
+                {% if r.year_from or r.year_to %}
+                    {{ r.year_from or '…' }}–{{ r.year_to or '…' }}
+                {% else %}
+                    <span class="muted">—</span>
+                {% endif %}
+            </td>
             <td>
                 {% if r.status == 'new' %}
                     <span class="st st-new">новая</span>
@@ -57,8 +63,7 @@
         <input type="hidden" name="row_{{ loop.index0 }}_name" value="{{ r.name }}">
         <input type="hidden" name="row_{{ loop.index0 }}_laps" value="{{ r.laps }}">
         <input type="hidden" name="row_{{ loop.index0 }}_gender" value="{{ r.gender or '' }}">
-        <input type="hidden" name="row_{{ loop.index0 }}_year_from" value="{{ r.year_from or '' }}">
-        <input type="hidden" name="row_{{ loop.index0 }}_year_to" value="{{ r.year_to or '' }}">
+        <input type="hidden" name="row_{{ loop.index0 }}_age_range" value="{{ r.age_range or '' }}">
     {% endfor %}
     <a class="btn-back-link" href="{{ url_for('categories_list', cid=competition.id) }}">← Отмена</a>
     <button type="submit" class="btn-import" {% if not ok %}disabled{% endif %}>

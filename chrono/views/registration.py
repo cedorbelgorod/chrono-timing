@@ -11,7 +11,7 @@ from openpyxl.utils import get_column_letter
 
 from chrono.db import (_get_competition, _registry_find, get_db)
 from chrono.settings import (set_cached_setting)
-from chrono.utils import (_qr_svg)
+from chrono.utils import (_fmt_date, _qr_svg)
 from chrono.auth import (_is_read_only)
 from chrono.catalog import (_auto_category, _cat_genders)
 from chrono.logging_setup import (_app_logger)
@@ -20,6 +20,12 @@ from chrono.registration_helpers import (
     _reg_allowed_categories, _reg_clear_draft, _reg_closed, _reg_config, _reg_create_participant,
     _reg_draft, _reg_rate_ok, _reg_save_draft, _reg_status, _reg_step_validate, _reg_steps,
 )
+
+
+def _setting(conn, key, default=''):
+    """Значение настройки из базы соревнования (без кэша по сессии)."""
+    row = conn.execute('SELECT value FROM settings WHERE key = ?', (key,)).fetchone()
+    return row['value'] if row and row['value'] is not None else default
 
 
 def registration_page():
@@ -191,7 +197,8 @@ def reg_list(slug):
     try:
         rows = _public_participants(conn, comp['id'])
         return render_template('public_reg_list.html', comp=comp, rows=rows, slug=slug,
-                               total=len(rows))
+                               total=len(rows),
+                               start_date=_fmt_date(_setting(conn, 'start_date')))
     finally:
         conn.close()
 
@@ -240,7 +247,8 @@ def reg_intro(slug):
         ok, why = _reg_status(cfg)
         if ok and _is_read_only(slug):
             ok, why = False, 'Регистрация недоступна: соревнование в режиме «только чтение».'
-        return render_template('public_reg.html', comp=comp, cfg=cfg, ok=ok, why=why, slug=slug)
+        return render_template('public_reg.html', comp=comp, cfg=cfg, ok=ok, why=why, slug=slug,
+                               start_date=_fmt_date(_setting(conn, 'start_date')))
     finally:
         conn.close()
 
@@ -355,7 +363,8 @@ def reg_step(slug, step):
         return render_template('public_reg_step.html', comp=comp, cfg=cfg, slug=slug,
                                step=step, total=total, key=key, field=field,
                                options=options, errors=errors, draft=draft,
-                               summary=summary, consent_text=cfg['consent'])
+                               summary=summary, consent_text=cfg['consent'],
+                               start_date=_fmt_date(_setting(conn, 'start_date')))
     finally:
         conn.close()
 

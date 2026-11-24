@@ -44,8 +44,12 @@
     <div class="top">
         <div class="kicker">Регистрация участника</div>
         <h1>{{ comp.name }}</h1>
-        {% if ok and cfg.deadline %}
-            <div class="deadline">Приём заявок до {{ cfg.deadline }}</div>
+        {% if start_date or (ok and cfg.deadline) %}
+            <div class="deadline">
+                {% if start_date %}📅 Старт: {{ start_date }}{% endif %}
+                {% if start_date and ok and cfg.deadline %} · {% endif %}
+                {% if ok and cfg.deadline %}Приём заявок до {{ cfg.deadline }}{% endif %}
+            </div>
         {% endif %}
     </div>
 
