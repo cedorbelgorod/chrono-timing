@@ -29,8 +29,8 @@ from chrono.catalog import (
 )
 from chrono.logging_setup import (_app_logger)
 from chrono.ratings import (
-    DEFAULT_RATING_COLUMN, _rating_for, _ratings_columns, _ratings_index, _ratings_refresh,
-    _ratings_stats,
+    DEFAULT_RATING_COLUMN, _active_rating_column, _column_label, _rating_column_id, _rating_for,
+    _ratings_columns, _ratings_index, _ratings_refresh, _ratings_stats,
 )
 from chrono.registration_helpers import (_next_reg_number)
 from chrono.results_helpers import (_base_url)
@@ -60,10 +60,12 @@ def competitions_list():
         settings['itt_start_interval'] = get_cached_setting('itt_start_interval', '30')
         settings['itt_countdown_sound'] = get_cached_setting('itt_countdown_sound', '1')
         settings['start_date'] = get_cached_setting('start_date', '')
-        settings['rating_column'] = get_cached_setting('rating_column', '') or ''
+        settings['rating_column'] = _active_rating_column()
         protocol_filled = bool((settings.get('proto_title') or '').strip())
-        rating_count, rating_updated, rating_columns = _ratings_stats()
-        if (not settings['rating_column'] and DEFAULT_RATING_COLUMN in rating_columns):
+        rating_count, rating_updated, _raw_columns = _ratings_stats()
+        rating_columns = _ratings_columns()
+        rating_ids = {c['id'] for c in rating_columns}
+        if (not settings['rating_column'] and DEFAULT_RATING_COLUMN in rating_ids):
             with conn:
                 set_cached_setting(conn, 'rating_column', DEFAULT_RATING_COLUMN)
             settings['rating_column'] = DEFAULT_RATING_COLUMN
@@ -108,15 +110,15 @@ def competition_rating_save():
     conn = get_db()
     try:
         _get_competition(conn)
-        column = (request.form.get('rating_column') or '').strip()
-        allowed = _ratings_columns()
+        column = _rating_column_id((request.form.get('rating_column') or '').strip())
+        allowed = {c['id'] for c in _ratings_columns()}
         if column and column not in allowed:
             flash('Такого рейтинга нет в загруженном файле', 'error')
             return redirect(url_for('competitions_list'))
         with conn:
             set_cached_setting(conn, 'rating_column', column)
-        flash('Рейтинг для сортировки сохранён: ' + column if column else 'Рейтинг отключён',
-              'success')
+        flash('Рейтинг для сортировки сохранён: ' + _column_label(column) if column
+              else 'Рейтинг отключён', 'success')
     finally:
         conn.close()
     return redirect(url_for('competitions_list'))
@@ -128,8 +130,9 @@ def competition_rating_refresh():
     if error:
         flash(error, 'error')
     else:
-        current = (get_cached_setting('rating_column', '') or '').strip()
-        if (not current or current not in columns) and DEFAULT_RATING_COLUMN in columns:
+        current = _active_rating_column()
+        allowed = {c['id'] for c in columns}
+        if (not current or current not in allowed) and DEFAULT_RATING_COLUMN in allowed:
             conn = get_db()
             try:
                 with conn:
@@ -884,7 +887,7 @@ def participants_list(cid):
 
         filters = {'q': q, 'cat': cat, 'city': city, 'team': team, 'gender': gender,
                    'year_op': year_op, 'year1': year1_raw, 'year2': year2_raw, 'order': order}
-        rating_column = (get_cached_setting('rating_column', '') or '').strip()
+        rating_column = _active_rating_column()
         ratings = {}
         if rating_column:
             rating_index = _ratings_index()
@@ -906,6 +909,7 @@ def participants_list(cid):
                                has_none_category=has_none_category,
                                mismatch_reasons=mismatch_reasons,
                                rating_column=rating_column, ratings=ratings,
+                               rating_column_label=_column_label(rating_column),
                                tags_by_number=_tags_by_number(conn, cid),
                                qs=request.query_string.decode('utf-8', 'ignore'),
                                next_default=_next_reg_number(conn, cid))

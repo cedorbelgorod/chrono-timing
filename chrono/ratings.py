@@ -17,13 +17,23 @@ from chrono.db import (_connect, RATINGS_DB)
 from chrono.logging_setup import (_app_logger)
 from chrono.utils import (_parse_year)
 
-RATINGS_URL = os.environ.get('CHRONO_RATINGS_URL', 'https://bike.cedor.ru/ratings-all.csv')
+RATINGS_URL = os.environ.get('CHRONO_RATINGS_URL', 'https://bike.cedor.ru/ratings-all.json')
 
 RATINGS_TTL_HOURS = 24
 
-DEFAULT_RATING_COLUMN = 'Все 2026'
+DEFAULT_RATING_COLUMN = 'overall-2026'
 
-BASE_COLUMNS = ('фио', 'год рождения', 'город', 'клуб')
+LEGACY_RATING_COLUMNS = {
+    'мтб 2026': 'mtb-2026', 'шоссе 2026': 'road-2026', 'другое 2026': 'other-2026',
+    'все 2026': 'overall-2026', 'мтб все время': 'mtb-all', 'шоссе все время': 'road-all',
+    'другое все время': 'other-all', 'все все время': 'overall-all',
+}
+
+
+def _rating_column_id(value):
+    """Имя столбца → стабильный id рейтинга (старые значения из CSV-версии тоже)."""
+    raw = (value or '').strip()
+    return LEGACY_RATING_COLUMNS.get(raw.lower().replace('ё', 'е'), raw)
 
 
 def _ratings_db():
@@ -71,51 +81,46 @@ def _to_number(raw):
     return int(value) if value.is_integer() else value
 
 
-def _parse_ratings_csv(text):
-    """CSV → (rows, columns). rows: dict(name, year, city, team, values)."""
-    first_line = text.split('\n', 1)[0]
-    delimiter = ';' if first_line.count(';') >= first_line.count(',') else ','
-    rows = list(_csv.reader(io.StringIO(text), delimiter=delimiter))
-    if len(rows) < 2:
+def _parse_ratings_json(text):
+    """JSON bike.cedor.ru → (rows, columns).
+
+    columns: [{'id', 'label', 'athletes'}]; rows: name/year/city/club/values по id.
+    """
+    try:
+        data = json.loads(text)
+    except ValueError:
         return [], []
-
-    header = [(h or '').strip() for h in rows[0]]
-    norm = [h.lower().replace('ё', 'е') for h in header]
-
-    def find(*names):
-        for i, h in enumerate(norm):
-            for n in names:
-                if n in h:
-                    return i
-        return None
-
-    i_fio = find('фио', 'фамилия', 'name')
-    i_year = find('год рождения', 'год')
-    i_city = find('город', 'city')
-    i_team = find('клуб', 'команд', 'team', 'club')
-    used = {i for i in (i_fio, i_year, i_city, i_team) if i is not None}
-    if i_fio is None:
-        i_fio = 0
-        used.add(0)
-    col_indexes = [(h, i) for i, h in enumerate(header) if i not in used and h]
-    columns = [name for name, _idx in col_indexes]
-
-    parsed = []
-    for r in rows[1:]:
-        if not r or len(r) <= i_fio:
+    if not isinstance(data, dict):
+        return [], []
+    columns = []
+    for item in data.get('ratings') or []:
+        rid = (item.get('id') or '').strip() if isinstance(item, dict) else ''
+        if not rid:
             continue
-        full_name = (r[i_fio] or '').strip()
+        columns.append({
+            'id': rid,
+            'label': (item.get('label') or rid),
+            'athletes': item.get('athletes') or 0,
+        })
+    parsed = []
+    for a in data.get('athletes') or []:
+        if not isinstance(a, dict):
+            continue
+        full_name = (a.get('name') or '').strip()
         if len(full_name) < 3:
             continue
-        year = _parse_year(r[i_year]) if i_year is not None and len(r) > i_year else None
-        city = (r[i_city] or '').strip() if i_city is not None and len(r) > i_city else None
-        team = (r[i_team] or '').strip() if i_team is not None and len(r) > i_team else None
         values = {}
-        for name, idx in col_indexes:
-            values[name] = _to_number(r[idx]) if idx < len(r) else 0.0
+        for rid, item in (a.get('ratings') or {}).items():
+            if isinstance(item, dict):
+                values[rid] = _to_number(item.get('points'))
+            else:
+                values[rid] = _to_number(item)
         surname, first = _split_name(full_name)
         parsed.append({'full_name': full_name, 'surname_key': surname, 'first_key': first,
-                       'birth_year': year, 'city': city, 'team': team, 'values': values})
+                       'birth_year': _parse_year(a.get('birth_year')),
+                       'city': (a.get('city') or '').strip() or None,
+                       'team': (a.get('club') or '').strip() or None,
+                       'values': values})
     return parsed, columns
 
 
@@ -139,7 +144,7 @@ def _ratings_refresh():
     if text is None:
         return None, [], 'Не удалось определить кодировку файла'
 
-    rows, columns = _parse_ratings_csv(text)
+    rows, columns = _parse_ratings_json(text)
     if not rows:
         return None, [], 'В файле рейтингов не найдено ни одного спортсмена'
 
@@ -190,7 +195,36 @@ def _ratings_stats():
 
 
 def _ratings_columns():
-    return _ratings_stats()[2]
+    """[{'id', 'label'}] — столбцы рейтингов из файла (старые значения-строки тоже)."""
+    out = []
+    for item in _ratings_stats()[2]:
+        if isinstance(item, dict):
+            rid = (item.get('id') or '').strip()
+            if rid:
+                out.append({'id': rid, 'label': item.get('label') or rid,
+                            'athletes': item.get('athletes') or 0})
+        elif isinstance(item, str) and item.strip():
+            rid = _rating_column_id(item)
+            out.append({'id': rid, 'label': item.strip(), 'athletes': 0})
+    return out
+
+
+def _column_label(column_id):
+    for item in _ratings_columns():
+        if item['id'] == column_id:
+            return item['label']
+    return column_id
+
+
+def _active_rating_column():
+    """Текущий выбранный рейтинг (id) или '' — если не выбран/не найден в файле."""
+    try:
+        from chrono.settings import get_cached_setting
+        value = _rating_column_id(get_cached_setting('rating_column', '') or '')
+    except Exception:
+        return ''
+    ids = {item['id'] for item in _ratings_columns()}
+    return value if value in ids else ''
 
 
 class RatingsIndex(object):
@@ -249,6 +283,8 @@ def _ratings_index():
             values = json.loads(r['values_json'])
         except ValueError:
             values = {}
+        # старый кэш (CSV) хранил значения по подписи столбца — приводим к id
+        values = {_rating_column_id(k): v for k, v in values.items()}
         items.append({'surname': r['surname_key'], 'first': r['first_key'],
                       'year': r['birth_year'], 'values': values})
     return RatingsIndex(items)

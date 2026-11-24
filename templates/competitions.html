@@ -39,7 +39,7 @@
                 <select name="rating_column">
                     <option value="">— не использовать —</option>
                     {% for col in rating_columns %}
-                        <option value="{{ col }}" {{ 'selected' if settings.rating_column == col }}>{{ col }}</option>
+                        <option value="{{ col.id }}" {{ 'selected' if settings.rating_column == col.id }}>{{ col.label }}</option>
                     {% endfor %}
                 </select>
                 <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
