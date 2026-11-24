@@ -17,7 +17,7 @@ from chrono.settings import (
 )
 from chrono.timing import (_heat_participant_counts)
 from chrono.utils import (_age_range_hint, _age_range_years, _format_age_range,
-                          _normalize_gender, _parse_age_range, _parse_year)
+                          _normalize_gender, _parse_age_range, _parse_year, _slugify)
 from chrono.catalog import (
     CATEGORY_HEADER_ALIASES, HEADER_ALIASES, MAX_TAGS_PER_NUMBER, PARTICIPANT_SORTS,
     TAGS_HEADER_ALIASES, _apply_age_range, _auto_category, _category_age_hint,
@@ -673,6 +673,83 @@ def categories_merge(cid):
         return redirect(url_for('categories_list', cid=cid))
     finally:
         conn.close()
+
+
+def categories_export(cid):
+    """Экспорт категорий в Excel — формат совместим с импортом категорий."""
+    conn = get_db()
+    try:
+        comp = conn.execute('SELECT * FROM competitions WHERE id = ?', (cid,)).fetchone()
+        if not comp:
+            return 'Не найдено', 404
+        rows = conn.execute(
+            'SELECT * FROM categories WHERE competition_id = ? '
+            'ORDER BY COALESCE(sort_order, id), id', (cid,)).fetchall()
+    finally:
+        conn.close()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Категории'
+    ws.append(['Название', 'Кругов', 'Пол', 'Возраст'])
+    for c in rows:
+        allowed = _cat_genders(c['gender'])
+        gender = 'МЖ' if allowed == {'M', 'F'} else ('М' if 'M' in allowed else 'Ж')
+        ws.append([c['name'], c['laps_total'], gender, c['age_range'] or ''])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for i, w in enumerate([32, 10, 8, 14], start=1):
+        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+    ws.freeze_panes = 'A2'
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf, as_attachment=True,
+        download_name=f'kategorii-{_slugify(comp["name"])}.xlsx',
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+def participants_export(cid):
+    """Экспорт участников в Excel — формат совместим с импортом участников."""
+    conn = get_db()
+    try:
+        comp = conn.execute('SELECT * FROM competitions WHERE id = ?', (cid,)).fetchone()
+        if not comp:
+            return 'Не найдено', 404
+        rows = conn.execute(
+            'SELECT p.*, c.name AS category_name FROM participants p '
+            'LEFT JOIN categories c ON c.id = p.category_id '
+            'WHERE p.competition_id = ? '
+            'ORDER BY p.number IS NULL, p.number, p.full_name', (cid,)).fetchall()
+    finally:
+        conn.close()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Участники'
+    ws.append(['Номер', 'ФИО', 'Год рождения', 'Пол', 'Категория', 'Город', 'Команда'])
+    for p in rows:
+        g = (p['gender'] or '').upper()
+        ws.append([
+            p['number'] if p['number'] is not None else '',
+            p['full_name'],
+            p['birth_year'] or '',
+            'М' if g == 'M' else ('Ж' if g == 'F' else ''),
+            p['category_name'] or '',
+            p['city'] or '',
+            p['team'] or '',
+        ])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for i, w in enumerate([8, 34, 14, 6, 28, 18, 22], start=1):
+        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+    ws.freeze_panes = 'A2'
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf, as_attachment=True,
+        download_name=f'uchastniki-{_slugify(comp["name"])}.xlsx',
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
 def categories_reorder(cid):
@@ -1441,6 +1518,7 @@ RULES = [
     ('/competitions/<int:cid>/links', 'competition_links', competition_links, ['GET']),
     ('/competitions/<int:cid>/categories', 'categories_list', categories_list, ['GET', 'POST']),
     ('/competitions/<int:cid>/categories/template.xlsx', 'categories_template', categories_template, ['GET']),
+    ('/competitions/<int:cid>/categories/export.xlsx', 'categories_export', categories_export, ['GET']),
     ('/competitions/<int:cid>/categories/import', 'categories_import', categories_import, ['POST']),
     ('/competitions/<int:cid>/categories/import/confirm', 'categories_import_confirm', categories_import_confirm, ['POST']),
     ('/competitions/<int:cid>/categories/save_all', 'categories_save_all', categories_save_all, ['POST']),
@@ -1464,5 +1542,6 @@ RULES = [
     ('/participants/<int:pid>/delete', 'participant_delete', participant_delete, ['POST']),
     ('/competitions/<int:cid>/participants/template.xlsx', 'participants_template', participants_template, ['GET']),
     ('/competitions/<int:cid>/participants/import', 'participants_import', participants_import, ['GET', 'POST']),
+    ('/competitions/<int:cid>/participants/export.xlsx', 'participants_export', participants_export, ['GET']),
     ('/competitions/<int:cid>/participants/import/confirm', 'participants_import_confirm', participants_import_confirm, ['POST']),
 ]

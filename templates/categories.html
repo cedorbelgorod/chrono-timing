@@ -42,6 +42,8 @@
         </label>
     </form>
     <a class="btn btn-sm btn-ghost" href="{{ url_for('categories_template', cid=competition.id) }}">⬇ Шаблон</a>
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('categories_export', cid=competition.id) }}"
+       title="Скачать категории в Excel — файл подходит для импорта в другое соревнование">⬆ Экспорт</a>
     <span class="cat-import-hint">колонки: Название · Кругов · Пол · Возраст</span>
 </div>
 

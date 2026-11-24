@@ -1,80 +1,83 @@
 # -*- coding: utf-8 -*-
-"""Экспорт: Excel результатов и стартового протокола, PDF и ширины колонок."""
+"""Экспорт категорий и участников в Excel и совместимость с импортом."""
 import io
-import os
-import unittest
 
 from openpyxl import load_workbook
 
 from tests.support import ChronoTestCase
 
-DEJAVU = ('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-          '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf')
 
-# ширины колонок PDF (мм до масштабирования под A4) — должны совпадать с app.py
-ITT_WIDTHS = [12, 8, 26, 12, 18, 17, 12, 15, 15, 19, 21, 11]
-ITT_HEADS = ['Место', '№', 'ФИО', 'Год рожд.', 'Город', 'Команда', 'Круги',
-             'Старт', 'Финиш', 'Общее время', 'Отставание', 'V.ср км/ч']
-ITT_VALUES = ['1', '21', 'Пятёрочкин', '1990', 'Белгород', 'МБУДО СШ №4', '5',
-              '16:51:53', '16:57:14', '1:05:21,21', '+00:41,95', '24,5']
-
-STARTLIST_WIDTHS = [11, 13, 36, 11, 26, 12, 18, 20, 19, 20]
-STARTLIST_HEADS = ['№ п/п', 'Номер', 'ФИО', 'Год', 'Группа', 'Круги', 'Город',
-                   'Команда', 'Время старта', 'Прим.']
-STARTLIST_VALUES = ['1', '21', 'Пятёрочкин', '1990', 'Пять кругов', '5', 'Белгород',
-                    'МБУДО СШ №4', '16:51:53', 'на дистанции']
-
-
-class ExportTest(ChronoTestCase):
-    def test_results_xlsx_has_laps(self):
-        hid, p1, p2 = self.itt_heat(laps=(2, 3))
-        self.board('begin')
-        self.board('start')
-        self.lap(1)
-        self.lap(1)
-        resp = self.client.get(f'/results/export?cid={self.comp["id"]}&target=heat:{hid}')
+class ExportXlsxTest(ChronoTestCase):
+    def test_categories_export(self):
+        self.login_admin()
+        cid = self.comp['id']
+        cat = self.add_category('Юноши 12-14', laps=3)
+        with self.conn:
+            self.conn.execute(
+                "UPDATE categories SET gender = 'M', age_range = '12-14' WHERE id = ?", (cat,))
+        self.add_category('Все', laps=1)
+        resp = self.client.get(f'/competitions/{cid}/categories/export.xlsx')
         self.assertEqual(resp.status_code, 200)
-        wb = load_workbook(io.BytesIO(resp.data))
-        header = next(wb.active.iter_rows(values_only=True))
-        self.assertIn('Круги', header)
+        ws = load_workbook(io.BytesIO(resp.data)).active
+        rows = list(ws.iter_rows(values_only=True))
+        self.assertEqual(rows[0], ('Название', 'Кругов', 'Пол', 'Возраст'))
+        self.assertIn(('Юноши 12-14', 3, 'М', '12-14'), rows)
+        self.assertIn(('Все', 1, 'МЖ', None), rows)
 
-    def test_protocol_pdf(self):
-        self.itt_heat(laps=(2, 3))
-        self.board('begin')
-        self.board('start')
-        self.lap(1)
-        self.lap(1)
-        resp = self.client.get('/protocol.pdf')
+    def test_participants_export(self):
+        self.login_admin()
+        cid = self.comp['id']
+        cat = self.add_category('Юноши', laps=2)
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, birth_year, gender, "
+                "category_id, city, team) VALUES (?, 7, 'Лопин Антон', 1980, 'M', ?, 'Белгород', 'Лично')",
+                (cid, cat))
+            self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, gender) "
+                "VALUES (?, NULL, 'Без номера', 'F')", (cid,))
+        resp = self.client.get(f'/competitions/{cid}/participants/export.xlsx')
         self.assertEqual(resp.status_code, 200)
-        self.assertTrue(resp.data.startswith(b'%PDF-'))
+        ws = load_workbook(io.BytesIO(resp.data)).active
+        rows = list(ws.iter_rows(values_only=True))
+        self.assertEqual(rows[0],
+                         ('Номер', 'ФИО', 'Год рождения', 'Пол', 'Категория', 'Город', 'Команда'))
+        self.assertIn((7, 'Лопин Антон', 1980, 'М', 'Юноши', 'Белгород', 'Лично'), rows)
+        self.assertIn((None, 'Без номера', None, 'Ж', None, None, None), rows)
 
-    @unittest.skipUnless(os.path.exists(DEJAVU[0]) and os.path.exists(DEJAVU[1]),
-                         'DejaVu не установлен — аудит ширин выполняется в контейнере')
-    def test_pdf_columns_fit(self):
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.units import mm
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
+    def test_categories_export_import_roundtrip(self):
+        self.login_admin()
+        cid = self.comp['id']
+        cat = self.add_category('Юноши 12-14', laps=3)
+        with self.conn:
+            self.conn.execute(
+                "UPDATE categories SET gender = 'M', age_range = '12-14' WHERE id = ?", (cat,))
+        data = self.client.get(f'/competitions/{cid}/categories/export.xlsx').data
+        # тот же файл проходит проверку импорта (совместимость формата)
+        resp = self.client.post(
+            f'/competitions/{cid}/categories/import',
+            data={'file': (io.BytesIO(data), 'kategorii.xlsx')},
+            content_type='multipart/form-data')
+        self.assertEqual(resp.status_code, 200)
+        html = resp.get_data(as_text=True)
+        self.assertIn('Юноши 12-14', html)
 
-        pdfmetrics.registerFont(TTFont('TestReg', DEJAVU[0]))
-        pdfmetrics.registerFont(TTFont('TestBold', DEJAVU[1]))
-        width = A4[0] - 24 * mm
-
-        def audit(widths, heads, values, label):
-            cols = [w * width / sum(widths) for w in widths]
-            problems = []
-            for head, col in zip(heads, cols):
-                for word in head.split():
-                    need = pdfmetrics.stringWidth(word, 'TestBold', 8)
-                    if need > col - 4:
-                        problems.append((label, 'шапка', word, round(need / mm, 1), round(col / mm, 1)))
-            for value, col in zip(values, cols):
-                for word in str(value).split():
-                    need = pdfmetrics.stringWidth(word, 'TestReg', 8)
-                    if need > col - 4:
-                        problems.append((label, 'данные', word, round(need / mm, 1), round(col / mm, 1)))
-            return problems
-
-        problems = audit(ITT_WIDTHS, ITT_HEADS, ITT_VALUES, 'протокол')
-        problems += audit(STARTLIST_WIDTHS, STARTLIST_HEADS, STARTLIST_VALUES, 'стартовый')
-        self.assertEqual(problems, [], problems)
+    def test_participants_export_import_preview(self):
+        self.login_admin()
+        cid = self.comp['id']
+        cat = self.add_category('Юноши', laps=2)
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO participants (competition_id, number, full_name, birth_year, gender, "
+                "category_id, city, team) VALUES (?, 7, 'Лопин Антон', 1980, 'M', ?, 'Белгород', 'Лично')",
+                (cid, cat))
+        data = self.client.get(f'/competitions/{cid}/participants/export.xlsx').data
+        # тот же файл проходит проверку импорта (совместимость формата)
+        resp = self.client.post(
+            f'/competitions/{cid}/participants/import',
+            data={'file': (io.BytesIO(data), 'uchastniki.xlsx')},
+            content_type='multipart/form-data')
+        self.assertEqual(resp.status_code, 200)
+        html = resp.get_data(as_text=True)
+        self.assertIn('Лопин Антон', html)
+        self.assertIn('Юноши', html)

@@ -22,6 +22,8 @@
     <div class="page-actions">
         <a class="btn btn-ghost" href="{{ url_for('participants_import', cid=competition.id) }}">📥 Импорт из Excel</a>
         <a class="btn btn-ghost" href="{{ url_for('participants_template', cid=competition.id) }}">⬇ Шаблон</a>
+        <a class="btn btn-ghost" href="{{ url_for('participants_export', cid=competition.id) }}"
+           title="Скачать всех участников в Excel — файл подходит для импорта в другое соревнование">⬆ Экспорт</a>
         {% if categories %}
             <form method="post" style="margin:0"
                   action="{{ url_for('participants_auto_categories', cid=competition.id) }}"
