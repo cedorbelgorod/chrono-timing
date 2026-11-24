@@ -2,7 +2,7 @@
     <div class="fs-empty">Нет активных или завершённых стартов</div>
 {% else %}
     <div class="fs-heat-title">
-        Старт №{{ heat.heat_number }}{% if heat.name %} — {{ heat.name }}{% endif %}
+        {{ heat.name or ('Старт №' ~ heat.heat_number) }}
         <span class="fs-heat-stat">{{ heat.finished_count }} из {{ heat.total }} финишировали</span>
     </div>
 

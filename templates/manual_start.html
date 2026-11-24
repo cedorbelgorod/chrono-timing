@@ -103,7 +103,7 @@
 
     <div class="board-top">
         <span>🚴 Раздельный старт</span>
-        {% if state.heat %}<span>· старт №{{ state.heat.number }}{% if state.heat.name %} «{{ state.heat.name }}»{% endif %}</span>{% endif %}
+        {% if state.heat %}<span>· {{ state.heat.name or ('старт №' ~ state.heat.number) }}</span>{% endif %}
         <span class="spacer"></span>
         <button type="button" class="sound-btn" id="sound-btn" title="Звуковой отсчёт">🔔</button>
         <a class="link" href="{{ url_for('manual_page') }}">Финиш →</a>

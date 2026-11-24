@@ -55,14 +55,15 @@ def _render_startlist_pdf(comp, data):
         return (str(v or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
     buf = io.BytesIO()
+    heat_label = (data['heat'].get('name') or '').strip() or f'Старт №{data["heat"]["number"]}'
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=12 * mm, rightMargin=12 * mm,
                             topMargin=12 * mm, bottomMargin=12 * mm,
-                            title=f'Стартовый протокол — старт №{data["heat"]["number"]}')
+                            title=f'Стартовый протокол — {heat_label}')
     story = []
     story.append(Paragraph(esc(data['competition']), st(15, bold, TA_CENTER)))
     story.append(Spacer(1, 3 * mm))
     story.append(Paragraph('СТАРТОВЫЙ ПРОТОКОЛ', st(12, bold, TA_CENTER)))
-    head_bits = [f'Старт №{data["heat"]["number"]}']
+    head_bits = [heat_label]
     if data['heat']['name']:
         head_bits.append(data['heat']['name'])
     if data['heat']['format'] == 'itt':

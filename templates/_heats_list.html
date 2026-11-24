@@ -168,7 +168,7 @@
                        target="_blank" rel="noopener" title="Стартовый протокол">📋 Протокол старта</a>
                     <form method="post" action="{{ url_for('heat_delete', hid=h.id) }}"
                           style="margin-left:auto"
-                          data-confirm-submit="Удалить старт №{{ h.heat_number }}?{% if h.status != 'pending' %} Все результаты этого старта будут потеряны безвозвратно.{% endif %}"
+                          data-confirm-submit="Удалить «{{ h.name or ('старт №' ~ h.heat_number) }}»?{% if h.status != 'pending' %} Все результаты этого старта будут потеряны безвозвратно.{% endif %}"
                           data-confirm-ok="Удалить" data-confirm-danger>
                         <button type="submit" class="danger" style="padding:6px 12px;font-size:13px">
                             🗑 Удалить

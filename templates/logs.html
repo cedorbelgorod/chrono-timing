@@ -8,7 +8,7 @@
         <option value="">— все старты —</option>
         {% for h in heats %}
             <option value="{{ h.id }}" {% if hid == h.id %}selected{% endif %}>
-                Старт №{{ h.heat_number }}{% if h.name %} — {{ h.name }}{% endif %}
+                {{ h.name or ('Старт №' ~ h.heat_number) }}
             </option>
         {% endfor %}
     </select>

@@ -50,7 +50,7 @@
         <div class="heat-card heat-running">
             <div class="heat-top">
                 <span class="heat-title">
-                    Старт №{{ h.heat_number }}{% if h.name %} — {{ h.name }}{% endif %}
+                    {{ h.name or ('Старт №' ~ h.heat_number) }}
                 </span>
                 {{ stat_chips(h) }}
                 <form method="post" action="{{ url_for('heat_force_finish_and_next', hid=h.id) }}"

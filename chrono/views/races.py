@@ -110,6 +110,19 @@ def heat_rename(hid):
     finally: conn.close()
 
 
+def _heat_label(h):
+    """Название старта, а если не задано — «Старт №N»."""
+    try:
+        name = (h['name'] or '').strip()
+    except (KeyError, IndexError, TypeError):
+        name = ''
+    try:
+        number = h['heat_number']
+    except (KeyError, IndexError, TypeError):
+        number = ''
+    return name or f'Старт №{number}'
+
+
 def heat_create():
     cid = request.form.get('competition_id', type=int); participant_ids = request.form.getlist('participant_ids', type=int)
     finish_on_leader = 1 if request.form.get('finish_on_leader') else 0; auto_enabled = 1 if request.form.get('auto_enabled') else 0
@@ -165,14 +178,15 @@ def heat_create():
             set_cached_setting(conn, 'heat_auto_enabled', auto_enabled)
             set_cached_setting(conn, 'heat_min_lap_time', min_lap_time)
             set_cached_setting(conn, 'heat_start_order', start_order)
+        new_label = heat_name or f'Старт №{new_num}'
         if start_now:
             heat_row = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
             if _start_heat(conn, heat_row) is None:
-                flash(f'Старт №{new_num} создан, но запускать некого', 'error')
+                flash(f'«{new_label}» создан, но запускать некого', 'error')
             else:
-                flash(f'Старт №{new_num} создан и запущен: активных {active_count}, DNS {dns_count}', 'success')
+                flash(f'«{new_label}» создан и запущен: активных {active_count}, DNS {dns_count}', 'success')
         else:
-            flash(f'Старт №{new_num}: активных {active_count}, DNS {dns_count}', 'success')
+            flash(f'«{new_label}»: активных {active_count}, DNS {dns_count}', 'success')
         return redirect(url_for('races_page', cid=cid))
     finally: conn.close()
 
@@ -183,7 +197,7 @@ def heat_start(hid):
         h = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
         if not h or h['status'] != 'pending': flash('Старт уже запущен', 'error'); return redirect(url_for('races_page', cid=h['competition_id'] if h else None))
         if _start_heat(conn, h) is None: flash('Нет участников', 'error'); return redirect(url_for('races_page', cid=h['competition_id']))
-        flash(f'Старт №{h["heat_number"]} запущен', 'success'); return redirect(url_for('races_page', cid=h['competition_id']))
+        flash(f'«{_heat_label(h)}» запущен', 'success'); return redirect(url_for('races_page', cid=h['competition_id']))
     finally: conn.close()
 
 
@@ -194,7 +208,7 @@ def heat_force_finish(hid):
         if h and h['status'] == 'running':
             dnf_ids = request.form.getlist('dnf_race_ids', type=int)
             with conn: _force_finish_heat(conn, hid, dnf_ids)
-            msg = f'Старт №{h["heat_number"]} завершён'
+            msg = f'«{_heat_label(h)}» завершён'
             if dnf_ids: msg += f', DNF: {len(dnf_ids)}'
             flash(msg, 'success')
         return redirect(url_for('races_page', cid=h['competition_id']))
@@ -422,7 +436,7 @@ def startlist_xlsx(hid):
         ws.title = f'Старт {data["heat"]["number"]}'
         ws.append([comp['name'] if comp else ''])
         ws['A1'].font = Font(bold=True, size=13)
-        ws.append([f'Стартовый протокол · старт №{data["heat"]["number"]}'])
+        ws.append([f'Стартовый протокол · {data["heat"]["name"] or ("старт №" + str(data["heat"]["number"]))}'])
         ws['A2'].font = Font(bold=True, size=11)
         meta = []
         if data['heat']['format'] == 'itt':

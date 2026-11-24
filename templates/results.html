@@ -18,7 +18,7 @@
                     {% for h in heats %}
                         <option value="heat:{{ h.id }}"
                                 {% if selected_heat_id == h.id and not selected_cat_id %}selected{% endif %}>
-                            Старт №{{ h.heat_number }}{% if h.name %} — {{ h.name }}{% endif %}
+                            {{ h.name or ('Старт №' ~ h.heat_number) }}
                             ({% if h.status == 'running' %}идёт{% else %}завершён{% endif %})
                         </option>
                     {% endfor %}
@@ -72,8 +72,7 @@
 
     {% if info.mode == 'heat' %}
         <h3>
-            Старт №{{ info.heat.heat_number }}
-            {% if info.heat.name %} — {{ info.heat.name }}{% endif %}
+            {{ info.heat.name or ('Старт №' ~ info.heat.heat_number) }}
             <small style="color:#6b7280;font-weight:400">
                 ({% if info.heat.status == 'running' %}идёт{% else %}завершён{% endif %})
             </small>
@@ -82,7 +81,7 @@
         <h3>
             Категория: {{ info.category.name }}
             <small style="color:#6b7280;font-weight:400">
-                (Старт №{{ info.heat.heat_number }})
+                (старт: {{ info.heat.name or ('№' ~ info.heat.heat_number) }})
             </small>
         </h3>
     {% endif %}

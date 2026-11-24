@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block title %}Автохронометраж — Хронометраж{% endblock %}
 {% block content %}
 <h2>Автохронометраж <small>— {{ competition.name }}</small></h2>
@@ -65,7 +65,7 @@
             <div class="card-head">
                 <h3>
                     {% if selected_heat %}
-                        Старт №{{ selected_heat.heat_number }}{% if selected_heat.name %} — {{ selected_heat.name }}{% endif %}
+                        {{ selected_heat.name or ('Старт №' ~ selected_heat.heat_number) }}
                     {% else %}
                         Результаты
                     {% endif %}

@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Стартовый протокол — старт №{{ data.heat.number }}{% endblock %}
+{% block title %}Стартовый протокол — {{ data.heat.name or ('старт №' ~ data.heat.number) }}{% endblock %}
 {% block content %}
 <h2>
     Стартовый протокол
-    <small>— старт №{{ data.heat.number }}{% if data.heat.name %} · {{ data.heat.name }}{% endif %}</small>
+    <small>— {{ data.heat.name or ('старт №' ~ data.heat.number) }}</small>
 </h2>
 
 <div class="slt-bar">
