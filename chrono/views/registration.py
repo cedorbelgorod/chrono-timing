@@ -45,7 +45,7 @@ def registration_page():
         public_url = url_for('reg_intro', slug=slug, _external=True) if slug else ''
         list_url = url_for('reg_list', slug=slug, _external=True) if slug else ''
         qr = _qr_svg(public_url) if public_url else None
-        cats = conn.execute('SELECT * FROM categories WHERE competition_id = ?', (comp['id'],)).fetchall()
+        cats = conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY COALESCE(sort_order, id), name', (comp['id'],)).fetchall()
         need_gender = any(_cat_genders(c['gender']) != {'M', 'F'} for c in cats)
         need_year = any(c['year_from'] is not None or c['year_to'] is not None for c in cats)
         uncategorized = conn.execute(
@@ -166,7 +166,7 @@ def registration_autocat():
                     continue
                 # вторая попытка: пол неизвестен — подбираем только по году
                 if r['gender'] is None and r['birth_year'] is not None:
-                    for cat in conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY id',
+                    for cat in conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY COALESCE(sort_order, id), name',
                                             (comp['id'],)).fetchall():
                         yf, yt = cat['year_from'], cat['year_to']
                         if yf is None and yt is None:

@@ -347,8 +347,8 @@ def _parse_gender_cell(raw):
     return None
 
 PARTICIPANT_SORTS = {
-    'category': 'c.name, p.number',
-    'category_desc': 'c.name DESC, p.number',
+    'category': 'COALESCE(c.sort_order, c.id), c.name, p.number',
+    'category_desc': 'COALESCE(c.sort_order, c.id) DESC, c.name DESC, p.number',
     'number': 'p.number',
     'number_desc': 'p.number DESC',
     'name': 'p.full_name COLLATE NOCASE',

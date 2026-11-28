@@ -257,7 +257,7 @@ def _reg_allowed_categories(conn, comp, draft):
     """Категории, подходящие под уже введённые пол и год."""
     gender = (draft.get('gender') or '').upper() or None
     year = _parse_year(draft.get('year')) if draft.get('year') else None
-    rows = conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY id',
+    rows = conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY COALESCE(sort_order, id), name',
                         (comp['id'],)).fetchall()
     return [c for c in rows if _category_matches(c, gender, year)]
 

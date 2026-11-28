@@ -53,7 +53,7 @@ def races_page():
                 'SELECT hc.category_id, h.heat_number FROM heat_categories hc JOIN heats h ON h.id = hc.heat_id WHERE h.competition_id = ?',
                 (selected_cid,)).fetchall()}
             tags_by_number = _tags_by_number(conn, selected_cid)
-            for c in conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY name', (selected_cid,)).fetchall():
+            for c in conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY COALESCE(sort_order, id), name', (selected_cid,)).fetchall():
                 cd = dict(c)
                 cd['heat_number'] = used_map.get(c['id'])
                 # в старт попадают только участники с выданным номером

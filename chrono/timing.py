@@ -693,7 +693,7 @@ def _find_heat_by_token(token):
 def _build_results_detail(conn, hid, cat_filter_id=None, include_auto=True):
     heat_row = conn.execute('SELECT * FROM heats WHERE id = ?', (hid,)).fetchone()
     heat_fmt = _heat_format(heat_row)
-    q = '''SELECT r.*, p.number, p.full_name, p.birth_year, p.gender, c.id AS category_id, c.name AS category_name, c.laps_total AS category_laps
+    q = '''SELECT r.*, p.number, p.full_name, p.birth_year, p.gender, c.id AS category_id, c.name AS category_name, c.laps_total AS category_laps, c.sort_order AS category_sort
            FROM races r JOIN participants p ON p.id = r.participant_id LEFT JOIN categories c ON c.id = p.category_id WHERE r.heat_id = ?'''
     params = [hid]
     if cat_filter_id is not None:
@@ -707,11 +707,15 @@ def _build_results_detail(conn, hid, cat_filter_id=None, include_auto=True):
         prepared = prepare_race(row, conn, laps_map.get(row['id'], []), include_auto=include_auto)
         cat_id = row['category_id']; cat_name = row['category_name'] or 'Без категории'; cat_laps = row['category_laps'] or prepared['laps_total'] or 1
         key = cat_id if cat_id is not None else 0
-        if key not in grouped: grouped[key] = {'id': cat_id, 'name': cat_name, 'laps_total': cat_laps, 'races': []}
+        if key not in grouped:
+            grouped[key] = {'id': cat_id, 'name': cat_name, 'laps_total': cat_laps,
+                            'sort': row['category_sort'], 'races': []}
         grouped[key]['races'].append(prepared)
 
     blocks = []
-    for cat in grouped.values():
+    for cat in sorted(grouped.values(),
+                      key=lambda g: (g['id'] is None, g['sort'] if g['sort'] is not None else 0,
+                                     (g['name'] or '').lower())):
         races = cat['races']
         races.sort(key=lambda r: (1 if r['status'] == 'dnf' else (2 if r['status'] == 'dns' else 0), -len(r['laps']), r.get('sort_time', float('inf')), r['number']))
         leader = next((r for r in races if r['status'] == 'ok'), None)
@@ -780,14 +784,15 @@ def _build_results_detail(conn, hid, cat_filter_id=None, include_auto=True):
             x.setdefault('place_now', None)
 
         blocks.append({'category': cat, 'laps_total': max_laps, 'rows': rows_data, 'format': heat_fmt})
-    return sorted(blocks, key=lambda x: (x['category']['name'] or '').lower())
+    # порядок категорий задан categories.sort_order (см. сортировку grouped выше)
+    return blocks
 
 def _build_races_heats(conn, cid):
     """Старты со всеми заездами — для страницы «Старт» и её автообновления."""
     heats_data = []
     for h in conn.execute('SELECT * FROM heats WHERE competition_id = ? ORDER BY heat_number', (cid,)).fetchall():
         hd = dict(h)
-        heat_cats = [dict(c) for c in conn.execute('SELECT c.* FROM categories c JOIN heat_categories hc ON hc.category_id = c.id WHERE hc.heat_id = ? ORDER BY c.name', (h['id'],)).fetchall()]
+        heat_cats = [dict(c) for c in conn.execute('SELECT c.* FROM categories c JOIN heat_categories hc ON hc.category_id = c.id WHERE hc.heat_id = ? ORDER BY COALESCE(c.sort_order, c.id), c.name', (h['id'],)).fetchall()]
         has_uncategorized = conn.execute(
             'SELECT 1 FROM heat_participants hp JOIN participants p ON p.id = hp.participant_id '
             'WHERE hp.heat_id = ? AND p.category_id IS NULL LIMIT 1', (h['id'],)).fetchone()
@@ -801,7 +806,7 @@ def _build_races_heats(conn, cid):
             'WHERE hp.heat_id = ? ORDER BY hp.status, p.number', (h['id'],)).fetchall()
         race_rows = conn.execute(
             "SELECT r.*, p.number, p.full_name, p.birth_year, p.gender, "
-            "COALESCE(c.name, 'Без категории') AS category_name "
+            "COALESCE(c.name, 'Без категории') AS category_name, c.sort_order AS category_sort "
             'FROM races r JOIN participants p ON p.id = r.participant_id '
             'LEFT JOIN categories c ON c.id = p.category_id WHERE r.heat_id = ? ORDER BY p.number', (h['id'],)).fetchall()
 
@@ -810,7 +815,11 @@ def _build_races_heats(conn, cid):
 
         if h['status'] == 'finished':
             multi_cat = len(hd['categories']) > 1
-            hd['races'].sort(key=lambda r: ((r['category_name'] or '',) if multi_cat else ()) + (1 if r['status'] == 'dnf' else (2 if r['status'] == 'dns' else 0), -len(r['laps']), r.get('sort_time', float('inf')), r['number']))
+            hd['races'].sort(key=lambda r: (
+                ((r['category_sort'] if r['category_sort'] is not None else 10 ** 9,
+                  r['category_name'] or '') if multi_cat else ())
+                + (1 if r['status'] == 'dnf' else (2 if r['status'] == 'dns' else 0),
+                   -len(r['laps']), r.get('sort_time', float('inf')), r['number'])))
         hd['races_total'] = sum(1 for r in hd['races'] if r['status'] != 'dns')
         hd['races_finished'] = sum(1 for r in hd['races'] if r['status'] in ('ok', 'dnf', 'lapped'))
         if h['started_at']:
@@ -873,7 +882,8 @@ def _build_heat_view(conn, h):
     Используется и страницей «Сейчас идёт», и публичным табло.
     """
     hd = dict(h)
-    races = conn.execute('SELECT r.*, p.number, p.full_name, p.category_id, c.name AS category_name '
+    races = conn.execute('SELECT r.*, p.number, p.full_name, p.category_id, '
+                         'c.name AS category_name, c.sort_order AS category_sort '
                          'FROM races r JOIN participants p ON p.id = r.participant_id '
                          'LEFT JOIN categories c ON c.id = p.category_id '
                          'WHERE r.heat_id = ? ORDER BY p.number', (h['id'],)).fetchall()
@@ -894,7 +904,8 @@ def _build_heat_view(conn, h):
     for r in prepared:
         key = r.get('category_id') or 0
         if key not in groups:
-            groups[key] = {'id': key, 'name': r.get('category_name') or 'Без категории', 'races': []}
+            groups[key] = {'id': key, 'name': r.get('category_name') or 'Без категории',
+                           'sort': r.get('category_sort'), 'races': []}
         groups[key]['races'].append(r)
 
     for g in groups.values():
@@ -907,7 +918,10 @@ def _build_heat_view(conn, h):
     counts = _count_races(prepared)
     hd.update(total=counts['total'], running_count=counts['running'],
               finished_count=counts['ok'], dnf_count=counts['dnf'], lapped_count=counts['lapped'])
-    hd['categories'] = sorted(groups.values(), key=lambda x: (x['name'] or '').lower())
+    hd['categories'] = sorted(
+        groups.values(),
+        key=lambda x: (x['id'] is None, x['sort'] if x['sort'] is not None else 0,
+                       (x['name'] or '').lower()))
     hd['running_list'] = [{'id': r['id'], 'number': r['number'], 'name': r['full_name'],
                            'laps': len(r['laps']), 'total': r['laps_total']}
                           for r in prepared if r['status'] == 'running']

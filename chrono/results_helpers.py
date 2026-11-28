@@ -55,7 +55,7 @@ def _prepare_results_data(conn, cid, target, include_auto=True):
     competition = conn.execute('SELECT * FROM competitions WHERE id = ?', (cid,)).fetchone()
     if not competition: return None, [], [], [], {}, None, None
     heats = conn.execute("SELECT * FROM heats WHERE competition_id = ? AND status IN ('running','finished') ORDER BY heat_number", (cid,)).fetchall()
-    categories = conn.execute('''SELECT DISTINCT c.id, c.name FROM categories c JOIN heat_categories hc ON hc.category_id = c.id JOIN heats h ON h.id = hc.heat_id WHERE c.competition_id = ? AND h.status IN ('running','finished') ORDER BY c.name''', (cid,)).fetchall()
+    categories = conn.execute('''SELECT DISTINCT c.id, c.name FROM categories c JOIN heat_categories hc ON hc.category_id = c.id JOIN heats h ON h.id = hc.heat_id WHERE c.competition_id = ? AND h.status IN ('running','finished') ORDER BY COALESCE(c.sort_order, c.id), c.name''', (cid,)).fetchall()
     details, info, selected_heat_id, selected_cat_id = [], {}, None, None
 
     if target.startswith('heat:'):
@@ -192,7 +192,7 @@ def _build_protocol(conn, cid):
     start_display = fmt_hm(first_start) or (s.get('proto_start_time') or '')
     finish_display = fmt_hm(last_finish)
 
-    cats = [dict(c) for c in conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY name', (cid,)).fetchall()]
+    cats = [dict(c) for c in conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY COALESCE(sort_order, id), name', (cid,)).fetchall()]
     uncategorized = _scalar(conn, 'SELECT COUNT(*) FROM participants WHERE competition_id = ? AND category_id IS NULL', cid)
     if uncategorized:
         cats.append({'id': 0, 'name': 'Без категории', 'laps_total': 1, 'lap_length': None,

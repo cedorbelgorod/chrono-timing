@@ -834,7 +834,7 @@ def participants_list(cid):
     try:
         comp = conn.execute('SELECT * FROM competitions WHERE id = ?', (cid,)).fetchone()
         if not comp: return 'Не найдено', 404
-        categories = conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY name', (cid,)).fetchall()
+        categories = conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY COALESCE(sort_order, id), name', (cid,)).fetchall()
 
         q = request.args.get('q', '').strip()
         cat = request.args.get('cat', '').strip()
@@ -1386,7 +1386,7 @@ def participants_import(cid):
     try:
         comp = conn.execute('SELECT * FROM competitions WHERE id = ?', (cid,)).fetchone()
         if not comp: return 'Не найдено', 404
-        categories = conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY name', (cid,)).fetchall()
+        categories = conn.execute('SELECT * FROM categories WHERE competition_id = ? ORDER BY COALESCE(sort_order, id), name', (cid,)).fetchall()
         categories_by_name = {c['name'].strip().lower(): c for c in categories}
         if request.method == 'GET':
             return render_template('participants_import.html', competition=comp, categories=categories, parsed=None, step='upload')
