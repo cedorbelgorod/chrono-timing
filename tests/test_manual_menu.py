@@ -49,12 +49,16 @@ class ManualMenuTest(ChronoTestCase):
         self.assertNotIn('class="finish-overlay"', html)
         self.assertNotIn('Ctrl+Z', html)
 
-    def test_manual_page_has_hidden_row_menu(self):
+    def test_manual_page_has_hidden_row_actions(self):
         self._setup()
         html = self.client.get('/manual').get_data(as_text=True)
         self.assertIn('m-row-menu-btn', html)
+        self.assertIn('m-row-actions', html)
         self.assertIn('data-action="undo"', html)
         self.assertIn('data-action="dnf"', html)
+        # действия скрыты, пока не открыты; автообновление не перерисовывает открытую строку
+        self.assertIn('m-actions-open', html)
+        self.assertIn('if (expandedRaceId) return;', html)
 
     def test_dnf_from_manual_removes_participant(self):
         rid, hid = self._setup(laps_done=1)

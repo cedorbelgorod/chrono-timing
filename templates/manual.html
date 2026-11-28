@@ -272,19 +272,20 @@
 }
 .m-row-menu-btn:hover { background: #f3f4f6; color: #374151; }
 @media (pointer: coarse) { .m-row-menu-btn { display: none; } }
-.m-row-menu {
-    position: absolute; right: 6px; top: calc(100% - 2px); z-index: 40;
-    min-width: 210px; padding: 4px; background: #fff;
-    border: 1px solid #e5e7eb; border-radius: 10px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, .18);
+/* действия в карточке: скрыты, показываются по ⋮ / долгому тапу */
+.m-row-actions { display: none; flex-direction: column; gap: 4px; flex: 0 0 auto; }
+.m-active-row.m-actions-open .m-row-actions { display: flex; }
+.m-active-row.m-actions-open .m-tap-form { display: none; }
+.m-row-act {
+    min-height: 44px; min-width: 92px; padding: 6px 10px;
+    font-size: 13px; font-weight: 700; font-family: inherit;
+    border-radius: 8px; border: 1px solid #d1d5db; background: #fff;
+    color: #374151; cursor: pointer; touch-action: manipulation;
 }
-.m-row-menu button {
-    display: block; width: 100%; text-align: left; padding: 10px 12px;
-    border: none; border-radius: 7px; background: none;
-    font: inherit; font-size: 14px; color: #1f2937; cursor: pointer;
-}
-.m-row-menu button:hover { background: #f3f4f6; }
-.m-row-menu .m-menu-dnf { color: #b91c1c; font-weight: 600; }
+.m-row-act-undo { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
+.m-row-act-undo:active { background: #fef3c7; }
+.m-row-act-dnf { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
+.m-row-act-dnf:active { background: #fee2e2; }
 
 /* ======================= ЖУРНАЛ ======================= */
 .m-log {
@@ -412,7 +413,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const cid = {{ competition.id if competition else 'null' }};
 
     let isFetching = false;
+    let expandedRaceId = null;
     async function refreshActive() {
+        // пока показаны «Отмена/DNF», не перерисовываем список — иначе кнопки исчезают
+        if (expandedRaceId) return;
         if (!container || !cid || isFetching) return;
         isFetching = true;
         try {
@@ -490,27 +494,33 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ===== 2. Меню участника: ⋮ на ПК, долгий тап на мобильном =====
+    // ===== 2. Действия участника: ⋮ на ПК, долгий тап на мобильном =====
     let pressTimer = null;
     let pressStart = null;
     let suppressRowClick = false;
+    let suppressResetTimer = null;
 
-    function closeRowMenus() {
-        container.querySelectorAll('.m-row-menu').forEach(m => { m.hidden = true; });
+    let actionsTimer = null;
+
+    function openRowActions(rid) {
+        expandedRaceId = rid;
+        container.querySelectorAll('.m-active-row').forEach(row => {
+            row.classList.toggle('m-actions-open', row.dataset.raceId === rid);
+        });
+        // не держим список замороженным слишком долго
+        clearTimeout(actionsTimer);
+        actionsTimer = setTimeout(closeRowActions, 12000);
     }
 
-    function openRowMenu(rid) {
-        closeRowMenus();
-        const menu = container.querySelector('.m-row-menu[data-menu-race="' + rid + '"]');
-        if (menu) menu.hidden = false;
+    function closeRowActions() {
+        clearTimeout(actionsTimer);
+        expandedRaceId = null;
+        container.querySelectorAll('.m-active-row').forEach(row => row.classList.remove('m-actions-open'));
     }
 
-    function toggleRowMenu(rid) {
-        const menu = container.querySelector('.m-row-menu[data-menu-race="' + rid + '"]');
-        if (!menu) return;
-        const show = menu.hidden;
-        closeRowMenus();
-        menu.hidden = !show;
+    function toggleRowActions(rid) {
+        if (expandedRaceId === rid) closeRowActions();
+        else openRowActions(rid);
     }
 
     async function runRaceAction(kind, rid) {
@@ -519,6 +529,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const msg = kind === 'dnf'
             ? 'Поставить DNF участнику №' + number + '? Он пропадёт из хронометража, вернуть можно на странице «Старты».'
             : 'Отменить последнее действие у №' + number + '?';
+        closeRowActions();
         const ok = await window.uiConfirm(msg, {
             okText: kind === 'dnf' ? 'DNF' : 'Отменить',
             danger: kind === 'dnf'
@@ -552,7 +563,9 @@ document.addEventListener('DOMContentLoaded', () => {
         clearTimeout(pressTimer);
         pressTimer = setTimeout(() => {
             suppressRowClick = true;
-            openRowMenu(row.dataset.raceId);
+            clearTimeout(suppressResetTimer);
+            suppressResetTimer = setTimeout(() => { suppressRowClick = false; }, 700);
+            openRowActions(row.dataset.raceId);
             if (navigator.vibrate) { try { navigator.vibrate(30); } catch (err) {} }
         }, 550);
     });
@@ -570,21 +583,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target.closest('.m-active-info')) e.preventDefault();
     });
     container.addEventListener('click', async (e) => {
-        if (suppressRowClick) {
+        const isAction = !!e.target.closest('.m-row-actions [data-action]');
+        if (suppressRowClick && !isAction) {
             suppressRowClick = false;
             e.preventDefault();
             e.stopPropagation();
             return;
         }
         const menuBtn = e.target.closest('.m-row-menu-btn');
-        if (menuBtn) { toggleRowMenu(menuBtn.dataset.menuRace); return; }
-        const item = e.target.closest('.m-row-menu [data-action]');
-        if (item) {
-            closeRowMenus();
+        if (menuBtn) { toggleRowActions(menuBtn.dataset.menuRace); return; }
+        if (isAction) {
+            const item = e.target.closest('.m-row-actions [data-action]');
             await runRaceAction(item.dataset.action, item.dataset.race);
             return;
         }
-        if (!e.target.closest('.m-row-menu')) closeRowMenus();
+    });
+    document.addEventListener('click', (e) => {
+        if (expandedRaceId && !e.target.closest('.m-active-row')) closeRowActions();
     });
 
     // ===== 3. AJAX-отправка для кнопок КРУГ/ФИНИШ в карточках =====

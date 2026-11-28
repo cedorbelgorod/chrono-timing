@@ -60,7 +60,7 @@
                         {% endif %}
                     </div>
                 </div>
-                <form method="post" action="{{ url_for('manual_action') }}">
+                <form method="post" action="{{ url_for('manual_action') }}" class="m-tap-form">
                     <input type="hidden" name="competition_id" value="{{ competition.id }}">
                     <input type="hidden" name="number" value="{{ r.number or "" }}">
                     <button type="submit" class="m-tap {{ 'm-tap-finish' if is_last else 'm-tap-lap' }}">
@@ -71,12 +71,14 @@
                         {% endif %}
                     </button>
                 </form>
-                <button type="button" class="m-row-menu-btn" data-menu-race="{{ r.id }}"
-                        aria-label="Действия" title="Действия">⋮</button>
-                <div class="m-row-menu" data-menu-race="{{ r.id }}" hidden>
-                    <button type="button" data-action="undo" data-race="{{ r.id }}">↶ Отменить действие</button>
-                    <button type="button" class="m-menu-dnf" data-action="dnf" data-race="{{ r.id }}">DNF — не финишировал</button>
+                <div class="m-row-actions">
+                    <button type="button" class="m-row-act m-row-act-undo"
+                            data-action="undo" data-race="{{ r.id }}">↶ Отмена</button>
+                    <button type="button" class="m-row-act m-row-act-dnf"
+                            data-action="dnf" data-race="{{ r.id }}">DNF</button>
                 </div>
+                <button type="button" class="m-row-menu-btn" data-menu-race="{{ r.id }}"
+                        aria-label="Действия" title="Отмена / DNF">⋮</button>
             </div>
         {% endfor %}
     </div>
