@@ -648,6 +648,10 @@ def lap_edit(lid):
 
 
 def lap_delete(lid):
+    """Удалить круг (любой). Последующие круги перенумеровываются.
+
+    Удаление последнего круга завершённого заезда снимает финиш (заезд снова идёт).
+    """
     conn = get_db()
     try:
         lap = conn.execute('SELECT * FROM laps WHERE id = ?', (lid,)).fetchone()
@@ -656,17 +660,20 @@ def lap_delete(lid):
         cid = race['competition_id']
 
         max_lap = conn.execute('SELECT MAX(lap_number) FROM laps WHERE race_id = ?', (race['id'],)).fetchone()[0]
-        if lap['lap_number'] != max_lap: flash('Можно удалять только последний круг', 'error'); return redirect(url_for('races_page', cid=cid))
-
+        is_last = lap['lap_number'] == max_lap
         had_finish = bool(race['finish_time'])
         with conn:
             conn.execute('DELETE FROM laps WHERE id = ?', (lid,))
-            if had_finish:
+            conn.execute('UPDATE laps SET lap_number = lap_number - 1 '
+                         'WHERE race_id = ? AND lap_number > ?', (race['id'], lap['lap_number']))
+            if is_last and had_finish:
                 conn.execute("UPDATE races SET finish_time = NULL, status = 'running', laps_behind = 0 WHERE id = ?", (race['id'],))
                 h = conn.execute('SELECT status FROM heats WHERE id = ?', (race['heat_id'],)).fetchone()
-                if h and h['status'] == 'finished': conn.execute("UPDATE heats SET status = 'running', finished_at = NULL WHERE id = ?", (race['heat_id'],))
+                if h and h['status'] == 'finished':
+                    conn.execute("UPDATE heats SET status = 'running', finished_at = NULL WHERE id = ?", (race['heat_id'],))
 
-        flash('Круг удалён' + (' (финиш снят)' if had_finish else ''), 'success'); return redirect(url_for('races_page', cid=cid))
+        flash('Круг удалён' + (' (финиш снят)' if is_last and had_finish else ''), 'success')
+        return redirect(url_for('races_page', cid=cid))
     finally: conn.close()
 
 

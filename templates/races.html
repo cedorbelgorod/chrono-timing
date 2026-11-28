@@ -542,6 +542,13 @@ function toggleHeat(btn) {
     btn.textContent = card.classList.contains('collapsed') ? '▶' : '▼';
 }
 
+function deleteLap(lapId, message) {
+    if (!confirm(message || 'Удалить круг?')) return;
+    const f = document.createElement('form');
+    f.method = 'post'; f.action = '/laps/' + lapId + '/delete';
+    document.body.appendChild(f); f.submit();
+}
+
 function editLap(lapId, currentIso) {
     const val = prompt(
         'Новое время круга (формат YYYY-MM-DDTHH:MM:SS):', currentIso

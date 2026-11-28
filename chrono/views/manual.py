@@ -241,7 +241,8 @@ def manual_action():
                 log(True, 'finish' if is_last_lap else 'lap', race=race, number=number_int,
                     full_name=race['full_name'], detail=f'Круг {laps_done + 1}/{race["laps_total"]}')
             if is_last_lap:
-                session['last_action'] = {'type': 'finish', 'id': race['id'], 'time': now.timestamp()}
+                session['last_action'] = {'type': 'finish', 'id': race['id'], 'lap_id': lap_id,
+                                          'time': now.timestamp()}
                 last = {'ok': True, 'number': number_int, 'full_name': race['full_name'], 'action': f'ФИНИШ (круг {laps_done + 1}/{race["laps_total"]})', 'time': now_ts, 'action_ts': action_ts, 'is_finish': True}
             else:
                 session['last_action'] = {'type': 'lap', 'id': lap_id, 'time': now.timestamp()}
@@ -297,13 +298,21 @@ def manual_undo():
         elif action['type'] == 'finish':
             race = conn.execute('SELECT * FROM races WHERE id = ?', (action['id'],)).fetchone()
             if race and race['status'] == 'ok':
+                lap_id = action.get('lap_id')
                 with conn:
+                    # финишным был последний круг — убираем его, иначе повторный финиш
+                    # засчитает лишний круг
+                    if lap_id:
+                        lap = conn.execute('SELECT * FROM laps WHERE id = ? AND race_id = ?',
+                                           (lap_id, race['id'])).fetchone()
+                        if lap:
+                            conn.execute('DELETE FROM laps WHERE id = ?', (lap_id,))
                     conn.execute("UPDATE races SET finish_time = NULL, status = 'running', laps_behind = 0 WHERE id = ?", (race['id'],))
                     if conn.execute('SELECT status FROM heats WHERE id = ?', (race['heat_id'],)).fetchone()['status'] == 'finished': conn.execute("UPDATE heats SET status = 'running', finished_at = NULL WHERE id = ?", (race['heat_id'],))
                     _log_timing(conn, 'manual', 'undo', True, competition_id=cid, heat_id=race['heat_id'],
                                 race_id=race['id'], participant_id=race['participant_id'], user_login=judge,
-                                detail='Отменён финиш')
-                flash('Финиш отменён', 'success')
+                                detail='Отменён финиш' + (' и последний круг' if action.get('lap_id') else ''))
+                flash('Финиш отменён' + (' (последний круг убран)' if action.get('lap_id') else ''), 'success')
             else:
                 flash('Заезд не найден', 'error')
                 with conn:
