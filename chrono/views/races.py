@@ -344,6 +344,42 @@ def heat_mark_dnf(hid):
     finally: conn.close()
 
 
+def race_undnf(rid):
+    """Вернуть участника после DNF (со страницы «Старты»)."""
+    conn = get_db()
+    try:
+        r = conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
+        if not r: return 'Заезд не найден', 404
+        cid = r['competition_id']
+        if r['status'] != 'dnf':
+            flash('Участник не в DNF', 'error'); return redirect(url_for('races_page', cid=cid))
+        h = conn.execute('SELECT * FROM heats WHERE id = ?', (r['heat_id'],)).fetchone()
+        person = conn.execute('SELECT number, full_name FROM participants WHERE id = ?',
+                              (r['participant_id'],)).fetchone()
+        editor = session.get('user')
+        with conn:
+            if h and h['status'] == 'finished':
+                laps = _race_lap_counts(conn, [rid]).get(rid, 0)
+                if laps >= r['laps_total']:
+                    conn.execute("UPDATE races SET status = 'ok', finish_time = ?, laps_behind = 0 WHERE id = ?",
+                                 (r['finish_time'] or datetime.now().isoformat(), rid))
+                else:
+                    conn.execute("UPDATE races SET status = 'lapped', finish_time = NULL, laps_behind = ? WHERE id = ?",
+                                 (r['laps_total'] - laps, rid))
+            else:
+                conn.execute("UPDATE races SET status = 'running', finish_time = NULL, laps_behind = 0 WHERE id = ?",
+                             (rid,))
+            _log_timing(conn, 'manual', 'undnf', True, competition_id=cid,
+                        heat_id=r['heat_id'], race_id=rid,
+                        participant_id=r['participant_id'],
+                        number=person['number'] if person else None,
+                        full_name=person['full_name'] if person else None,
+                        user_login=editor, detail='Возврат после DNF')
+        flash('Участник возвращён в хронометраж', 'success')
+        return redirect(url_for('races_page', cid=cid))
+    finally: conn.close()
+
+
 def heat_delete(hid):
     conn = get_db()
     try:
@@ -834,6 +870,7 @@ RULES = [
     ('/heats/<int:hid>/undns', 'heat_undns', heat_undns, ['POST']),
     ('/heats/<int:hid>/mark_dnf', 'heat_mark_dnf', heat_mark_dnf, ['POST']),
     ('/heats/<int:hid>/delete', 'heat_delete', heat_delete, ['POST']),
+    ('/races/<int:rid>/undnf', 'race_undnf', race_undnf, ['POST']),
     ('/heats/<int:hid>/edit_start', 'heat_edit_start', heat_edit_start, ['POST']),
     ('/heats/<int:hid>/order', 'heat_order_save', heat_order_save, ['POST']),
     ('/heats/<int:hid>/reset_order', 'heat_order_reset', heat_order_reset, ['POST']),

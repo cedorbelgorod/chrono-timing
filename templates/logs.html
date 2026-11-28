@@ -73,6 +73,8 @@
                 {% elif r.action == 'lap_edit' %}правка круга
                 {% elif r.action == 'lap_delete' %}удаление круга
                 {% elif r.action == 'finish_edit' %}правка финиша
+                {% elif r.action == 'dnf' %}DNF (не финишировал)
+                {% elif r.action == 'undnf' %}возврат после DNF
                 {% else %}{{ r.action }}{% endif %}
             </td>
             <td class="mono">{{ r.number or '—' }}</td>

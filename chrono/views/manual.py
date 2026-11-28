@@ -258,6 +258,87 @@ def manual_action():
     finally: conn.close()
 
 
+def _manual_race(conn, rid):
+    """Заезд текущего соревнования (защита от чужих id)."""
+    comp = _get_competition(conn)
+    if not comp:
+        return None, None
+    race = conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
+    if not race or race['competition_id'] != comp['id']:
+        return None, None
+    return comp, race
+
+
+def _race_person(conn, race):
+    return conn.execute('SELECT number, full_name FROM participants WHERE id = ?',
+                        (race['participant_id'],)).fetchone()
+
+
+def manual_race_undo(rid):
+    """Отменить последнее действие по участнику (меню карточки в хронометраже)."""
+    judge = session.get('user')
+    conn = get_db()
+    try:
+        comp, race = _manual_race(conn, rid)
+        if not race:
+            return jsonify({'ok': False, 'message': 'Участник не найден'}), 404
+        person = _race_person(conn, race)
+        last = conn.execute('SELECT * FROM laps WHERE race_id = ? ORDER BY lap_number DESC LIMIT 1',
+                            (rid,)).fetchone()
+        was_finished = race['status'] == 'ok'
+        if not last and not was_finished:
+            return jsonify({'ok': False, 'message': 'Нечего отменять'})
+        detail = 'Отменён финиш' if was_finished else 'Отменён последний круг'
+        if last:
+            detail += f' (К{last["lap_number"]}, {last["lap_time"][11:19]})'
+        with conn:
+            if last:
+                conn.execute('DELETE FROM laps WHERE id = ?', (last['id'],))
+            if was_finished:
+                conn.execute("UPDATE races SET finish_time = NULL, status = 'running', laps_behind = 0 WHERE id = ?",
+                             (rid,))
+                h = conn.execute('SELECT status FROM heats WHERE id = ?', (race['heat_id'],)).fetchone()
+                if h and h['status'] == 'finished':
+                    conn.execute("UPDATE heats SET status = 'running', finished_at = NULL WHERE id = ?",
+                                 (race['heat_id'],))
+            _log_timing(conn, 'manual', 'undo', True, competition_id=comp['id'],
+                        heat_id=race['heat_id'], race_id=rid,
+                        participant_id=race['participant_id'],
+                        number=person['number'] if person else None,
+                        full_name=person['full_name'] if person else None,
+                        user_login=judge, detail=detail)
+        return jsonify({'ok': True, 'message': detail})
+    finally:
+        conn.close()
+
+
+def manual_race_dnf(rid):
+    """DNF из хронометража. Вернуть участника можно только со страницы «Старты»."""
+    judge = session.get('user')
+    conn = get_db()
+    try:
+        comp, race = _manual_race(conn, rid)
+        if not race:
+            return jsonify({'ok': False, 'message': 'Участник не найден'}), 404
+        if race['status'] == 'dnf':
+            return jsonify({'ok': False, 'message': 'Участник уже в DNF'})
+        if race['status'] != 'running':
+            return jsonify({'ok': False, 'message': 'Участник уже финишировал'})
+        person = _race_person(conn, race)
+        with conn:
+            conn.execute("UPDATE races SET status = 'dnf', finish_time = NULL, laps_behind = 0 WHERE id = ?",
+                         (rid,))
+            _log_timing(conn, 'manual', 'dnf', True, competition_id=comp['id'],
+                        heat_id=race['heat_id'], race_id=rid,
+                        participant_id=race['participant_id'],
+                        number=person['number'] if person else None,
+                        full_name=person['full_name'] if person else None,
+                        user_login=judge, detail='DNF с хронометража')
+        return jsonify({'ok': True, 'message': 'DNF поставлен'})
+    finally:
+        conn.close()
+
+
 def manual_undo():
     action = session.get('last_action'); cid = request.form.get('competition_id', type=int)
     judge = session.get('user')
@@ -328,4 +409,6 @@ RULES = [
     ('/manual/active', 'manual_active', manual_active, ['GET']),
     ('/manual/action', 'manual_action', manual_action, ['POST']),
     ('/manual/undo', 'manual_undo', manual_undo, ['POST']),
+    ('/manual/race/<int:rid>/undo', 'manual_race_undo', manual_race_undo, ['POST']),
+    ('/manual/race/<int:rid>/dnf', 'manual_race_dnf', manual_race_dnf, ['POST']),
 ]

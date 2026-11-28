@@ -71,6 +71,12 @@
                         {% endif %}
                     </button>
                 </form>
+                <button type="button" class="m-row-menu-btn" data-menu-race="{{ r.id }}"
+                        aria-label="Действия" title="Действия">⋮</button>
+                <div class="m-row-menu" data-menu-race="{{ r.id }}" hidden>
+                    <button type="button" data-action="undo" data-race="{{ r.id }}">↶ Отменить действие</button>
+                    <button type="button" class="m-menu-dnf" data-action="dnf" data-race="{{ r.id }}">DNF — не финишировал</button>
+                </div>
             </div>
         {% endfor %}
     </div>

@@ -295,6 +295,14 @@
                                             <span class="mono" style="font-size:14px;color:#b45309">
                                                 {{ r.status_display }}
                                             </span>
+                                            {% if r.status == 'dnf' %}
+                                            <form method="post" action="{{ url_for('race_undnf', rid=r.id) }}"
+                                                  style="display:inline;margin:0"
+                                                  data-confirm-submit="Вернуть участника в хронометраж?"
+                                                  data-confirm-ok="Вернуть">
+                                                <button type="submit" class="btn btn-sm btn-ghost" style="margin-left:6px">↩ Вернуть</button>
+                                            </form>
+                                            {% endif %}
                                         {% endif %}
                                     </td>
                                     <td>
