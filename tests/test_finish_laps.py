@@ -159,3 +159,6 @@ class LapAdminTest(ChronoTestCase):
         # кнопки привязаны к конкретным кругам
         self.assertIn(f'deleteLap({ids[1]}', html)
         self.assertIn(f'editLap({ids[2]}', html)
+        # onclick в одинарных кавычках: внутри JSON-строка в двойных — иначе атрибут ломается
+        self.assertIn("onclick='deleteLap(", html)
+        self.assertNotIn('onclick="deleteLap(', html)

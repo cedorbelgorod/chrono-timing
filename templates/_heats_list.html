@@ -107,7 +107,7 @@
                                     title="Изменить время круга"
                                     style="padding:0 6px;font-size:10px;background:#3b82f6;line-height:1.6">✎</button>
                             <button type="button"
-                                    onclick="deleteLap({{ lap.id }}, {{ ('Удалить круг? Финиш будет снят' if loop.last and r.finish_time else 'Удалить круг?')|tojson }})"
+                                    onclick='deleteLap({{ lap.id }}, {{ ("Удалить круг? Финиш будет снят" if loop.last and r.finish_time else "Удалить круг?")|tojson }})'
                                     title="Удалить круг"
                                     style="padding:0 6px;font-size:10px;background:#dc2626;line-height:1.6">🗑</button>
                             {% endif %}
@@ -312,7 +312,7 @@
                                                             title="Изменить время круга"
                                                             style="padding:0 6px;font-size:10px;background:#3b82f6;line-height:1.6">✎</button>
                                                     <button type="button"
-                                                            onclick="deleteLap({{ lap.id }}, {{ ('Удалить круг? Финиш будет снят' if loop.last and r.finish_time else 'Удалить круг?')|tojson }})"
+                                                            onclick='deleteLap({{ lap.id }}, {{ ("Удалить круг? Финиш будет снят" if loop.last and r.finish_time else "Удалить круг?")|tojson }})'
                                                             title="Удалить круг"
                                                             style="padding:0 6px;font-size:10px;background:#dc2626;line-height:1.6">🗑</button>
                                                     {% endif %}
