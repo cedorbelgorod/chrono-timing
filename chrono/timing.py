@@ -161,7 +161,17 @@ def prepare_race(row, conn, laps_rows=None, auto_laps_rows=None, min_lap=None, i
 
         orig_status = d.get('status') or 'running'
         if orig_status not in ('dns', 'dnf', 'lapped'):
-            if len(laps) >= d['laps_total']:
+            stored_finish = d.get('finish_time')
+            if orig_status == 'ok' and stored_finish:
+                # финиш сохранён (в т.ч. поправлен вручную) — он главнее последнего круга
+                finish_dt = datetime.fromisoformat(stored_finish)
+                d['finish_time'] = finish_dt.isoformat()
+                d['finish_display'] = finish_dt.strftime('%H:%M:%S')
+                d['total_display'] = format_secs((finish_dt - start).total_seconds())
+                d['sort_time'] = (finish_dt - start).total_seconds()
+                d['status_display'] = 'OK'
+                d['result_display'] = d['total_display']
+            elif len(laps) >= d['laps_total']:
                 finish_dt = datetime.fromisoformat(laps[d['laps_total'] - 1]['lap_time'])
                 d['finish_time'] = finish_dt.isoformat()
                 d['finish_display'] = finish_dt.strftime('%H:%M:%S')

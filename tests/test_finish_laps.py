@@ -149,6 +149,26 @@ class LapAdminTest(ChronoTestCase):
         self.client.post(f'/laps/{ids[2]}/edit', data={'lap_time': too_early})
         self.assertEqual(self._laps(rid), before)
 
+
+    def test_edited_finish_shown_on_heat_card(self):
+        rid, hid = self._setup(laps=2, finish=True)
+        race = self.conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
+        new_finish = datetime.fromisoformat(race['start_time']) + timedelta(minutes=30)
+        self.client.post(f'/races/{rid}/edit_finish', data={'finish_time': _iso(new_finish)})
+        html = self.client.get('/races').get_data(as_text=True)
+        self.assertIn('00:30:00', html)
+
+    def test_edit_last_lap_moves_finish(self):
+        rid, hid = self._setup(laps=2, finish=True)
+        ids = self._lap_ids(rid)
+        race = self.conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
+        new_last = datetime.fromisoformat(race['start_time']) + timedelta(minutes=7)
+        self.client.post(f'/laps/{ids[2]}/edit', data={'lap_time': _iso(new_last)})
+        race = self.conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
+        self.assertEqual(race['finish_time'], _iso(new_last))
+        html = self.client.get('/races').get_data(as_text=True)
+        self.assertIn('00:07:00', html)
+
     def test_finished_heat_shows_lap_controls(self):
         rid, hid = self._setup(laps=2, finish=True)
         ids = self._lap_ids(rid)

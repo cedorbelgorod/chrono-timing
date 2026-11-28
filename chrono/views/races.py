@@ -637,12 +637,20 @@ def lap_edit(lid):
         nxt = conn.execute('SELECT lap_time FROM laps WHERE race_id = ? AND lap_number = ?', (race['id'], lap['lap_number'] + 1)).fetchone()
         if nxt and new_dt >= datetime.fromisoformat(nxt['lap_time']): flash('Время круга должно быть раньше следующего', 'error'); return redirect(url_for('races_page', cid=cid))
 
-        if race['finish_time'] and new_dt >= datetime.fromisoformat(race['finish_time']): flash('Время круга должно быть раньше финиша', 'error'); return redirect(url_for('races_page', cid=cid))
+        max_lap = conn.execute('SELECT MAX(lap_number) FROM laps WHERE race_id = ?', (race['id'],)).fetchone()[0]
+        is_last = lap['lap_number'] == max_lap
+        if not is_last and race['finish_time'] and new_dt >= datetime.fromisoformat(race['finish_time']):
+            flash('Время круга должно быть раньше финиша', 'error'); return redirect(url_for('races_page', cid=cid))
 
         editor = session.get('user')
         editor_id = session.get('user_id')
-        with conn: conn.execute('UPDATE laps SET lap_time = ?, user_id = ?, user_login = ? WHERE id = ?',
-                                (new_dt.isoformat(), editor_id, editor, lid))
+        with conn:
+            conn.execute('UPDATE laps SET lap_time = ?, user_id = ?, user_login = ? WHERE id = ?',
+                         (new_dt.isoformat(), editor_id, editor, lid))
+            # последний круг — это и есть финиш: держим финиш в согласии с правкой
+            if is_last and race['finish_time'] and race['status'] == 'ok':
+                conn.execute('UPDATE races SET finish_time = ? WHERE id = ?',
+                             (new_dt.isoformat(), race['id']))
         flash(f'Время круга обновлено (правил: {editor})', 'success'); return redirect(url_for('races_page', cid=cid))
     finally: conn.close()
 
