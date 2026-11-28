@@ -132,6 +132,32 @@
 {% endif %}
 
 {# ==================== ДИАЛОГ ПРАВКИ ФИНИША ==================== #}
+<div id="lap-dialog" class="fd-overlay" hidden>
+    <div class="fd-box" role="dialog" aria-modal="true" aria-labelledby="ld-title">
+        <h3 id="ld-title">Изменить круг</h3>
+        <div class="fd-sub" id="ld-sub"></div>
+
+        <label class="fd-opt">
+            <input type="radio" name="ld-mode" value="lap" checked>
+            <span class="fd-label">Время круга</span>
+            <input type="datetime-local" step="1" id="ld-lap">
+        </label>
+
+        <label class="fd-opt">
+            <input type="radio" name="ld-mode" value="elapsed">
+            <span class="fd-label">Прохождение</span>
+            <input type="text" id="ld-elapsed" placeholder="00:00:00" inputmode="numeric" autocomplete="off">
+        </label>
+
+        <div class="fd-hint" id="ld-hint"></div>
+
+        <div class="fd-actions">
+            <button type="button" class="btn-ghost" id="ld-cancel">Отмена</button>
+            <button type="button" class="btn btn-primary" id="ld-ok">Сохранить</button>
+        </div>
+    </div>
+</div>
+
 <div id="finish-dialog" class="fd-overlay" hidden>
     <div class="fd-box" role="dialog" aria-modal="true" aria-labelledby="fd-title">
         <h3 id="fd-title">Изменить финиш</h3>
@@ -147,6 +173,11 @@
             <input type="radio" name="fd-mode" value="elapsed">
             <span class="fd-label">Время на дистанции</span>
             <input type="text" id="fd-elapsed" placeholder="00:00:00" inputmode="numeric" autocomplete="off">
+        </label>
+
+        <label class="fd-opt fd-check">
+            <input type="checkbox" id="fd-adjust" checked>
+            <span>Скорректировать время последнего круга (финиш = последний круг)</span>
         </label>
 
         <div class="fd-hint" id="fd-hint"></div>
@@ -506,6 +537,9 @@
 }
 .fd-opt input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
 .fd-dim { background: #f3f4f6; color: #9ca3af; }
+.fd-check { align-items: flex-start; }
+.fd-check input[type=checkbox] { width: 16px; height: 16px; margin-top: 3px; accent-color: #2563eb; flex: 0 0 auto; }
+.fd-check span { font-size: 13px; color: #374151; line-height: 1.4; }
 .fd-hint { color: #b91c1c; font-size: 13px; min-height: 18px; margin-top: 8px; }
 .fd-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
 .fd-actions .btn-save { background: #16a34a; padding: 8px 18px; font-weight: 600; }
@@ -549,17 +583,156 @@ function deleteLap(lapId, message) {
     document.body.appendChild(f); f.submit();
 }
 
-function editLap(lapId, currentIso) {
-    const val = prompt(
-        'Новое время круга (формат YYYY-MM-DDTHH:MM:SS):', currentIso
-    );
-    if (!val) return;
-    const f = document.createElement('form');
-    f.method = 'post'; f.action = '/laps/' + lapId + '/edit';
-    const i = document.createElement('input');
-    i.type = 'hidden'; i.name = 'lap_time'; i.value = val;
-    f.appendChild(i); document.body.appendChild(f); f.submit();
-}
+/* ====== Диалог правки круга: время круга или время прохождения ====== */
+(function () {
+    const overlay = document.getElementById('lap-dialog');
+    if (!overlay) return;
+
+    const lapEl = document.getElementById('ld-lap');
+    const elapsedEl = document.getElementById('ld-elapsed');
+    const hintEl = document.getElementById('ld-hint');
+    const subEl = document.getElementById('ld-sub');
+    const okBtn = document.getElementById('ld-ok');
+    const cancelBtn = document.getElementById('ld-cancel');
+    const radios = [...overlay.querySelectorAll('input[name="ld-mode"]')];
+
+    let resolver = null;
+    let lastFocus = null;
+    let prevDate = null;
+
+    const pad = (n) => String(n).padStart(2, '0');
+
+    function toLocalIso(d) {
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+            'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    }
+
+    function fmtDur(sec) {
+        sec = Math.round(sec);
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        return pad(h) + ':' + pad(m) + ':' + pad(sec % 60);
+    }
+
+    function parseDur(value) {
+        const s = (value || '').trim().replace(',', '.');
+        if (!s) return null;
+        if (s.indexOf(':') >= 0) {
+            const parts = s.split(':');
+            if (parts.length > 3) return null;
+            let total = 0;
+            for (const part of parts) {
+                const n = Number(part);
+                if (!isFinite(n) || n < 0) return null;
+                total = total * 60 + n;
+            }
+            return total;
+        }
+        const n = Number(s);
+        return isFinite(n) && n > 0 ? n : null;
+    }
+
+    function currentMode() {
+        const checked = overlay.querySelector('input[name="ld-mode"]:checked');
+        return checked ? checked.value : 'lap';
+    }
+
+    function syncFromLap() {
+        if (!prevDate || !lapEl.value) { elapsedEl.value = ''; return; }
+        const d = new Date(lapEl.value);
+        if (isNaN(d)) { elapsedEl.value = ''; return; }
+        const sec = (d - prevDate) / 1000;
+        elapsedEl.value = sec > 0 ? fmtDur(sec) : '';
+    }
+
+    function syncFromElapsed() {
+        if (!prevDate) return;
+        const sec = parseDur(elapsedEl.value);
+        if (sec === null) return;
+        lapEl.value = toLocalIso(new Date(prevDate.getTime() + sec * 1000));
+    }
+
+    function updateMode() {
+        const m = currentMode();
+        lapEl.disabled = m !== 'lap';
+        elapsedEl.disabled = m !== 'elapsed';
+        lapEl.classList.toggle('fd-dim', lapEl.disabled);
+        elapsedEl.classList.toggle('fd-dim', elapsedEl.disabled);
+        setTimeout(() => (m === 'elapsed' ? elapsedEl : lapEl).focus(), 0);
+    }
+
+    function close(result) {
+        if (!resolver) return;
+        const resolve = resolver;
+        resolver = null;
+        overlay.hidden = true;
+        document.removeEventListener('keydown', onKey, true);
+        if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+        resolve(result);
+    }
+
+    function onKey(e) {
+        if (e.key === 'Escape') { e.preventDefault(); close(null); }
+    }
+
+    function openDialog(startIso, prevIso, lapIso, num) {
+        lastFocus = document.activeElement;
+        prevDate = new Date(prevIso || startIso);
+        lapEl.value = lapIso || '';
+        elapsedEl.value = '';
+        syncFromLap();
+        hintEl.textContent = '';
+        subEl.textContent = '№ ' + (num || '—') + ' · старт: ' +
+            (startIso || '').replace('T', ' ').slice(0, 19) +
+            ' · предыдущая отметка: ' + (prevIso || startIso || '').replace('T', ' ').slice(0, 19) +
+            (elapsedEl.value ? ' · прохождение ' + elapsedEl.value : '');
+        overlay.querySelector('input[value="lap"]').checked = true;
+        overlay.hidden = false;
+        document.addEventListener('keydown', onKey, true);
+        updateMode();
+        return new Promise((resolve) => { resolver = resolve; });
+    }
+
+    radios.forEach((r) => r.addEventListener('change', updateMode));
+    lapEl.addEventListener('input', syncFromLap);
+    elapsedEl.addEventListener('input', syncFromElapsed);
+    cancelBtn.addEventListener('click', () => close(null));
+    overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(null); });
+
+    okBtn.addEventListener('click', () => {
+        hintEl.textContent = '';
+        if (currentMode() === 'lap') {
+            if (!lapEl.value) { hintEl.textContent = 'Укажите время круга.'; return; }
+            const iso = lapEl.value.length === 16 ? lapEl.value + ':00' : lapEl.value;
+            close({ lap_time: iso });
+        } else {
+            const sec = parseDur(elapsedEl.value);
+            if (sec === null || sec <= 0) {
+                hintEl.textContent = 'Введите ЧЧ:ММ:СС, ММ:СС или число секунд.';
+                return;
+            }
+            close({ elapsed: elapsedEl.value.trim() });
+        }
+    });
+
+    window.editLap = function (lapId, startIso, prevIso, lapIso, num) {
+        openDialog(startIso, prevIso, lapIso, num).then((result) => {
+            if (!result) return;
+            const form = document.createElement('form');
+            form.method = 'post';
+            form.action = '/laps/' + lapId + '/edit';
+            Object.keys(result).forEach((name) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = result[name];
+                form.appendChild(input);
+            });
+            document.body.appendChild(form);
+            form.submit();
+        });
+    };
+})();
 
 /* ====== Диалог правки финиша: можно ввести время финиша или время на дистанции ====== */
 (function () {
@@ -678,17 +851,19 @@ function editLap(lapId, currentIso) {
 
     okBtn.addEventListener('click', () => {
         hintEl.textContent = '';
+        const adjustEl = document.getElementById('fd-adjust');
+        const adjust = adjustEl && adjustEl.checked ? '1' : '0';
         if (currentMode() === 'finish') {
             if (!finishEl.value) { hintEl.textContent = 'Укажите время финиша.'; return; }
             const iso = finishEl.value.length === 16 ? finishEl.value + ':00' : finishEl.value;
-            close({ finish_time: iso });
+            close({ finish_time: iso, adjust_last_lap: adjust });
         } else {
             const sec = parseDur(elapsedEl.value);
             if (sec === null || sec <= 0) {
                 hintEl.textContent = 'Введите ЧЧ:ММ:СС, ММ:СС или число секунд.';
                 return;
             }
-            close({ elapsed: elapsedEl.value.trim() });
+            close({ elapsed: elapsedEl.value.trim(), adjust_last_lap: adjust });
         }
     });
 

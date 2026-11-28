@@ -169,6 +169,93 @@ class LapAdminTest(ChronoTestCase):
         html = self.client.get('/races').get_data(as_text=True)
         self.assertIn('00:07:00', html)
 
+
+    def test_edit_lap_by_elapsed_duration(self):
+        rid, hid = self._setup(laps=3, finish=True)
+        ids = self._lap_ids(rid)
+        race = self.conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
+        start = datetime.fromisoformat(race['start_time'])
+        # третий круг: предыдущий — старт+2 мин, прохождение 4 мин → старт+6 мин
+        self.client.post(f'/laps/{ids[3]}/edit', data={'elapsed': '00:04:00'})
+        laps = dict(self._laps(rid))
+        self.assertEqual(laps[3], _iso(start + timedelta(minutes=6)))
+
+    def test_lap_edit_writes_journal(self):
+        rid, hid = self._setup(laps=3, finish=True)
+        ids = self._lap_ids(rid)
+        race = self.conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
+        start = datetime.fromisoformat(race['start_time'])
+        old_dt = start + timedelta(minutes=3)
+        new_dt = start + timedelta(minutes=9)
+        self.client.post(f'/laps/{ids[3]}/edit', data={'lap_time': _iso(new_dt)})
+        html = self.client.get('/logs').get_data(as_text=True)
+        self.assertIn('правка круга', html)
+        self.assertIn(old_dt.strftime('%H:%M:%S'), html)
+        self.assertIn(new_dt.strftime('%H:%M:%S'), html)
+        log = self.conn.execute(
+            "SELECT * FROM timing_log WHERE action = 'lap_edit' ORDER BY id DESC LIMIT 1").fetchone()
+        self.assertIsNotNone(log)
+        self.assertIn('→', log['detail'])
+
+    def test_lap_delete_writes_journal(self):
+        rid, hid = self._setup(laps=3, finish=True)
+        ids = self._lap_ids(rid)
+        self.client.post(f'/laps/{ids[2]}/delete')
+        html = self.client.get('/logs').get_data(as_text=True)
+        self.assertIn('удаление круга', html)
+        log = self.conn.execute(
+            "SELECT * FROM timing_log WHERE action = 'lap_delete' ORDER BY id DESC LIMIT 1").fetchone()
+        self.assertIsNotNone(log)
+        self.assertIn('удалён К2', log['detail'])
+
+    def test_finish_edit_adjusts_last_lap(self):
+        rid, hid = self._setup(laps=2, finish=True)
+        race = self.conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
+        start = datetime.fromisoformat(race['start_time'])
+        new_finish = start + timedelta(minutes=12)
+        self.client.post(f'/races/{rid}/edit_finish',
+                         data={'finish_time': _iso(new_finish), 'adjust_last_lap': '1'})
+        race = self.conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
+        self.assertEqual(race['finish_time'], _iso(new_finish))
+        laps = dict(self._laps(rid))
+        self.assertEqual(laps[2], _iso(new_finish))
+        log = self.conn.execute(
+            "SELECT * FROM timing_log WHERE action = 'finish_edit' ORDER BY id DESC LIMIT 1").fetchone()
+        self.assertIn('последний круг', log['detail'])
+
+    def test_finish_edit_without_adjust_keeps_lap(self):
+        rid, hid = self._setup(laps=2, finish=True)
+        ids = self._lap_ids(rid)
+        before = dict(self._laps(rid))
+        race = self.conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
+        start = datetime.fromisoformat(race['start_time'])
+        new_finish = start + timedelta(minutes=15)
+        self.client.post(f'/races/{rid}/edit_finish',
+                         data={'finish_time': _iso(new_finish), 'adjust_last_lap': '0'})
+        race = self.conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
+        self.assertEqual(race['finish_time'], _iso(new_finish))
+        self.assertEqual(dict(self._laps(rid))[2], before[2])
+
+    def test_finish_edit_adjust_validation(self):
+        rid, hid = self._setup(laps=2, finish=True)
+        before = self.conn.execute('SELECT finish_time FROM races WHERE id = ?', (rid,)).fetchone()
+        race = self.conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
+        start = datetime.fromisoformat(race['start_time'])
+        too_early = start + timedelta(seconds=30)  # раньше первого круга
+        self.client.post(f'/races/{rid}/edit_finish',
+                         data={'finish_time': _iso(too_early), 'adjust_last_lap': '1'})
+        after = self.conn.execute('SELECT finish_time FROM races WHERE id = ?', (rid,)).fetchone()
+        self.assertEqual(before['finish_time'], after['finish_time'])
+
+    def test_dialogs_present(self):
+        self.login_admin()
+        html = self.client.get('/races').get_data(as_text=True)
+        self.assertIn('id="lap-dialog"', html)
+        self.assertIn('id="fd-adjust"', html)
+        self.assertIn('Прохождение', html)
+        self.assertIn('window.editLap = function', html)
+        self.assertIn('function deleteLap(', html)
+
     def test_finished_heat_shows_lap_controls(self):
         rid, hid = self._setup(laps=2, finish=True)
         ids = self._lap_ids(rid)

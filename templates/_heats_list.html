@@ -98,12 +98,13 @@
                     <summary style="cursor:pointer;font-size:12px;color:#6b7280">времена</summary>
                     <ul style="margin:6px 0 0;padding-left:16px;font-size:12px" class="mono">
                     {% for lap in r.laps %}
+                        {% set prev_iso = (r.laps[loop.index0 - 1]['lap_time'][:19] if loop.index0 > 0 else r.start_time[:19]) %}
                         <li style="margin-bottom:2px">
                             К{{ lap.lap_number }}: {{ lap.elapsed_display }} ({{ lap.split_display }})
                             {% if lap.source == 'A' %}<small class="muted">авто</small>{% endif %}
                             {% if lap.source == 'M' and lap.id %}
                             <button type="button"
-                                    onclick="editLap({{ lap.id }}, '{{ lap.lap_time[:19] }}')"
+                                    onclick="editLap({{ lap.id }}, '{{ r.start_time[:19] }}', '{{ prev_iso }}', '{{ lap.lap_time[:19] }}', {{ r.number or 0 }})"
                                     title="Изменить время круга"
                                     style="padding:0 6px;font-size:10px;background:#3b82f6;line-height:1.6">✎</button>
                             <button type="button"
@@ -303,12 +304,13 @@
                                             <summary style="cursor:pointer;font-size:12px;color:#6b7280">времена</summary>
                                             <ul style="margin:6px 0 0;padding-left:16px;font-size:12px" class="mono">
                                             {% for lap in r.laps %}
+                                                {% set prev_iso = (r.laps[loop.index0 - 1]['lap_time'][:19] if loop.index0 > 0 else r.start_time[:19]) %}
                                                 <li style="margin-bottom:2px">
                                                     К{{ lap.lap_number }}: {{ lap.elapsed_display }} ({{ lap.split_display }})
                                                     {% if lap.source == 'A' %}<small class="muted">авто</small>{% endif %}
                                                     {% if lap.source == 'M' and lap.id %}
                                                     <button type="button"
-                                                            onclick="editLap({{ lap.id }}, '{{ lap.lap_time[:19] }}')"
+                                                            onclick="editLap({{ lap.id }}, '{{ r.start_time[:19] }}', '{{ prev_iso }}', '{{ lap.lap_time[:19] }}', {{ r.number or 0 }})"
                                                             title="Изменить время круга"
                                                             style="padding:0 6px;font-size:10px;background:#3b82f6;line-height:1.6">✎</button>
                                                     <button type="button"

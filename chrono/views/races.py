@@ -617,48 +617,9 @@ def startlist_public(token):
 
 
 def lap_edit(lid):
-    conn = get_db()
-    try:
-        lap = conn.execute('SELECT * FROM laps WHERE id = ?', (lid,)).fetchone()
-        if not lap: return 'Круг не найден', 404
-        race = conn.execute('SELECT * FROM races WHERE id = ?', (lap['race_id'],)).fetchone()
-        cid = race['competition_id']
+    """Правка круга: можно ввести время круга или время прохождения.
 
-        new_str = (request.form.get('lap_time') or '').strip()
-        try: new_dt = datetime.fromisoformat(new_str)
-        except: flash('Неверный формат времени', 'error'); return redirect(url_for('races_page', cid=cid))
-
-        if new_dt <= datetime.fromisoformat(race['start_time']): flash('Время круга должно быть позже старта', 'error'); return redirect(url_for('races_page', cid=cid))
-
-        if lap['lap_number'] > 1:
-            prev = conn.execute('SELECT lap_time FROM laps WHERE race_id = ? AND lap_number = ?', (race['id'], lap['lap_number'] - 1)).fetchone()
-            if prev and new_dt <= datetime.fromisoformat(prev['lap_time']): flash('Время круга должно быть позже предыдущего', 'error'); return redirect(url_for('races_page', cid=cid))
-
-        nxt = conn.execute('SELECT lap_time FROM laps WHERE race_id = ? AND lap_number = ?', (race['id'], lap['lap_number'] + 1)).fetchone()
-        if nxt and new_dt >= datetime.fromisoformat(nxt['lap_time']): flash('Время круга должно быть раньше следующего', 'error'); return redirect(url_for('races_page', cid=cid))
-
-        max_lap = conn.execute('SELECT MAX(lap_number) FROM laps WHERE race_id = ?', (race['id'],)).fetchone()[0]
-        is_last = lap['lap_number'] == max_lap
-        if not is_last and race['finish_time'] and new_dt >= datetime.fromisoformat(race['finish_time']):
-            flash('Время круга должно быть раньше финиша', 'error'); return redirect(url_for('races_page', cid=cid))
-
-        editor = session.get('user')
-        editor_id = session.get('user_id')
-        with conn:
-            conn.execute('UPDATE laps SET lap_time = ?, user_id = ?, user_login = ? WHERE id = ?',
-                         (new_dt.isoformat(), editor_id, editor, lid))
-            # последний круг — это и есть финиш: держим финиш в согласии с правкой
-            if is_last and race['finish_time'] and race['status'] == 'ok':
-                conn.execute('UPDATE races SET finish_time = ? WHERE id = ?',
-                             (new_dt.isoformat(), race['id']))
-        flash(f'Время круга обновлено (правил: {editor})', 'success'); return redirect(url_for('races_page', cid=cid))
-    finally: conn.close()
-
-
-def lap_delete(lid):
-    """Удалить круг (любой). Последующие круги перенумеровываются.
-
-    Удаление последнего круга завершённого заезда снимает финиш (заезд снова идёт).
+    Все изменения пишутся в журнал с прежним и новым значением.
     """
     conn = get_db()
     try:
@@ -666,19 +627,125 @@ def lap_delete(lid):
         if not lap: return 'Круг не найден', 404
         race = conn.execute('SELECT * FROM races WHERE id = ?', (lap['race_id'],)).fetchone()
         cid = race['competition_id']
+        person = conn.execute(
+            'SELECT p.number, p.full_name FROM participants p WHERE p.id = ?',
+            (race['participant_id'],)).fetchone()
+        start_dt = datetime.fromisoformat(race['start_time'])
+        prev = conn.execute(
+            'SELECT lap_time FROM laps WHERE race_id = ? AND lap_number < ? '
+            'ORDER BY lap_number DESC LIMIT 1', (race['id'], lap['lap_number'])).fetchone()
+        prev_dt = datetime.fromisoformat(prev['lap_time']) if prev else start_dt
+        old_dt = datetime.fromisoformat(lap['lap_time'])
+
+        elapsed_str = (request.form.get('elapsed') or '').strip()
+        if elapsed_str:
+            seconds = _parse_duration(elapsed_str)
+            if seconds is None or seconds <= 0:
+                flash('Неверный формат времени прохождения', 'error')
+                return redirect(url_for('races_page', cid=cid))
+            new_dt = prev_dt + timedelta(seconds=seconds)
+        else:
+            new_str = (request.form.get('lap_time') or '').strip()
+            try:
+                new_dt = datetime.fromisoformat(new_str)
+            except ValueError:
+                flash('Неверный формат времени', 'error')
+                return redirect(url_for('races_page', cid=cid))
+
+        if new_dt <= start_dt:
+            flash('Время круга должно быть позже старта', 'error')
+            return redirect(url_for('races_page', cid=cid))
+        if prev and new_dt <= prev_dt:
+            flash('Время круга должно быть позже предыдущего', 'error')
+            return redirect(url_for('races_page', cid=cid))
+
+        nxt = conn.execute('SELECT lap_time FROM laps WHERE race_id = ? AND lap_number = ?',
+                           (race['id'], lap['lap_number'] + 1)).fetchone()
+        if nxt and new_dt >= datetime.fromisoformat(nxt['lap_time']):
+            flash('Время круга должно быть раньше следующего', 'error')
+            return redirect(url_for('races_page', cid=cid))
+
+        max_lap = conn.execute('SELECT MAX(lap_number) FROM laps WHERE race_id = ?',
+                               (race['id'],)).fetchone()[0]
+        is_last = lap['lap_number'] == max_lap
+        if not is_last and race['finish_time'] and new_dt >= datetime.fromisoformat(race['finish_time']):
+            flash('Время круга должно быть раньше финиша', 'error')
+            return redirect(url_for('races_page', cid=cid))
+
+        editor = session.get('user')
+        editor_id = session.get('user_id')
+        old_split = (old_dt - prev_dt).total_seconds()
+        new_split = (new_dt - prev_dt).total_seconds()
+        finish_note = ''
+        with conn:
+            conn.execute('UPDATE laps SET lap_time = ?, user_id = ?, user_login = ? WHERE id = ?',
+                         (new_dt.isoformat(), editor_id, editor, lid))
+            # последний круг — это и есть финиш: держим финиш в согласии с правкой
+            if is_last and race['finish_time'] and race['status'] == 'ok':
+                old_finish = datetime.fromisoformat(race['finish_time'])
+                conn.execute('UPDATE races SET finish_time = ? WHERE id = ?',
+                             (new_dt.isoformat(), race['id']))
+                finish_note = (f'; финиш {old_finish.strftime("%H:%M:%S")} → '
+                               f'{new_dt.strftime("%H:%M:%S")}')
+            detail = (f'К{lap["lap_number"]}: {old_dt.strftime("%H:%M:%S")} → '
+                      f'{new_dt.strftime("%H:%M:%S")} (прохождение '
+                      f'{format_secs(old_split)} → {format_secs(new_split)}){finish_note}')
+            _log_timing(conn, 'manual', 'lap_edit', True, competition_id=cid,
+                        heat_id=race['heat_id'], race_id=race['id'],
+                        participant_id=race['participant_id'],
+                        number=person['number'] if person else None,
+                        full_name=person['full_name'] if person else None,
+                        user_login=editor, detail=detail)
+        flash(f'Круг К{lap["lap_number"]} обновлён (правил: {editor})', 'success')
+        return redirect(url_for('races_page', cid=cid))
+    finally: conn.close()
+
+
+def lap_delete(lid):
+    """Удалить круг (любой). Последующие круги перенумеровываются.
+
+    Удаление последнего круга завершённого заезда снимает финиш (заезд снова идёт).
+    Действие фиксируется в журнале с прежним временем круга.
+    """
+    conn = get_db()
+    try:
+        lap = conn.execute('SELECT * FROM laps WHERE id = ?', (lid,)).fetchone()
+        if not lap: return 'Круг не найден', 404
+        race = conn.execute('SELECT * FROM races WHERE id = ?', (lap['race_id'],)).fetchone()
+        cid = race['competition_id']
+        person = conn.execute(
+            'SELECT p.number, p.full_name FROM participants p WHERE p.id = ?',
+            (race['participant_id'],)).fetchone()
+        start_dt = datetime.fromisoformat(race['start_time'])
+        prev = conn.execute(
+            'SELECT lap_time FROM laps WHERE race_id = ? AND lap_number < ? '
+            'ORDER BY lap_number DESC LIMIT 1', (race['id'], lap['lap_number'])).fetchone()
+        prev_dt = datetime.fromisoformat(prev['lap_time']) if prev else start_dt
+        old_dt = datetime.fromisoformat(lap['lap_time'])
+        split = (old_dt - prev_dt).total_seconds()
 
         max_lap = conn.execute('SELECT MAX(lap_number) FROM laps WHERE race_id = ?', (race['id'],)).fetchone()[0]
         is_last = lap['lap_number'] == max_lap
         had_finish = bool(race['finish_time'])
+        editor = session.get('user')
         with conn:
             conn.execute('DELETE FROM laps WHERE id = ?', (lid,))
             conn.execute('UPDATE laps SET lap_number = lap_number - 1 '
                          'WHERE race_id = ? AND lap_number > ?', (race['id'], lap['lap_number']))
-            if is_last and had_finish:
+            finish_synced = is_last and had_finish
+            if finish_synced:
                 conn.execute("UPDATE races SET finish_time = NULL, status = 'running', laps_behind = 0 WHERE id = ?", (race['id'],))
                 h = conn.execute('SELECT status FROM heats WHERE id = ?', (race['heat_id'],)).fetchone()
                 if h and h['status'] == 'finished':
                     conn.execute("UPDATE heats SET status = 'running', finished_at = NULL WHERE id = ?", (race['heat_id'],))
+            detail = (f'удалён К{lap["lap_number"]}: {old_dt.strftime("%H:%M:%S")} '
+                      f'(прохождение {format_secs(split)})' + ('; финиш снят' if finish_synced else ''))
+            _log_timing(conn, 'manual', 'lap_delete', True, competition_id=cid,
+                        heat_id=race['heat_id'], race_id=race['id'],
+                        participant_id=race['participant_id'],
+                        number=person['number'] if person else None,
+                        full_name=person['full_name'] if person else None,
+                        user_login=editor, detail=detail)
 
         flash('Круг удалён' + (' (финиш снят)' if is_last and had_finish else ''), 'success')
         return redirect(url_for('races_page', cid=cid))
@@ -686,34 +753,71 @@ def lap_delete(lid):
 
 
 def race_edit_finish(rid):
+    """Правка финиша заезда: можно скорректировать и время последнего круга."""
     conn = get_db()
     try:
         r = conn.execute('SELECT * FROM races WHERE id = ?', (rid,)).fetchone()
         if not r: return 'Заезд не найден', 404
         cid = r['competition_id']
         if r['status'] != 'ok': flash('Финиш можно править только у завершённого заезда', 'error'); return redirect(url_for('races_page', cid=cid))
+        person = conn.execute(
+            'SELECT p.number, p.full_name FROM participants p WHERE p.id = ?',
+            (r['participant_id'],)).fetchone()
 
         new_str = (request.form.get('finish_time') or '').strip()
         elapsed_str = (request.form.get('elapsed') or '').strip()
         start_dt = datetime.fromisoformat(r['start_time'])
         if elapsed_str:
-            # ввели время прохождения дистанции — финиш считаем от старта
             seconds = _parse_duration(elapsed_str)
             if seconds is None or seconds <= 0:
                 flash('Неверный формат времени на дистанции', 'error'); return redirect(url_for('races_page', cid=cid))
             new_dt = start_dt + timedelta(seconds=seconds)
         else:
             try: new_dt = datetime.fromisoformat(new_str)
-            except: flash('Неверный формат времени', 'error'); return redirect(url_for('races_page', cid=cid))
+            except ValueError: flash('Неверный формат времени', 'error'); return redirect(url_for('races_page', cid=cid))
 
         if new_dt <= start_dt: flash('Финиш должен быть позже старта', 'error'); return redirect(url_for('races_page', cid=cid))
 
-        last_lap = conn.execute('SELECT lap_time FROM laps WHERE race_id = ? ORDER BY lap_number DESC LIMIT 1', (rid,)).fetchone()
-        if last_lap and new_dt <= datetime.fromisoformat(last_lap['lap_time']): flash('Финиш должен быть позже последнего круга', 'error'); return redirect(url_for('races_page', cid=cid))
+        laps = conn.execute('SELECT * FROM laps WHERE race_id = ? ORDER BY lap_number', (rid,)).fetchall()
+        last_lap = laps[-1] if laps else None
+        prev_lap = laps[-2] if len(laps) > 1 else None
+        prev_dt = datetime.fromisoformat(prev_lap['lap_time']) if prev_lap else start_dt
+        adjust_raw = request.form.get('adjust_last_lap')
+        adjust = adjust_raw is None or adjust_raw in ('1', 'on', 'true')
 
-        with conn: conn.execute('UPDATE races SET finish_time = ? WHERE id = ?', (new_dt.isoformat(), rid))
-        total = (new_dt - start_dt).total_seconds()
-        flash(f'Время финиша обновлено: {new_dt.strftime("%H:%M:%S")} (дистанция {format_secs(total)})', 'success')
+        if adjust and last_lap:
+            if new_dt <= prev_dt:
+                flash('Финиш должен быть позже предыдущего круга', 'error'); return redirect(url_for('races_page', cid=cid))
+        elif last_lap and new_dt <= datetime.fromisoformat(last_lap['lap_time']):
+            flash('Финиш должен быть позже последнего круга', 'error'); return redirect(url_for('races_page', cid=cid))
+
+        editor = session.get('user')
+        editor_id = session.get('user_id')
+        old_finish = datetime.fromisoformat(r['finish_time']) if r['finish_time'] else None
+        lap_note = ''
+        with conn:
+            if adjust and last_lap:
+                conn.execute('UPDATE laps SET lap_time = ?, user_id = ?, user_login = ? WHERE id = ?',
+                             (new_dt.isoformat(), editor_id, editor, last_lap['id']))
+                old_lap = datetime.fromisoformat(last_lap['lap_time'])
+                lap_note = (f'; последний круг К{last_lap["lap_number"]}: '
+                            f'{old_lap.strftime("%H:%M:%S")} → {new_dt.strftime("%H:%M:%S")}')
+            conn.execute('UPDATE races SET finish_time = ? WHERE id = ?', (new_dt.isoformat(), rid))
+            total = (new_dt - start_dt).total_seconds()
+            old_total = ((old_finish - start_dt).total_seconds() if old_finish else None)
+            detail = (f'финиш {old_finish.strftime("%H:%M:%S") if old_finish else "—"} → '
+                      f'{new_dt.strftime("%H:%M:%S")} (дистанция '
+                      f'{format_secs(old_total) if old_total is not None else "—"} → '
+                      f'{format_secs(total)}){lap_note}')
+            _log_timing(conn, 'manual', 'finish_edit', True, competition_id=cid,
+                        heat_id=r['heat_id'], race_id=rid,
+                        participant_id=r['participant_id'],
+                        number=person['number'] if person else None,
+                        full_name=person['full_name'] if person else None,
+                        user_login=editor, detail=detail)
+
+        flash(f'Время финиша обновлено: {new_dt.strftime("%H:%M:%S")} (дистанция {format_secs(total)})'
+              + (', последний круг скорректирован' if adjust and last_lap else ''), 'success')
         return redirect(url_for('races_page', cid=cid))
     finally: conn.close()
 

@@ -70,6 +70,9 @@
                 {% elif r.action == 'undo' %}отмена
                 {% elif r.action == 'dns' %}DNS (до старта)
                 {% elif r.action == 'undns' %}возврат в старт
+                {% elif r.action == 'lap_edit' %}правка круга
+                {% elif r.action == 'lap_delete' %}удаление круга
+                {% elif r.action == 'finish_edit' %}правка финиша
                 {% else %}{{ r.action }}{% endif %}
             </td>
             <td class="mono">{{ r.number or '—' }}</td>
